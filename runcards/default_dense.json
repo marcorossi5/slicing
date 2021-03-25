@@ -1,0 +1,29 @@
+{
+    "expurl_env": {
+        "fn": "test_full.json.gz",
+        "nev": 750,
+        "width": 1.0,
+        "jet_R": 1.0,
+        "ptmin": 10,
+        "rapmax": 7.5,
+        "Rmatch": 0.4,
+        "reward": "cauchy",
+        "penalty": 0.25,
+        "discrete": true
+    },
+    "rl_agent": {
+        "learning_rate": 1e-4,
+        "nstep": 500000,
+        "enable_dueling_network": false,
+        "enable_double_dqn": false,
+        "policy": "boltzmann",
+        "architecture": "Dense",
+        "dropout": 0.05,
+        "nb_layers": 3,
+        "nb_units": 100,
+        "optimizer": "Adam"
+    },
+    "test": {
+        "fn": "test_full.json.gz"
+    }
+}
