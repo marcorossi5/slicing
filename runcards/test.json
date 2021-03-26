@@ -9,7 +9,6 @@
     "rl_agent": {
     "learning_rate": 1e-4,
     "nstep": 1500,
-    "policy": "boltzmann",
     "actor": {
         "architecture": "Dense",
         "dropout": 0.05,

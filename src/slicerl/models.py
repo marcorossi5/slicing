@@ -6,11 +6,11 @@ import numpy as np
 from slicerl.tools import get_window_width, mass
 from slicerl.AgentSlicerl import DDPGAgentSlicerl
 from slicerl.read_data import Events
-from rl.policy import BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
+from rl.random import OrnsteinUhlenbeckProcess
 
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Activation, Flatten, LSTM, Dropout
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Dense, Activation, Flatten, LSTM, Dropout, Input, Concatenate
 from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 import tensorflow.keras.backend as K
 from tensorflow.keras.callbacks import TensorBoard
@@ -23,7 +23,6 @@ import pprint, json
 #----------------------------------------------------------------------
 def build_actor_model(hps, input_dim):
     """Construct the actor model used by the DDPG. Outputs the action"""
-    K.clear_session()
     model = Sequential()
     if hps['architecture']=='Dense':
         model.add(Flatten(input_shape=(1,) + input_dim))
@@ -53,29 +52,32 @@ def build_critic_model(hps, input_dim):
     Construct the critic model used by the DDPG. Judge the goodness of the
     predicted action
     """
-    K.clear_session()
-    model = Sequential()
+    action_input = Input(shape=(1,), name='action_input')
+    obs_input = Input(shape=(1,)+input_dim, name='observation_input')
+    flattened_obs = Flatten()(obs_input)
+    x = Concatenate()([action_input, flattened_obs])
     if hps['architecture']=='Dense':
-        model.add(Flatten(input_shape=(1,) + input_dim))
         for i in range(hps['nb_layers']):
-            model.add(Dense(hps['nb_units']))
-            model.add(Activation('relu'))
+            x = Dense(hps['nb_units'])(x)
+            x = Activation('relu')(x)
         if hps['dropout']>0.0:
-            model.add(Dropout(hps['dropout']))
-        model.add(Dense(1))
-        model.add(Activation('linear'))
+            x = Dropout(hps['dropout'])(x)
+        x = Dense(1)(x)
+        x = Activation('linear')(x)
     elif hps['architecture']=='LSTM':
-        model.add(LSTM(hps['nb_units'], input_shape = (1,max(input_dim)),
-                       return_sequences=not (hps['nb_layers']==1)))
+        raise NotImplementedError("LSTM for critic not implemented")
+        x = LSTM(hps['nb_units'], input_shape = (1,max(input_dim)),
+                       return_sequences=not (hps['nb_layers']==1))(x)
         for i in range(hps['nb_layers']-1):
-            model.add(LSTM(hps['nb_units'],
-                           return_sequences=not (i+2==hps['nb_layers'])))
+            x = LSTM(hps['nb_units'],
+                           return_sequences=not (i+2==hps['nb_layers']))(x)
         if hps['dropout']>0.0:
-            model.add(Dropout(hps['dropout']))
-        model.add(Dense(1))
-        model.add(Activation('linear'))
+            x = Dropout(hps['dropout'])(x)
+        x = Dense(1)(x)
+        x = Activation('linear')(x)
+    model = Model(inputs=[action_input, obs_input], outputs=x)
     model.summary()
-    return model
+    return model, action_input
 
 #----------------------------------------------------------------------
 def build_ddpg(hps, input_dim):
@@ -85,21 +87,18 @@ def build_ddpg(hps, input_dim):
     pprint.pprint(hps)
 
     # set up the agent
+    K.clear_session()
     actor_model = build_actor_model(hps['actor'], input_dim)
-    critic_input_dim = tuple([input_dim[0] + 1]) # concatenate state + action spaces
-    critic_model = build_critic_model(hps['critic'], critic_input_dim)
+    critic_input_dim = input_dim
+    critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim)
 
     memory = SequentialMemory(limit=500000, window_length=1)
-    if hps["policy"]=="boltzmann":
-        policy = BoltzmannQPolicy()
-    elif hps["policy"]=="epsgreedyq":
-        policy = EpsGreedyQPolicy()
-    else:
-        raise ValueError("Invalid policy: %s"%hps["policy"])
-    agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model, nb_actions=2,
-                          memory=memory, nb_steps_warmup_actor=500,
-                          nb_steps_warmup_critic=500, target_model_update=1e-2,
-                          policy=policy)
+    random_process = OrnsteinUhlenbeckProcess(size=1, theta=.15, mu=0., sigma=.3)
+    agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model,
+                          critic_action_input=action_input, nb_actions=1,
+                          memory=memory, nb_steps_warmup_actor=100,
+                          nb_steps_warmup_critic=100, target_model_update=1e-2,
+                          random_process=random_process)
 
     if hps['optimizer'] == 'Adam':
         opt = Adam(lr=hps['learning_rate'])
