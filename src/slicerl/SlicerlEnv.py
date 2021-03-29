@@ -34,8 +34,9 @@ class SlicerlEnv(Env):
         reader = Events(hps['fn'], hps['nev'], hps['min_hits'])
         self.events = reader.values()
 
-        # set up the mass parameters and initial state
-        self.root          = None
+        # set up the count parameters and initial state
+        self.slice_count   = 0
+        self.slices        = []
 
         # set up observation and action space
         self.action_space      = spaces.Discrete(2)
@@ -66,9 +67,24 @@ class SlicerlEnv(Env):
 
     #----------------------------------------------------------------------
     def reset_current_event(self):
-        """Reset the current event."""
-        self.event = random.choice(self.events)
-        self.index = -1
+        """Reset the current event and insert the first calohit."""
+        self.event       = random.choice(self.events)
+        self.index       = -1
+        self.slice_count = 0
+        self.slices      = []
+        self.set_next_node()
+
+        print(f"training on event with {len(self.event)} calohits")
+
+        # overwrite calohit status with slice index
+        c = self.event.calohits[self.index]
+        c.status = self.slice_count
+
+        # add calohit (E,x,z) to cumulative slice state
+        calohit_state = self.event.state(self.index)[:-1]
+        self.slices.append( calohit_state )
+        self.slice_count += 1
+
         self.set_next_node()
 
     #----------------------------------------------------------------------
@@ -78,7 +94,8 @@ class SlicerlEnv(Env):
         while True:
             self.index += 1
             if (len(self.event.calohits) >= self.index)\
-               or (self.event.calohits[self.index].status is None):
+               or (self.event.calohits[self.index].status is None)\
+               or (self.event.calohits[self.index].status == -1):
                 break
 
         self.state = self.event.state(self.index)
@@ -104,12 +121,9 @@ class SlicerlEnv(Env):
         return min(1.0, 1.0/(x + 0.5))
 
     #----------------------------------------------------------------------
-    def reward(self, ipair):
+    def reward(self, slice_state, mc_state):
         """Full reward function."""
-        # TODO:
-        # implement reward by comparing properties of paired jets
-        j_noPU,j = self.event.jet_pairs[ipair]
-        x = quality_metric(j_noPU, j)
+        x = quality_metric(slice_state, mc_state)
         return self.__reward(x/self.width)
 
     #----------------------------------------------------------------------
@@ -139,8 +153,10 @@ class SlicerlEnvContinuous(SlicerlEnv):
     #----------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(SlicerlEnvContinuous, self).__init__(*args, **kwargs)
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
-
+        self.eps = np.finfo(np.float32).eps
+        self.action_max = 1.0
+        self.action_space = spaces.Box(low=-self.action_max, high=self.action_max,
+                                       shape=(1,), dtype=np.float32)
 
     #----------------------------------------------------------------------
     def step(self, action):
@@ -148,20 +164,34 @@ class SlicerlEnvContinuous(SlicerlEnv):
         Perform a step using the current calohit in the event, deciding which
         slice to add it to.
         """
+        action = np.clip(action, -self.action_max, self.action_max-self.eps)
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-        p = self.event.particles[self.index]
-        ipair = p.index
-        neighbours = p.neighbours
+        c = self.event.calohits[self.index]
+        mc_state = c.mc_state
+        calohit_state = self.event.state(self.index)[:-1]
 
-        scalefact = action[0]
-        # rescale particle by scalefact, update corresponding jet
-        j = self.event.jet_pairs[ipair][1]
-        r = 1.0 - scalefact
-        j.reset(j.px - r*p.px, j.py - r*p.py, j.pz - r*p.pz, j.E - r*p.E)
-        p.reset(scalefact*p.px, scalefact*p.py, scalefact*p.pz, scalefact*p.E)
+        if action[0] >= 0:
+            # select the correct existing slice to put the calohit in
+            idx = math.floor(action[0]*self.slice_count)
+
+            # overwrite calohit status attribute with slice index
+            c.status = idx
+
+            # add calohit (E,x,z) to cumulative slice state
+            self.slices[idx] += calohit_state
+            slice_state = self.slices[idx]
+        else:
+            # form a new slice
+            # overwrite calohit status with slice index
+            c.status = self.slice_count
+
+            # add calohit (E,x,z) to cumulative slice state
+            self.slices.append( calohit_state )
+            slice_state = calohit_state
+            self.slice_count += 1
 
         # calculate a reward
-        reward = self.reward(ipair)
+        reward = self.reward(slice_state, mc_state)
 
         # move to the next node in the clustering sequence
         self.set_next_node()

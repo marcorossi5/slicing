@@ -27,4 +27,8 @@ The [EnergyFlow](https://github.com/pkomiske/EnergyFlow) Python package is used 
 
 SliceRL feeds a tuple of `(E,x,z)` coordinates to the EDM function. First parameter is the total energy, second is the sum of `x` coordinates of all the CaloHits in the slice, the last is the sum of coordinates in the specific U/V/W plane considered.
 
-Note: For EMD to be a distance metric, the `R` parameter has to be greater than half of the maximum distance between CaloHits. For protoDUNE we have that parameter must be greater than about 600 millimeters for the (x,U/V/W) planes.
+Note: For EMD to be a distance metric, the `R` parameter has to be greater than half of the maximum distance between CaloHits. For protoDUNE we have that parameter must be greater than about 600 millimeters for the (x,U/V/W) planes (0.6 in the code).
+
+## Notes
+
+Input lenghts are expressed in millimeters, while energies in ADCs. In order to have smaller number and gradients involved in the slicing computations, rescaling factors of 1e3 and 1e2 are employed for lenghts and energies respectively.

@@ -37,11 +37,9 @@ def get_window_width(masses, lower_frac=20, upper_frac=80):
     return lower, upper, median
 
 #----------------------------------------------------------------------
-def quality_metric(j_noPU, j):
+def quality_metric(slice_state, mc_state):
     """ Caluclate EMD metric for two Particle objects """
-    ev0 = np.array([j_noPU.pt, j_noPU.rap, j_noPU.phi])
-    ev1 = np.array([j.pt, j.rap, j.phi])
-    return emd(ev0, ev1)
+    return emd(slice_state, mc_state, R=0.6)
 
 #----------------------------------------------------------------------
 def jet_emd(j_noPU, j):

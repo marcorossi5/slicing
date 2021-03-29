@@ -41,6 +41,4 @@ class DDPGAgentSlicerl(DDPGAgent):
     #----------------------------------------------------------------------
     def slicer(self):
         """Return the current subtractor."""
-        return ContinuousSlicer(self.actor, self.test_policy)
-        
-    
+        return ContinuousSlicer(self.actor)

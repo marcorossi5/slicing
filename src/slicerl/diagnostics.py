@@ -12,6 +12,27 @@ import fastjet as fj
 import math
 
 #----------------------------------------------------------------------
+colors = [
+    "lightsalmon",
+    "orange",
+    "springgreen",
+    "fuchsia",
+    "lime",
+    "lightcoral",
+    "pink",
+    "darkseagreen",
+    "gold",
+    "red",
+    "deepskyblue",
+    "lightgreen",
+    "coral",
+    "aqua",
+    "lightgreen",
+    "mediumaquamarine"
+]
+l = len(colors)
+
+#----------------------------------------------------------------------
 def print_stats(name, data, mass_ref, output_folder='./'):
     """Print statistics on the mass distribution."""
     r_plain = np.array(data)-mass_ref
@@ -24,147 +45,101 @@ def print_stats(name, data, mass_ref, output_folder='./'):
               file=f)
 
 #----------------------------------------------------------------------
-def match(events, sb_events):
-    """ Match LV jets with closest subtracted(LV+PU) jets in (y,phi) plane"""
-    events_idxs = []
-    for jets_LV, jets_sb in zip(events, sb_events):
-        idxs = []
-        for jet_noPU in jets_LV:
-            min_dist = 100000
-            idx = -1
-            for i, jet in enumerate(jets_sb):
-                dphi = abs(jet_noPU.phi() - jet.phi())
-                if (dphi > math.pi):
-                    dphi = 2*math.pi - dphi
-                drap = jet_noPU.rap()- jet.rap()
-                dist = np.sqrt(drap**2 + dphi**2)
-                if (dist < min_dist):
-                    min_dist = dist
-                    idx = i
-            idxs.append(idx)
-        events_idxs.append(idxs)
-    return events_idxs
-
-#----------------------------------------------------------------------
-def plot_multiplicity(events, sb_events, output_folder='./', loaddir=None):
-    """Plot the jet multiplicity distribution and output some statistics."""
+def plot_multiplicity(events, output_folder='./', loaddir=None):
+    """Plot the slice multiplicity distribution and output some statistics."""
     if loaddir is not None:
-        fname = '%s/nnoPU.npy' % loaddir
-        nnoPU = np.load(fname)
-        fname = '%s/ndqn.npy' % loaddir
-        ndqn = np.load(fname)
+        fname = '%s/nmc.npy' % loaddir
+        nmc = np.load(fname)
+        fname = '%s/nddpg.npy' % loaddir
+        nddpg = np.load(fname)
     else:
-        nnoPU = np.array( [len(event) for event in events] )
-        ndqn = np.array( [len(event) for event in sb_events] )
+        nmc = np.array( [int(event.mc_idx.max()) + 1 for event in events] )
+        nddpg = np.array( [int(event.slicerl_idx.max()) + 1 for event in events] )
     
-    bins = np.linspace(-100, 100, 201)
+    bins = np.linspace(-10000, 10000, 201)
     plt.rcParams.update({'font.size': 20})
     plt.figure(figsize=(18,14))
-    counts, _, _ = plt.hist(ndqn-nnoPU, bins=bins, alpha=0.5,
-             linestyle='dotted', facecolor='lawngreen', label='DQN-Subtracting')
+    counts, _, _ = plt.hist(nddpg-nmc, bins=bins, alpha=0.5,
+             linestyle='dotted', facecolor='lawngreen', label='DDPG-Slicing')
     plt.hist(bins[:-1], bins, weights=counts, histtype='step', color='green', linestyle='dotted')
 
-    plt.xlabel("$n_{jets,reco}- n_{jets,LV}$", loc='right')
+    plt.xlabel("$n_{reco}- n_{mc}$", loc='right')
     plt.xlim((bins[0], bins[-1]))
     plt.legend()
     fname = f"{output_folder}/multiplicity.pdf"
     plt.savefig(fname, bbox_inches='tight')
         
-    print_stats('jet multiplicity', ndqn  , nnoPU, output_folder=output_folder)
+    print_stats('Slice multiplicity', nddpg  , nmc, output_folder=output_folder)
     resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/nnoPU.npy", nnoPU)
-    np.save(f"{resultsdir}/ndqn.npy", ndqn)
+    np.save(f"{resultsdir}/nmc.npy", nmc)
+    np.save(f"{resultsdir}/nddpg.npy", nddpg)
 
 #----------------------------------------------------------------------
-def plot_mass(events, sb_events, output_folder='./', loaddir=None):
-    """Plot the mass distribution and output some statistics."""
+def plot_slice_size(events, output_folder='./', loaddir=None):
+    """Plot the slice size distribution and output some statistics."""
+    bins = np.linspace(0, 1000, 1001)
+
     if loaddir is not None:
-        fname = '%s/mnoPU.npy' % loaddir
-        mnoPU = np.load(fname)
-        fname = '%s/mdqn.npy' % loaddir
-        mdqn = np.load(fname)
+        fname = '%s/smc.npy' % loaddir
+        smc = np.load(fname)
+        fname = '%s/sddpg.npy' % loaddir
+        sddpg = np.load(fname)
     else:
-        mnoPU = np.array( [jet.m() for event in events for jet in event] )
-        mdqn = np.array( [jet.m() for event in sb_events for jet in event] )
+        binc_mc = [np.bincount(event.mc_idx.astype(np.int32)[event.mc_idx >= 0]) for event in events]
+        binc_ddpg = [np.bincount(event.slicerl_idx.astype(np.int32)) for event in events]
+        smc = sum( [np.histogram(bc, bins=bins)[0] for bc in binc_mc] )
+        sddpg = sum( [np.histogram(bc, bins=bins)[0] for bc in binc_ddpg] )
     
-    bins = np.linspace(-2.5, 2.5, 101)
     plt.rcParams.update({'font.size': 20})
     plt.figure(figsize=(18,14))
-    counts, _, _ = plt.hist((mdqn-mnoPU)/mnoPU, bins=bins, alpha=0.5,
-             linestyle='dotted', facecolor='lawngreen', label='DQN-Subtracting')
-    plt.hist(bins[:-1], bins, weights=counts, histtype='step', color='green', linestyle='dotted')
-    # plt.hist((mplain-mnoPU)/mnoPU, bins=bins, histtype='step', color='blue', lw=1, label='plain')
 
-    plt.xlabel("$(m_{reco}- m_{LV})/m_{LV}$", loc='right')
+    plt.hist(bins[:-1], bins, weights=smc, histtype='step', color='blue', label='mc')
+    plt.hist(bins[:-1], bins, weights=sddpg, histtype='step', color='red', label='ddpg')
+
+    plt.xlabel("$s_{reco}- s_{mc}$", loc='right')
     plt.xlim((bins[0], bins[-1]))
+
+    plt.yscale("log")
     plt.legend()
-    fname = f"{output_folder}/mass.pdf"
+    fname = f"{output_folder}/slice_size.pdf"
     plt.savefig(fname, bbox_inches='tight')
         
-    # print_stats('mplain  ', mplain, mnoPU, output_folder=output_folder)
-    print_stats('mdqn    ', mdqn  , mnoPU, output_folder=output_folder)
+    print_stats('Slice multiplicity', sddpg  , smc, output_folder=output_folder)
     resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/mnoPU.npy", mnoPU)
-    np.save(f"{resultsdir}/mdqn.npy", mdqn)
+    np.save(f"{resultsdir}/smc.npy", smc)
+    np.save(f"{resultsdir}/sddpg.npy", sddpg)
 
 #----------------------------------------------------------------------
-def plot_pT(events, sb_events, output_folder='./', loaddir=None):
-    """Plot the mass distribution and output some statistics."""
-    if loaddir is not None:
-        fname = '%s/pTnoPU.npy' % loaddir
-        pTnoPU = np.load(fname)
-        fname = '%s/pTdqn.npy' % loaddir
-        pTdqn = np.load(fname)
-    else:
-        pTnoPU = np.array( [np.sqrt(jet.px()**2 + jet.py()**2) for event in events for jet in event] )
-        pTdqn = np.array( [np.sqrt(jet.px()**2 + jet.py()**2) for event in sb_events for jet in event] )
-    
-    bins = np.linspace(-2, 10, 51)
-    plt.rcParams.update({'font.size': 20})
-    plt.figure(figsize=(18,14))
-    counts, _, _ = plt.hist((pTdqn-pTnoPU)/pTnoPU, bins=bins, alpha=0.5,
-             linestyle='dotted', facecolor='lawngreen', label='DQN-Subtracting')
-    plt.hist(bins[:-1], bins, weights=counts, histtype='step', color='green', linestyle='dotted')
-    # plt.hist((pTplain-pTnoPU)/pTnoPU, bins=bins, histtype='step', color='blue', lw=1, label='plain')
+def plot_plane_view(events, output_folder='./', loaddir=None):
+    event_arr = events[0]
 
-    plt.xlabel("$(p_{T,reco}- p_{T,LV})/p_{T,LV}$", loc='right')
-    plt.xlim((bins[0], bins[-1]))
-    plt.legend()
-    fname = f"{output_folder}/pT.pdf"
+    fig = plt.figure(figsize=(18*2,14))
+    ax = fig.add_subplot(121)
+    ax.set_title(f"Slicing Algorithm Output, 2D plane view")
+    ax.set_xlabel("x [mm]")
+    ax.set_ylabel("z [mm]")
+    num_clusters = int(event_arr.slicerl_idx.max()) + 1
+    sort_fn = lambda x: np.count_nonzero( event_arr.slicerl_idx == x )
+    sorted_indices = sorted( range(num_clusters), key=sort_fn, reverse=True)
+    # sort all the cluster with greater number of hits
+    print(f"Plotting {num_clusters} Slices in event over {event_arr.slicerl_idx.shape[0]} particles")
+    for index in sorted_indices[:min(len(sorted_indices), 200)]:
+        m = event_arr.slicerl_idx == index
+        ax.scatter(event_arr.x[m], event_arr.z[m], marker='.', color=colors[index%l])
+    ax.set_box_aspect(1)
+
+    ax = fig.add_subplot(122)
+    ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
+    ax.set_xlabel("x [mm]")
+    ax.set_ylabel("z [mm]")
+    num_clusters = int(event_arr.mc_idx.max()) + 1
+    print(f"Plotting {num_clusters} true Slices in event")
+    for index in range(num_clusters):
+        m = event_arr.mc_idx == index
+        ax.scatter(event_arr.x[m], event_arr.z[m], marker='.', color=colors[index%l])
+    ax.set_box_aspect(1)
+    fname = f"{output_folder}/pview.pdf"
     plt.savefig(fname, bbox_inches='tight')
-        
-    # print_stats('pTplain', pTplain, pTnoPU, output_folder=output_folder)
-    print_stats('pTdqn'  , pTdqn  , pTnoPU, output_folder=output_folder)
-    resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/pTnoPU.npy", pTnoPU)
-    np.save(f"{resultsdir}/pTdqn.npy", pTdqn)
-
-#----------------------------------------------------------------------
-def plot_EMD(events, sb_events, output_folder='./', loaddir=None):
-    """Plot the Energy Moving Distance distribution and output some statistics."""
-    if loaddir is not None:
-        fname = '%s/EMDdqn.npy' % loaddir
-        EMDdqn = np.load(fname)
-    else:
-        EMDdqn = np.array([jet_emd(jet_noPU, sb_jet) for jets_noPU, sb_jets in zip(events, sb_events) \
-                                                for jet_noPU, sb_jet in zip(jets_noPU, sb_jets)])
-    bins = np.arange(0, 300, 2)
-    plt.rcParams.update({'font.size': 20})
-    plt.figure(figsize=(18,14))
-    counts, _, _ = plt.hist(EMDdqn, bins=bins, alpha=0.5,
-             linestyle='dotted', facecolor='lawngreen', label='DQN-Subtracting')
-    plt.hist(bins[:-1], bins, weights=counts, histtype='step', color='green', linestyle='dotted')
-    # plt.hist(EMDplain, bins=bins, histtype='step', color='blue', lw=1, label='plain')
-
-    plt.xlabel("$EMD_{reco}$", loc='right')
-    plt.xlim((bins[0], bins[-1]))
-    plt.legend()
-    fname = f"{output_folder}/EMD.pdf"
-    plt.savefig(fname, bbox_inches='tight')
-        
-    print_stats('EMDdqn'  , EMDdqn  , 0, output_folder=output_folder)
-    resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/EMDdqn.npy", EMDdqn)
 
 #----------------------------------------------------------------------
 def plot_ROC(scores, output_folder='./', loaddir=None):
@@ -219,81 +194,39 @@ def plot_ROC(scores, output_folder='./', loaddir=None):
     np.save(f"{resultsdir}/confusion.npy", np.stack([tp, fp, fn, tn]))
 
 #----------------------------------------------------------------------
-def inference(subtractor, events):
+def inference(slicer, events):
     """
-    Subtract PU particles from a list of Events objects. Returns a list of
-    subtracted Events.
+    Slice calohits from a list of Events objects. Returns the list of
+    processed Events.
 
     Parameters
     ----------
-        subtractor: Subtractor object
+        slicer: Slicer object
     
     Returns
     -------
         The list of subtracted Events.
     """
-    events_sb = []
     progbar = Progbar(len(events))
     for i, event in enumerate(events):
-        events_sb.append( subtractor(event) )
+        slicer(event)
         progbar.update(i+1)
-    return events_sb
+    return events
 
 #----------------------------------------------------------------------
-def make_plots(events, jet_algorithm, R, plotdir):
+def make_plots(events, plotdir):
     """
     Make diagnostics plots from a list of subtracted events.
 
     Parameters
     ----------
-        events: list of Event objects
-            list of subtracted events
-        jet_algorithm: fastjet::JetAlgorithm
-            the jet algorithm to re-cluster events for PU subtraction assessment
-        - R: float
-            radius parameter of jet clustering algorithm
-        - plotdir: str
-            plots output folder
+        - events:  list, list of sliced Event objects
+        - plotdir: str, plots output folder
     """
-    events_LV               = []
-    events_reco             = []
-    kept_rejected_particles = []
-    # collects (truth, prediction) for particle to be PU: 1 is PU, 0 is LV
-    
-    jet_def = fj.JetDefinition(jet_algorithm, R) 
-    
-    for event in events:
-        ppjets = event.particles_as_pseudojets()
-
-        p_LV    = []
-        p_reco  = []
-        krp     = []
-
-        for p in ppjets:
-            assert p.has_user_info(), "Particles do not carry user info, ensure to set load_truth to True in Reader object"
-            PU = p.python_info().PU
-            status = p.python_info().status
-            if PU == 0:
-                p_LV.append( p )
-            if status == 1:
-                p_reco.append( p )
-            krp.append( [PU, 1-status] )
-
-        events_LV.append( jet_def(p_LV) )
-        events_reco.append( jet_def(p_reco) )
-        kept_rejected_particles.append( np.array(krp) )
-    
-    events_idxs = match(events_LV, events_reco)
-
-    # sort the subtracted jets according to closest ones
-    # drop the unmatched ones
-    events_sorted = [ [jets_sb[idx] for idx in jets_idx] for jets_idx, jets_sb in zip(events_idxs, events_reco) ]
-
-    plot_multiplicity(events_LV, events_reco, plotdir)
-    plot_mass(events_LV, events_sorted, plotdir)
-    plot_pT(events_LV, events_sorted, plotdir)
-    plot_EMD(events_LV, events_sorted, plotdir)
-    plot_ROC(kept_rejected_particles, plotdir)
+    events = [event.calohits_to_namedtuple() for event in events]
+    plot_multiplicity(events, plotdir)
+    plot_slice_size(events, plotdir)
+    plot_plane_view(events, plotdir)
 
 #----------------------------------------------------------------------
 def load_and_dump_plots(plotdir, loaddir):
@@ -302,13 +235,10 @@ def load_and_dump_plots(plotdir, loaddir):
 
     Parameters
     ----------
-        - plotdir: str
-            plots output folder
-        - loaddir: str
-            directory where to load plot data from
+        - plotdir: str, plots output folder
+        - loaddir: str, directory where to load plot data from
     """
-    plot_multiplicity(None, None, plotdir, loaddir)
-    plot_mass(None, None, plotdir, loaddir)
-    plot_pT(None, None, plotdir, loaddir)
-    plot_EMD(None, None, plotdir, loaddir)
-    plot_ROC(None, plotdir, loaddir)
+    events = [event.calohits_to_namedtuple() for event in events]
+    plot_multiplicity(None, plotdir, loaddir)
+    plot_slice_size(None, plotdir, loaddir)
+    plot_plane_view(None, plotdir, loaddir)

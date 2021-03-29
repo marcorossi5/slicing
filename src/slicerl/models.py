@@ -42,7 +42,7 @@ def build_actor_model(hps, input_dim):
         if hps['dropout']>0.0:
             model.add(Dropout(hps['dropout']))
         model.add(Dense(1))
-        model.add(Activation('sigmoid'))
+        model.add(Activation('tanh'))
     model.summary()
     return model
 
@@ -120,7 +120,7 @@ def load_runcard(runcard):
         res = json.load(f)
     # if there is a state_dim variable, set up LundCoordinates accordingly
     # unless we are doing a scan (in which case it needs to be done later)
-    env_setup = res.get("expurl_env")
+    env_setup = res.get("slicerl_env")
     return res
 
 #----------------------------------------------------------------------
@@ -154,56 +154,57 @@ def loss_calc(dqn, fn, nev):
 
 #----------------------------------------------------------------------
 def load_environment(env_setup):
-    expurl_env = SlicerlEnvContinuous(env_setup,
+    slicerl_env = SlicerlEnvContinuous(env_setup,
                 low=np.array([0., -0.37260447692861504, -0.35284, 0.], dtype=np.float32),
                 high=np.array([500., 0.37260447692861504, 0.91702, 150.], dtype=np.float32)
                                      )
-    # expurl_env = SlicerlEnvContinuous(env_setup,
+    # slicerl_env = SlicerlEnvContinuous(env_setup,
     #                     flow=np.array([0., -0.37260447692861504, -0.35284], dtype=np.float32),
     #                     fhigh=np.array([500., 0.37260447692861504, 0.91702], dtype=np.float32),
     #                     ihigh=np.array([150])
     #                     )
-    return expurl_env
+    return slicerl_env
 
 #----------------------------------------------------------------------
-def build_and_train_model(expurl_agent_setup, expurl_env=None):
+def build_and_train_model(slicerl_agent_setup, slicerl_env=None):
     """Run a test model"""
 
-    if expurl_env is None:
-        env_setup = expurl_agent_setup.get('expurl_env')
-        expurl_env = load_environment(env_setup)
+    if slicerl_env is None:
+        env_setup = slicerl_agent_setup.get('slicerl_env')
+        slicerl_env = load_environment(env_setup)
 
-    agent_setup = expurl_agent_setup.get('rl_agent')
-    ddpg = build_ddpg(agent_setup, expurl_env.observation_space.shape)
+    agent_setup = slicerl_agent_setup.get('rl_agent')
+    ddpg = build_ddpg(agent_setup, slicerl_env.observation_space.shape)
 
-    logdir = '%s/logs/{}'.format(time()) % expurl_agent_setup['output']
+    logdir = '%s/logs/{}'.format(time()) % slicerl_agent_setup['output']
     print(f'[+] Constructing tensorboard log in {logdir}')
     tensorboard = TensorBoard(log_dir=logdir)
 
     print('[+] Fitting DDPG agent...')
-    r = ddpg.fit(expurl_env, nb_steps=agent_setup['nstep'],
+    r = ddpg.fit(slicerl_env, nb_steps=agent_setup['nstep'],
                 visualize=False, verbose=1, callbacks=[tensorboard])
-
-    print("models.py line 188")
-    exit()
 
     # compute nominal reward after training
     median_reward = np.median(r.history['episode_reward'])
     print(f'[+] Median reward: {median_reward}')
 
     # After training is done, we save the final weights.
-    if not expurl_agent_setup['scan']:
-        weight_file = '%s/weights.h5' % expurl_agent_setup['output']
+    if not slicerl_agent_setup['scan']:
+        weight_file = '%s/weights.h5' % slicerl_agent_setup['output']
         print(f'[+] Saving weights to {weight_file}')
         ddpg.save_weights(weight_file, overwrite=True)
 
         # save the model architecture in json
-        model_file = '%s/model.json' % expurl_agent_setup['output']
-        print(f'[+] Saving model to {model_file}')
-        with open(model_file, 'w') as outfile:
-            json.dump(ddpg.model.to_json(), outfile)
+        model_file = '%s/model' % slicerl_agent_setup['output']
+        actor_file = '%s_actor.json' % model_file
+        critic_file = '%s_critic.json' % model_file        
+        print(f'[+] Saving model to {actor_file}, {critic_file}')
+        with open(actor_file, 'w') as outfile:
+            json.dump(ddpg.actor.to_json(), outfile)
+        with open(critic_file, 'w') as outfile:
+            json.dump(ddpg.critic.to_json(), outfile)
 
-    if expurl_agent_setup['scan']:
+    if slicerl_agent_setup['scan']:
         # compute a metric for training set (TODO: change to validation)
         raise ValueError('SCAN LOSS FCT NOT IMPLEMENTED YET')
         loss, window = loss_calc(ddpg, env_setup['val'],  env_setup['nev_val'])

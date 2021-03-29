@@ -14,11 +14,12 @@ class Reader(object):
     """
 
     #----------------------------------------------------------------------
-    def __init__(self, infile, nmax = -1):
+    def __init__(self, infile, nmax=-1, num_lines=6):
         """Initialize the reader."""
         self.infile = infile
         self.readline_fn = lambda x: np.array(next(x))[:-1].astype(np.float32)
         self.nmax = nmax
+        self.num_lines = num_lines
         self.reset()
 
     #----------------------------------------------------------------------
@@ -59,6 +60,10 @@ class Reader(object):
             c.append( self.readline_fn(self.stream) ) # cluster_idx
             c.append( self.readline_fn(self.stream) ) # pndr_idx
             c.append( self.readline_fn(self.stream) ) # cheating_idx (mc truth)
+            if self.num_lines == 7:
+                c.append( self.readline_fn(self.stream) ) # slicerl_idx
+            else:
+                c.append( -1*np.ones_like(c[-1]) )
         except IOError:
             print("# got to end with IOError (maybe gzip structure broken?) around event", self.n, file=sys.stderr)
             return None
@@ -79,8 +84,8 @@ class Reader(object):
 class Image(ABC):
     """Image which transforms point-like information into pixelated 2D
     images which can be processed by convolutional neural networks."""
-    def __init__(self, infile, nmax):
-        self.reader = Reader(infile, nmax)
+    def __init__(self, infile, nmax, num_lines=6):
+        self.reader = Reader(infile, nmax, num_lines)
 
     #----------------------------------------------------------------------
     @abstractmethod
@@ -104,15 +109,17 @@ class Events(Image):
     """Read input file with calohits and transform into python events."""
 
     #----------------------------------------------------------------------
-    def __init__(self, infile, nmax, min_hits):
+    def __init__(self, infile, nmax, min_hits, num_lines=None):
         """
         Parameters
         ----------
-            infile:   str, input file name
-            nmax:     int, max number of events to load
-            min_hits: int, consider slices with more than min_hits Calohits only
+            infile:    str, input file name
+            nmax:      int, max number of events to load
+            min_hits:  int, consider slices with more than min_hits Calohits only
+            num_lines: int, number of lines stored in the file. Specifies if the
+                       file contains inference results or not.
         """
-        Image.__init__(self, infile, nmax)
+        Image.__init__(self, infile, nmax, num_lines)
         self.min_hits = min_hits
         self.printouts=10
 
@@ -121,26 +128,27 @@ class Events(Image):
         return Event(event, self.min_hits)
 
 #======================================================================
-def load_Events_from_file(filename, nev, R):
+def load_Events_from_file(filename, nev, min_hits=1, num_lines=6):
     """
-    Utility function to load Jets object list from file. Return a list of Event
-    objects. Loading into Events objects applies additional cuts in pT and
-    rapidity on event particles.
+    Utility function to load Events object from file. Return a list of Event
+    objects.
 
     Parameters
     ----------
-        - filename: str, file to load events from
-        - nev:      int, number of events to load
-        - R:        float, radius parameter of jet clustering algorithm
+        - filename:  str, file to load events from
+        - nev:       int, number of events to load
+        - min_hits:  int, consider slices with more than min_hits Calohits only
+        - num_lines: int, number of lines stored in the file. Lines stand for:
+                     energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
+                     slicerl_idx (optional). 
     
     Returns
     -------
         - list
             list of loaded Event object (with length equal to nev)
     """
-    reader = Events(filename, nev, R)
-    events = reader.values()
-    return [Event(plane_view) for plane_view in events]
+    reader = Events(filename, nev, min_hits, num_lines)
+    return reader.values()
 
 #======================================================================
 def save_Event_list_to_file(events, filename):
@@ -152,7 +160,7 @@ def save_Event_list_to_file(events, filename):
 
     Parameters
     ----------
-        - event_list: list, list of Event objects
+        - events:     list, list of Event objects
         - filename:   str
     """
     with gzip.open(filename, 'wb') as wfp:

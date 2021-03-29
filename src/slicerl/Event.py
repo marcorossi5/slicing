@@ -3,35 +3,52 @@
 import sys
 import numpy as np
 import math
-import json
+import json, gzip
+from collections import namedtuple
+
+EventTuple = namedtuple("EventTuple", ["E", "x", "z", "cluster_idx", "pndr_idx",
+                                       "mc_idx", "slicerl_idx"])
 
 #======================================================================
 class Event:
     """Event class keeping track of calohits in a 2D plane view."""
     
     #----------------------------------------------------------------------
-    def __init__(self, calohits, min_hits=0):
+    def __init__(self, calohits, min_hits=1):
         """
         Parameters
         ----------
-            - calohits : np.array, shape=(6, num calohits), containing all the
+            - calohits : np.array, shape=(7, num calohits), containing all the
                          event information. Each calohit is described by:
-                         energies, x coordinate, z coordinate, input pfo list
-                         cluster idx, pandora slice index, cheating slice idx
-                         (mc truth).
-            - min_hits : int, consider only slices with more than min_hits         
+                            - energy
+                            - x coordinate
+                            - z coordinate
+                            - input pfo list cluster idx
+                            - pandora slice index
+                            - cheating slice idx (mc truth)
+                            - slicing output (array of minus ones if not loading
+                              inference results)
+            - min_hits : int, consider only slices with equal or more than min_hits         
         """
         self.calohits = []
         for i,c in enumerate(calohits.T):
-            in_slice_idx = np.where(calohits[-1] == c[-1])[0]
+            # find calohits indices belonging to the same slice
+            in_slice_idx = np.where(calohits[5] == c[5])[0]
             if len(in_slice_idx) >= min_hits:
-                mcstate = (
-                           calohits[0][in_slice_idx].sum(), # cumulative energy
-                           calohits[0][in_slice_idx].sum(), # cumulative x
-                           calohits[0][in_slice_idx].sum()  # cumulative z
+                mcstate = np.array(
+                           [calohits[0][in_slice_idx].sum(),  # cumulative energy
+                            calohits[0][in_slice_idx].sum(),  # cumulative x
+                            calohits[0][in_slice_idx].sum()]  # cumulative z
                           )
                 self.calohits.append(CaloHit(c[0], c[1], c[2],c[3], c[4], c[5],
-                                     neighbours=in_slice_idx, mcstate=mcstate))
+                                     neighbours=in_slice_idx, mcstate=mcstate,
+                                     status=c[6]))
+        self.slices_info = []
+
+
+    #----------------------------------------------------------------------
+    def __len__(self):
+        return len(self.calohits)
 
     #----------------------------------------------------------------------
     def state(self, i):
@@ -51,14 +68,51 @@ class Event:
         #            )
         # else:
         #     return ( np.zeros(3), -1*np.ones(1) )
-    
+
+
+    #----------------------------------------------------------------------
+    def calohits_to_array(self):
+        """
+        Takes calohits list into a list of arrays for plot rendering.
+
+        Returns
+        ----------
+            - numpy array of shape (7, num calohits). Rows contain in order:
+              energies, xs, zs, cluster_idx, pndr_idx, cheating_idx, slicerl_idx
+
+        """
+        rows = [[] for i in range(7)]
+        for c in self.calohits:
+            rows[0].append(c.E*100)
+            rows[1].append(c.x*1000)
+            rows[2].append(c.z*1000)
+            rows[3].append(c.clusterIdx)
+            rows[4].append(c.pndrIdx)
+            rows[5].append(c.mcIdx)
+            rows[6].append(c.status)
+        return np.array(rows)
+
+    #----------------------------------------------------------------------
+    def calohits_to_namedtuple(self):
+        """
+        Takes calohits list into an EventTuple object for plot rendering.
+
+        Returns
+        ----------
+            - numpy array of shape (7, num calohits). Rows contain in order:
+              energies, xs, zs, cluster_idx, pndr_idx, cheating_idx, slicerl_idx
+
+        """
+        arr = self.calohits_to_array()
+        return EventTuple(*arr)
+
     #----------------------------------------------------------------------
     def dump(self, fname):
-        """ Dump particle list to fname file """
-        data = [{'E': p.E, 'px': p.px, 'py': p.py, 'pz': p.pz, 'PU': p.PU, 'status': p.status} for p in self.particles]
-        line = json.dumps(data, separators=(',', ':')).encode('utf-8')
-        fname.write(line)
-        fname.write(b'\n')
+        """ Dump calohits list to fname file """
+        rows = self.calohits_to_array()        
+        for row in rows:
+            np.savetxt(fname, row, fmt='%.5f', newline=',')
+            fname.write(b"\n")
 
 #======================================================================
 class CaloHit:
@@ -79,7 +133,7 @@ class CaloHit:
          - neighbours: indices array of calohits from the same slice (mc truth)
          - mc_state:   the cumulative (E,x,z) info about the slice the calohit
                        belongs to (mc truth)
-         - status:      the current slice index the calohit belongs to (changed
+         - status:     the current slice index the calohit belongs to (changed
                        by the agent)
         """
         self.E          = E
@@ -90,7 +144,7 @@ class CaloHit:
         self.mcIdx      = mcIdx
         self.neighbours = neighbours if neighbours is not None else []
         self.mc_state   = mcstate
-        self.status      = status
+        self.status     = status
 
 """
 TODO: rename Particle into CaloHit

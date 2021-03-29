@@ -1,7 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 
 """
-    expurl.py: the entry point for expurl.
+    slicerl.py: the entry point for slicerl.
 """
 from slicerl.read_data import Events, save_Event_list_to_file, load_Events_from_file
 from slicerl.Event import Event
@@ -12,7 +12,7 @@ from slicerl.keras_to_cpp import keras_to_cpp, check_model
 from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
 import fastjet as fj
-from time import time
+from time import time as tm
 from shutil import copyfile
 from copy import deepcopy
 import os, argparse, pickle, pprint, json, gzip, ast, shutil
@@ -25,7 +25,7 @@ def run_hyperparameter_scan(search_space):
     """Running a hyperparameter scan using hyperopt.
     TODO: implement cross-validation, e.g. k-fold, or randomized cross-validation.
     TODO: use test data as hyper. optimization goal.
-    TODO: better import/export for the best model, wait to DQNAgentExpurl
+    TODO: better import/export for the best model, wait to DQNAgentSlicerl
     """
 
     print('[+] Performing hyperparameter scan...')
@@ -34,19 +34,19 @@ def run_hyperparameter_scan(search_space):
         url = search_space['cluster']['url']
         key = search_space['cluster']['exp_key']
         trials = MongoTrials(url, exp_key=key)
-        expurl_env = None
+        slicerl_env = None
     else:
-        env_setup = search_space.get('expurl_env')
-        expurl_env = load_environment(env_setup)
+        env_setup = search_space.get('slicerl_env')
+        slicerl_env = load_environment(env_setup)
         trials = Trials()
 
-    best = fmin(lambda p: build_and_train_model(p, expurl_env), search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)
+    best = fmin(lambda p: build_and_train_model(p, slicerl_env), search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)
 
     best_setup = space_eval(search_space, best)
     print('\n[+] Best scan setup:')
     pprint.pprint(best_setup)
 
-    log = '%s/hyperopt_log_{}.pickle'.format(time()) % search_space['output']
+    log = '%s/hyperopt_log_{}.pickle'.format(tm()) % search_space['output']
     with open(log,'wb') as wfp:
         print(f'[+] Saving trials in {log}')
         pickle.dump(trials.trials, wfp)
@@ -62,9 +62,9 @@ def load_json(runcard_file):
     """
     runcard = load_runcard(runcard_file)
     runcard['scan'] = False
-    for key, value in runcard.get('expurl_env').items():
+    for key, value in runcard.get('slicerl_env').items():
         if 'hp.' in str(value):
-            runcard['expurl_env'][key] = eval(value)
+            runcard['slicerl_env'][key] = eval(value)
             runcard['scan'] = True
     for key, value in runcard.get('rl_agent').items():
         if 'hp.' in str(value):
@@ -81,7 +81,7 @@ def makedir(folder):
         raise Exception('Output folder %s already exists.' % folder)
 
 #----------------------------------------------------------------------
-def safe_inference_and_plots(subtractor, fnin, fnres, plotdir, loaddir, nev, R):
+def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev):
     """
     Make inference from dataset at fnin and save results at fnres. Output
     diagnostic plots in plotdir and plot data in loaddir. Perform checks trying
@@ -99,8 +99,6 @@ def safe_inference_and_plots(subtractor, fnin, fnres, plotdir, loaddir, nev, R):
             folder name to store diagnostic plots data (to tweak plots only)
         nev: int
             number of event to load
-        R: float
-            radius parameter of jet clustering algorithm
     """
     try:
         makedir(plotdir)
@@ -113,23 +111,24 @@ def safe_inference_and_plots(subtractor, fnin, fnres, plotdir, loaddir, nev, R):
             print(f'[+] Ignoring plots: {loaddir} already exists, but is empty')
     else:
         print(f'[+] Creating test plots in {plotdir}')
-        # if already tested subtractor, load results and make plots
+        # if already tested slicer, load results and make plots
         # otherwise do inference first
         if os.path.isfile(fnres):
             print('[+] Json file found: loading from saved test data')
-            events = load_Jets_from_file(fnres, nev, R, True)
+            events = load_Events_from_file(fnres, nev, num_lines=7)
         else:
-            events = load_Jets_from_file(fnin, nev, R, True)
-            events = inference(subtractor, events)
+            events = load_Events_from_file(fnin, nev)
+            events = inference(slicer, events)
             save_Event_list_to_file(events, fnres)
-        make_plots(events, fj.antikt_algorithm, R, plotdir)
+        make_plots(events, plotdir)
 
 
 #----------------------------------------------------------------------
 def main():
     """Parsing command line arguments"""
+    start = tm()
     # read command line arguments
-    parser = argparse.ArgumentParser(description='Train an ML subtractor.')
+    parser = argparse.ArgumentParser(description='Train an ML slicer.')
     parser.add_argument('runcard', action='store', nargs='?', default=None,
                         help='A json file with the setup.')
     parser.add_argument('--model', '-m', type=str, default=None,
@@ -141,7 +140,7 @@ def main():
                         help='Overwrite existing files if present')
     parser.add_argument('--cpp',action='store_true',dest='cpp')
     parser.add_argument('--data', type=str, default=None, dest='data',
-                        help='Data on which to apply the subtractor.')
+                        help='Data on which to apply the slicer.')
     parser.add_argument('--nev', '-n', type=float, default=-1,
                         help='Number of events.')
     args = parser.parse_args()
@@ -181,7 +180,7 @@ def main():
         # copy runcard to output folder
         copyfile(args.runcard, f'{out}/input-runcard.json')
 
-        # expurl common environment setup
+        # slicerl common environment setup
         if setup.get('scan'):
             rl_agent_setup = run_hyperparameter_scan(setup)
         else:
@@ -189,7 +188,7 @@ def main():
             rl_agent_setup = setup
 
         print('[+] Training best model:')
-        dqn = build_and_train_model(rl_agent_setup)
+        ddpg = build_and_train_model(rl_agent_setup)
 
         # save the final runcard
         with open(f'{out}/runcard.json','w') as f:
@@ -201,9 +200,9 @@ def main():
         if os.path.exists(fnres):
             os.remove(fnres)
 
-        subtractor = dqn.subtractor()
-        events = load_Jets_from_file(setup['test']['fn'], args.nev, setup['expurl_env']['jet_R'], True)
-        events = inference(subtractor, events)
+        slicer = ddpg.slicer()
+        events = load_Events_from_file(setup['test']['fn'], args.nev)
+        events = inference(slicer, events)
         save_Event_list_to_file(events, fnres)
 
         # define the folder where to do the plotting/cpp conversation
@@ -215,15 +214,11 @@ def main():
         # loading json card
         setup = load_runcard('%s/runcard.json' % folder)
         rl_agent_setup = setup
-        # loading subtractor
-        if setup['expurl_env']['discrete']:
-            subtractor = DiscreteSubtractor()
-        else:
-            raise ValueError('ContinuousSubtractor was not implemented yet')
-            # subtractor = ContinuousSubtractor()
+        # loading slicer
+        slicer = ContinuousSlicer()
         modelwgts_fn = '%s/weights.h5' % folder
         modeljson_fn = '%s/model.json' % folder
-        subtractor.load_with_json(modeljson_fn, modelwgts_fn)
+        slicer.load_with_json(modeljson_fn, modelwgts_fn)
 
     # if requested, add plotting
     if args.plot:
@@ -231,7 +226,7 @@ def main():
         plotdir = '%s/plots' % folder
         loaddir = '%s/results' % plotdir
         fnres   = '%s/test_predictions.json.gz' % setup['output']
-        safe_inference_and_plots(subtractor, fnin, fnres, plotdir, loaddir, args.nev, setup['expurl_env']['jet_R'])
+        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev)
 
     # if a data set was given as input, produce plots from it
     # always check if inference data is already there
@@ -240,7 +235,7 @@ def main():
         plotdir='%s/%s' % (folder, fnres)
         loaddir = '%s/results' % plotdir
         fnres = '%s/%s_sb.json.gz' % (plotdir, fnin)
-        safe_inference_and_plots(subtractor, fnin, fnres, plotdir, loaddir, args.nev, setup['expurl_env']['jet_R'])
+        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev, setup['slicerl_env']['jet_R'])
 
     # if requested, add cpp output
     if args.cpp:
@@ -253,7 +248,8 @@ def main():
         else:
             print(f'[+] Adding cpp model in {cppdir}')
             cpp_fn = '%s/model.nnet' % cppdir
-            arch_dic=ast.literal_eval(subtractor.model.to_json()
+            arch_dic=ast.literal_eval(slicer.model.to_json()
                                       .replace('true','True')
                                       .replace('null','None'))
-            keras_to_cpp(subtractor.model, arch_dic['config']['layers'], cpp_fn)
+            keras_to_cpp(slicer.model, arch_dic['config']['layers'], cpp_fn)
+    print(f"Program done in {tm()-start} s")
