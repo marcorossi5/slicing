@@ -1,6 +1,6 @@
 {
     "slicerl_env": {
-    "fn": "test_data.csv.gz",
+    "fn": "test_data_2GeV.csv.gz",
     "nev": 5,
     "width": 1.0,
     "min_hits": 200,
@@ -24,6 +24,6 @@
     "optimizer": "Adam"
     },
     "test": {
-    "fn": "test_data.csv.gz"
+    "fn": "test_data_2GeV.csv.gz"
     }
 }
