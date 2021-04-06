@@ -3,18 +3,12 @@
 import random, math, pprint
 from slicerl.read_data import Events
 from slicerl.Event import Event
+from slicerl.SpaceDiscrete import SpaceDiscrete
 from gym import spaces, Env
 from gym.utils import seeding
 import numpy as np
 from slicerl.tools import quality_metric
-
-
-class TupleSpace(spaces.Tuple):
-    def __init__(self, *args, **kwargs):
-        super(TupleSpace,self).__init__(*args, **kwargs)
-        # watch out ! this breaks if some space has shape of type NoneType
-        print(list(space.shape for space in self.spaces))
-        self.shape = tuple([sum(space.shape for space in self.spaces)])
+from copy import deepcopy
 
 #======================================================================
 class SlicerlEnv(Env):
@@ -30,21 +24,22 @@ class SlicerlEnv(Env):
         - nev: number of events (-1 for all)
         - reward: type of reward function (cauchy, gaussian, ...)
         """
+        # add small penalty for not clustering
+        self.penalty = hps['penalty']
+
         # read in the events
-        reader = Events(hps['fn'], hps['nev'], hps['min_hits'])
+        self.k = hps['k']
+        reader = Events(hps['fn'], hps['nev'], k=hps['k'], min_hits=hps['min_hits'])
         self.events = reader.values()
 
         # set up the count parameters and initial state
         self.slice_count   = 0
         self.slices        = []
 
-        # set up observation and action space
+        # set up action and observation space
         self.action_space      = spaces.Discrete(2)
         self.observation_space = spaces.Box(low, high, dtype=np.float32)
-        # self.observation_space = TupleSpace(
-        #                                 (spaces.Box(flow, fhigh, dtype=np.float32), \
-        #                                 spaces.Discrete(ihigh) )
-        #                                    )
+        
         # set up some internal parameters
         self.seed()
         self.viewer = None
@@ -68,36 +63,34 @@ class SlicerlEnv(Env):
     #----------------------------------------------------------------------
     def reset_current_event(self):
         """Reset the current event and insert the first calohit."""
-        self.event       = random.choice(self.events)
+        self.event       = deepcopy(random.choice(self.events))
         self.index       = -1
         self.slice_count = 0
         self.slices      = []
         self.set_next_node()
 
-        print(f"training on event with {len(self.event)} calohits")
-
         # overwrite calohit status with slice index
+
         c = self.event.calohits[self.index]
         c.status = self.slice_count
 
         # add calohit (E,x,z) to cumulative slice state
-        calohit_state = self.event.state(self.index)[:-1]
+        calohit_state = self.state[0,1:4]
         self.slices.append( calohit_state )
         self.slice_count += 1
 
         self.set_next_node()
 
     #----------------------------------------------------------------------
-    def set_next_node(self):
+    def set_next_node(self, is_reset=False):
         """Set the current particle using the event list."""
         # print('setting node up')
-        while True:
+        while self.index < len(self.event):
             self.index += 1
-            if (len(self.event.calohits) >= self.index)\
-               or (self.event.calohits[self.index].status is None)\
-               or (self.event.calohits[self.index].status == -1):
-                break
-
+            if self.index < len(self.event):
+                if (self.event.calohits[self.index].status is None)\
+                    or (self.event.calohits[self.index].status == -1):
+                    break
         self.state = self.event.state(self.index)
 
     #----------------------------------------------------------------------
@@ -168,9 +161,10 @@ class SlicerlEnvContinuous(SlicerlEnv):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         c = self.event.calohits[self.index]
         mc_state = c.mc_state
-        calohit_state = self.event.state(self.index)[:-1]
+        calohit_state = self.state[0,1:4]
 
-        if action[0] >= 0:
+        aggregate = action[0] >= 0
+        if aggregate:
             # select the correct existing slice to put the calohit in
             idx = math.floor(action[0]*self.slice_count)
 
@@ -190,14 +184,21 @@ class SlicerlEnvContinuous(SlicerlEnv):
             slice_state = calohit_state
             self.slice_count += 1
 
-        # calculate a reward
-        reward = self.reward(slice_state, mc_state)
+        # calculate a reward        
+        # penalize wrongly seeding new slice and when aggregating to small slice
+        large_cluster = np.count_nonzero(c.mc_neighbours_m) >= 5
+        penalty = self.penalty / 1e3 * (not aggregate)
+        extra_reward =  self.penalty / 1e3 * (large_cluster == aggregate)
+        extra_penalty =  self.penalty / 5e1 * (large_cluster and not aggregate)
+        # penalize when aggregating if neighbours < 5
+        # penalize when seeding new slide if neighbours > 5
+        reward = self.reward(slice_state, mc_state) + extra_reward - penalty - extra_penalty
 
         # move to the next node in the clustering sequence
         self.set_next_node()
 
         # if we are at the end of the declustering list, then we are done for this event.
-        done = bool(len(self.event) <= self.index)
+        done = bool(self.index >= len(self.event))
 
         # return the state, reward, and status
         return self.state, reward, done, {}

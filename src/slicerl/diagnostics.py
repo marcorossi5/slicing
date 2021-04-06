@@ -1,14 +1,10 @@
 # This file is part of SliceRL by M. Rossi
 import os
 from tensorflow.keras.utils import Progbar
-from expurl.read_data import Jets
-from expurl.Event import Event
-from expurl.tools import jet_emd, confusion_matrix_per_event
+from slicerl.Event import Event
+from slicerl.tools import quality_metric
 from matplotlib import pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
-from copy import deepcopy
-import fastjet as fj
 import math
 
 #----------------------------------------------------------------------
@@ -56,14 +52,17 @@ def plot_multiplicity(events, output_folder='./', loaddir=None):
         nmc = np.array( [int(event.mc_idx.max()) + 1 for event in events] )
         nddpg = np.array( [int(event.slicerl_idx.max()) + 1 for event in events] )
     
-    bins = np.linspace(-10000, 10000, 201)
+    bins = np.linspace(0, 200, 201)
+    hnmc, _   = np.histogram(nmc, bins=bins)
+    hnddpg, _ = np.histogram(nddpg, bins=bins)
+
     plt.rcParams.update({'font.size': 20})
     plt.figure(figsize=(18,14))
-    counts, _, _ = plt.hist(nddpg-nmc, bins=bins, alpha=0.5,
-             linestyle='dotted', facecolor='lawngreen', label='DDPG-Slicing')
-    plt.hist(bins[:-1], bins, weights=counts, histtype='step', color='green', linestyle='dotted')
+    
+    plt.hist(bins[:-1], bins, weights=hnmc, histtype='step', color='blue', label='mc')
+    plt.hist(bins[:-1], bins, weights=hnddpg, histtype='step', color='red', label='ddpg')
 
-    plt.xlabel("$n_{reco}- n_{mc}$", loc='right')
+    plt.xlabel("multiplicity", loc='right')
     plt.xlim((bins[0], bins[-1]))
     plt.legend()
     fname = f"{output_folder}/multiplicity.pdf"
@@ -75,9 +74,48 @@ def plot_multiplicity(events, output_folder='./', loaddir=None):
     np.save(f"{resultsdir}/nddpg.npy", nddpg)
 
 #----------------------------------------------------------------------
+def plot_EMD(events, events_obj, output_folder='./', loaddir=None):
+    """Plot the energy movers distance between slices and output some statistics."""
+    if loaddir is not None:
+        fname = '%s/emdddpg.npy' % loaddir
+        emdddpg = np.load(fname)
+    else:
+        emdddpg  = []
+        for i, event in enumerate(events):
+            num_clusters = event.slicerl_idx.max().astype(np.int32) + 1
+            for idx in range(num_clusters):
+                m = event.slicerl_idx == idx
+                Es = event.E[m].sum()
+                xs = event.x[m].sum()
+                zs = event.z[m].sum()
+                slice_state = np.array([Es, xs, zs])
+                # get the index of the first calohit in the slice
+                cidx = np.argwhere(m)[0,0]
+                mc_state = events_obj[i].calohits[cidx].mc_state
+                emdddpg.append(quality_metric(slice_state, mc_state))
+        emdddpg = np.array(emdddpg)
+    
+    bins = np.linspace(0, 200, 201)
+    hemdddpg, _ = np.histogram(emdddpg, bins=bins)
+
+    plt.rcParams.update({'font.size': 20})
+    plt.figure(figsize=(18,14))
+    
+    plt.hist(bins[:-1], bins, weights=hemdddpg, histtype='step', color='red')
+
+    plt.xlabel("emd", loc='right')
+    plt.xlim((bins[0], bins[-1]))
+    fname = f"{output_folder}/emd.pdf"
+    plt.savefig(fname, bbox_inches='tight')
+        
+    print_stats('Slice EMD', emdddpg, 0, output_folder=output_folder)
+    resultsdir = '%s/results' % output_folder
+    np.save(f"{resultsdir}/emdddpg.npy", emdddpg)
+
+#----------------------------------------------------------------------
 def plot_slice_size(events, output_folder='./', loaddir=None):
     """Plot the slice size distribution and output some statistics."""
-    bins = np.linspace(0, 1000, 1001)
+    bins = np.linspace(0, 100, 101)
 
     if loaddir is not None:
         fname = '%s/smc.npy' % loaddir
@@ -96,10 +134,9 @@ def plot_slice_size(events, output_folder='./', loaddir=None):
     plt.hist(bins[:-1], bins, weights=smc, histtype='step', color='blue', label='mc')
     plt.hist(bins[:-1], bins, weights=sddpg, histtype='step', color='red', label='ddpg')
 
-    plt.xlabel("$s_{reco}- s_{mc}$", loc='right')
+    plt.xlabel("size", loc='right')
     plt.xlim((bins[0], bins[-1]))
 
-    plt.yscale("log")
     plt.legend()
     fname = f"{output_folder}/slice_size.pdf"
     plt.savefig(fname, bbox_inches='tight')
@@ -214,19 +251,20 @@ def inference(slicer, events):
     return events
 
 #----------------------------------------------------------------------
-def make_plots(events, plotdir):
+def make_plots(events_obj, plotdir):
     """
     Make diagnostics plots from a list of subtracted events.
 
     Parameters
     ----------
-        - events:  list, list of sliced Event objects
-        - plotdir: str, plots output folder
+        - events_obj:  list, list of sliced Event objects
+        - plotdir:     str, plots output folder
     """
-    events = [event.calohits_to_namedtuple() for event in events]
+    events = [event.calohits_to_namedtuple() for event in events_obj]
     plot_multiplicity(events, plotdir)
     plot_slice_size(events, plotdir)
     plot_plane_view(events, plotdir)
+    plot_EMD(events, events_obj, plotdir)
 
 #----------------------------------------------------------------------
 def load_and_dump_plots(plotdir, loaddir):
@@ -238,7 +276,7 @@ def load_and_dump_plots(plotdir, loaddir):
         - plotdir: str, plots output folder
         - loaddir: str, directory where to load plot data from
     """
-    events = [event.calohits_to_namedtuple() for event in events]
     plot_multiplicity(None, plotdir, loaddir)
     plot_slice_size(None, plotdir, loaddir)
     plot_plane_view(None, plotdir, loaddir)
+    plot_EMD(None, None, plotdir, loaddir)

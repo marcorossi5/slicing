@@ -2,6 +2,22 @@
 
 Slicing Problem with Reinforcement Learning for DUNE reconstruction.
 
+## Python Environment
+
+SliceRL requires the following python packages:
+
+- python3 (version 3.8)
+- numpy
+- gym
+- matplotlib
+- tensorflow (version 2.3)
+- [keras-rl2](https://github.com/wau/keras-rl2.git)
+- [energyflow](https://github.com/pkomiske/EnergyFlow.git)
+- json
+- gzip
+- argparse
+- [hyperopt](https://github.com/hyperopt/hyperopt.git) (optional)
+
 ## Problem
 
 Slicing algorithm clusters calorimeter hits (CaloHits) based on the main primary interacting particle. This repository implements a DDPG agent that learns to recursively put CaloHits into their correct slice. The agent tries to predict the slice index for each CaloHit.

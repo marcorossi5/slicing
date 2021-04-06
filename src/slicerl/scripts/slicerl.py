@@ -81,7 +81,7 @@ def makedir(folder):
         raise Exception('Output folder %s already exists.' % folder)
 
 #----------------------------------------------------------------------
-def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev):
+def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev, k):
     """
     Make inference from dataset at fnin and save results at fnres. Output
     diagnostic plots in plotdir and plot data in loaddir. Perform checks trying
@@ -115,9 +115,9 @@ def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev):
         # otherwise do inference first
         if os.path.isfile(fnres):
             print('[+] Json file found: loading from saved test data')
-            events = load_Events_from_file(fnres, nev, num_lines=7)
+            events = load_Events_from_file(fnres, nev, k, num_lines=7)
         else:
-            events = load_Events_from_file(fnin, nev)
+            events = load_Events_from_file(fnin, nev, k)
             events = inference(slicer, events)
             save_Event_list_to_file(events, fnres)
         make_plots(events, plotdir)
@@ -201,7 +201,7 @@ def main():
             os.remove(fnres)
 
         slicer = ddpg.slicer()
-        events = load_Events_from_file(setup['test']['fn'], args.nev)
+        events = load_Events_from_file(setup['test']['fn'], args.nev, setup['slicerl_env']['k'])
         events = inference(slicer, events)
         save_Event_list_to_file(events, fnres)
 
@@ -226,16 +226,16 @@ def main():
         plotdir = '%s/plots' % folder
         loaddir = '%s/results' % plotdir
         fnres   = '%s/test_predictions.json.gz' % setup['output']
-        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev)
+        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev, setup['slicerl_env']['k'])
 
     # if a data set was given as input, produce plots from it
     # always check if inference data is already there
     if args.data:
         fnin = os.path.basename(args.data).split(os.extsep)[0]
-        plotdir='%s/%s' % (folder, fnres)
+        plotdir='%s/%s' % (folder, fnin)
         loaddir = '%s/results' % plotdir
-        fnres = '%s/%s_sb.json.gz' % (plotdir, fnin)
-        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev, setup['slicerl_env']['jet_R'])
+        fnres = '%s/%s_sliced.json.gz' % (plotdir, fnin)
+        safe_inference_and_plots(slicer, args.data, fnres, plotdir, loaddir, args.nev, setup['slicerl_env']['k'])
 
     # if requested, add cpp output
     if args.cpp:

@@ -60,7 +60,7 @@ class ContinuousSlicer(AbstractSlicer):
             else:
                 c.status = slice_count
                 slice_count += 1
-
+        
         return event
 
     #----------------------------------------------------------------------

@@ -9,8 +9,9 @@ from slicerl.read_data import Events
 from rl.memory import SequentialMemory
 from rl.random import OrnsteinUhlenbeckProcess
 
+import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Dense, Activation, Flatten, LSTM, Dropout, Input, Concatenate
+from tensorflow.keras.layers import Dense, Activation, Flatten, Dropout, Input, Concatenate, Reshape
 from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 import tensorflow.keras.backend as K
 from tensorflow.keras.callbacks import TensorBoard
@@ -21,66 +22,61 @@ from time import time
 import pprint, json
 
 #----------------------------------------------------------------------
-def build_actor_model(hps, input_dim):
+def Block(hps, name, activation):
+    model = Sequential(name=name)
+    for i in range(hps['nb_layers']):
+        model.add(Dense(hps['nb_units']))
+        model.add(Activation('relu'))
+    if hps['dropout']>0.0:
+        model.add(Dropout(hps['dropout']))
+    model.add(Dense(1))
+    model.add(Activation(activation))
+    return model
+
+#----------------------------------------------------------------------
+def build_actor_model(hps, input_dim, k):
     """Construct the actor model used by the DDPG. Outputs the action"""
-    model = Sequential()
-    if hps['architecture']=='Dense':
-        model.add(Flatten(input_shape=(1,) + input_dim))
-        for i in range(hps['nb_layers']):
-            model.add(Dense(hps['nb_units']))
-            model.add(Activation('relu'))
-        if hps['dropout']>0.0:
-            model.add(Dropout(hps['dropout']))
-        model.add(Dense(1))
-        model.add(Activation('linear'))
-    elif hps['architecture']=='LSTM':
-        model.add(LSTM(hps['nb_units'], input_shape = (1,max(input_dim)),
-                       return_sequences=not (hps['nb_layers']==1)))
-        for i in range(hps['nb_layers']-1):
-            model.add(LSTM(hps['nb_units'],
-                           return_sequences=not (i+2==hps['nb_layers'])))
-        if hps['dropout']>0.0:
-            model.add(Dropout(hps['dropout']))
-        model.add(Dense(1))
-        model.add(Activation('tanh'))
+    input_state     = Input(shape=(1,) + input_dim, name='actor_input')    
+    graphBlock      = Block(hps, 'GraphBlock', 'linear')
+    aggregatorBlock = Block(hps, 'AggregatorBlock', 'linear')
+    finalBlock      = Block(hps, 'FinalBlock', 'tanh')
+    
+    reshaped_state = Reshape(input_dim)(input_state)
+    c, notc = tf.split(reshaped_state, [1,k], -2)
+    c = Reshape((6,))(c)
+    
+    neigh_state = graphBlock(notc)
+    neigh_state = Reshape((k,))(neigh_state)
+    aggr_state = aggregatorBlock(neigh_state)
+
+    cat_state = Concatenate(axis=-1)([c, aggr_state])
+    out = finalBlock(cat_state)
+
+    model = Model(inputs=input_state, outputs=out, name="Actor")
     model.summary()
     return model
 
 #----------------------------------------------------------------------
-def build_critic_model(hps, input_dim):
+def build_critic_model(hps, input_dim, k):
     """
     Construct the critic model used by the DDPG. Judge the goodness of the
     predicted action
     """
     action_input = Input(shape=(1,), name='action_input')
-    obs_input = Input(shape=(1,)+input_dim, name='observation_input')
-    flattened_obs = Flatten()(obs_input)
+    obs_input    = Input(shape=(1,)+input_dim, name='observation_input')
+    criticBlock  = Block(hps, 'critic', 'linear')
+
+    c, _ = tf.split(obs_input, [1,k], -2)
+    flattened_obs = Flatten()(c)
     x = Concatenate()([action_input, flattened_obs])
-    if hps['architecture']=='Dense':
-        for i in range(hps['nb_layers']):
-            x = Dense(hps['nb_units'])(x)
-            x = Activation('relu')(x)
-        if hps['dropout']>0.0:
-            x = Dropout(hps['dropout'])(x)
-        x = Dense(1)(x)
-        x = Activation('linear')(x)
-    elif hps['architecture']=='LSTM':
-        raise NotImplementedError("LSTM for critic not implemented")
-        x = LSTM(hps['nb_units'], input_shape = (1,max(input_dim)),
-                       return_sequences=not (hps['nb_layers']==1))(x)
-        for i in range(hps['nb_layers']-1):
-            x = LSTM(hps['nb_units'],
-                           return_sequences=not (i+2==hps['nb_layers']))(x)
-        if hps['dropout']>0.0:
-            x = Dropout(hps['dropout'])(x)
-        x = Dense(1)(x)
-        x = Activation('linear')(x)
-    model = Model(inputs=[action_input, obs_input], outputs=x)
+    x = criticBlock(x)
+    
+    model = Model(inputs=[action_input, obs_input], outputs=x, name="Critic")
     model.summary()
     return model, action_input
 
 #----------------------------------------------------------------------
-def build_ddpg(hps, input_dim):
+def build_ddpg(hps, input_dim, k):
     """Create a DDPG agent to be used on pandora inputs."""
 
     print('[+] Constructing DDPG agent, model setup:')
@@ -88,9 +84,9 @@ def build_ddpg(hps, input_dim):
 
     # set up the agent
     K.clear_session()
-    actor_model = build_actor_model(hps['actor'], input_dim)
+    actor_model = build_actor_model(hps['actor'], input_dim, k)
     critic_input_dim = input_dim
-    critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim)
+    critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim, k)
 
     memory = SequentialMemory(limit=500000, window_length=1)
     random_process = OrnsteinUhlenbeckProcess(size=1, theta=.15, mu=0., sigma=.3)
@@ -154,15 +150,31 @@ def loss_calc(dqn, fn, nev):
 
 #----------------------------------------------------------------------
 def load_environment(env_setup):
-    slicerl_env = SlicerlEnvContinuous(env_setup,
-                low=np.array([0., -0.37260447692861504, -0.35284, 0.], dtype=np.float32),
-                high=np.array([500., 0.37260447692861504, 0.91702, 150.], dtype=np.float32)
-                                     )
-    # slicerl_env = SlicerlEnvContinuous(env_setup,
-    #                     flow=np.array([0., -0.37260447692861504, -0.35284], dtype=np.float32),
-    #                     fhigh=np.array([500., 0.37260447692861504, 0.91702], dtype=np.float32),
-    #                     ihigh=np.array([150])
-    #                     )
+    low = np.array(
+        [
+            0.,                     # squared distance
+            0.,                     # E
+            -0.37260447692861504,   # x
+            -0.35284,               # z
+            0.,                     # cluster idx
+            0.,                     # status
+        ], dtype=np.float32
+    ).reshape(1,-1)
+    low = np.repeat(low, 1+env_setup['k'], 0)
+
+    high = np.array(
+        [
+            3.,                     # squared distance
+            500.,                   # E
+            0.37260447692861504,    # x
+            0.91702,                # z
+            1.50,                   # cluster idx / 100
+            15.,                    # status / 100
+        ], dtype=np.float32
+    ).reshape(1,-1)
+    high = np.repeat(high, 1+env_setup['k'], 0)
+
+    slicerl_env = SlicerlEnvContinuous(env_setup, low=low, high=high)
     return slicerl_env
 
 #----------------------------------------------------------------------
@@ -174,7 +186,7 @@ def build_and_train_model(slicerl_agent_setup, slicerl_env=None):
         slicerl_env = load_environment(env_setup)
 
     agent_setup = slicerl_agent_setup.get('rl_agent')
-    ddpg = build_ddpg(agent_setup, slicerl_env.observation_space.shape)
+    ddpg = build_ddpg(agent_setup, slicerl_env.observation_space.shape, slicerl_env.k)
 
     logdir = '%s/logs/{}'.format(time()) % slicerl_agent_setup['output']
     print(f'[+] Constructing tensorboard log in {logdir}')
