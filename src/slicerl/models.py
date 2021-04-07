@@ -39,7 +39,7 @@ def build_actor_model(hps, input_dim, k):
     input_state     = Input(shape=(1,) + input_dim, name='actor_input')    
     graphBlock      = Block(hps, 'GraphBlock', 'linear')
     aggregatorBlock = Block(hps, 'AggregatorBlock', 'linear')
-    finalBlock      = Block(hps, 'FinalBlock', 'tanh')
+    finalBlock      = Block(hps, 'FinalBlock', 'sigmoid')
     
     reshaped_state = Reshape(input_dim)(input_state)
     c, notc = tf.split(reshaped_state, [1,k], -2)

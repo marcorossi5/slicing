@@ -32,7 +32,6 @@ class SlicerlEnv(Env):
         self.events = reader.values()
 
         # set up the count parameters and initial state
-        self.slice_count   = 0
         self.slices        = []
 
         # set up action and observation space
@@ -61,23 +60,10 @@ class SlicerlEnv(Env):
 
     #----------------------------------------------------------------------
     def reset_current_event(self):
-        """Reset the current event and insert the first calohit."""
+        """Reset the current event."""
         self.event       = deepcopy(random.choice(self.events))
         self.index       = -1
-        self.slice_count = 0
         self.slices      = []
-        self.set_next_node()
-
-        # overwrite calohit status with slice index
-
-        c = self.event.calohits[self.index]
-        c.status = self.slice_count
-
-        # add calohit (E,x,z) to cumulative slice state
-        calohit_state = self.state[0,1:4]
-        self.slices.append( calohit_state )
-        self.slice_count += 1
-
         self.set_next_node()
 
     #----------------------------------------------------------------------
@@ -147,8 +133,18 @@ class SlicerlEnvContinuous(SlicerlEnv):
         super(SlicerlEnvContinuous, self).__init__(*args, **kwargs)
         self.eps = np.finfo(np.float32).eps
         self.action_max = 1.0
-        self.action_space = spaces.Box(low=-self.action_max, high=self.action_max,
+        self.action_space = spaces.Box(low=0., high=self.action_max,
                                        shape=(1,), dtype=np.float32)
+        self.nbins = 128 # the maximum number of slices
+        self.slices = np.zeros((self.nbins, 3))
+
+    #----------------------------------------------------------------------
+    def reset_current_event(self):
+        """Reset the current event."""
+        self.event       = deepcopy(random.choice(self.events))
+        self.index       = -1
+        self.slices      = np.zeros((self.nbins, 3))
+        self.set_next_node()
 
     #----------------------------------------------------------------------
     def step(self, action):
@@ -156,42 +152,24 @@ class SlicerlEnvContinuous(SlicerlEnv):
         Perform a step using the current calohit in the event, deciding which
         slice to add it to.
         """
-        action = np.clip(action, -self.action_max, self.action_max-self.eps)
+        action = np.clip(action, 0., self.action_max-self.eps)
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         c = self.event.calohits[self.index]
         mc_state = c.mc_state
         calohit_state = self.state[0,1:4]
 
-        aggregate = action[0] >= 0
-        if aggregate:
-            # select the correct existing slice to put the calohit in
-            idx = math.floor(action[0]*self.slice_count)
+        # select the correct existing slice to put the calohit in
+        idx = math.floor(action[0]*self.nbins)
 
-            # overwrite calohit status attribute with slice index
-            c.status = idx
+        # overwrite calohit status attribute with slice index
+        c.status = idx
 
-            # add calohit (E,x,z) to cumulative slice state
-            self.slices[idx] += calohit_state
-            slice_state = self.slices[idx]
-        else:
-            # form a new slice
-            # overwrite calohit status with slice index
-            c.status = self.slice_count
+        # add calohit (E,x,z) to cumulative slice state
+        self.slices[idx] += calohit_state
+        slice_state = self.slices[idx]
 
-            # add calohit (E,x,z) to cumulative slice state
-            self.slices.append( calohit_state )
-            slice_state = calohit_state
-            self.slice_count += 1
-
-        # calculate a reward        
-        # penalize wrongly seeding new slice and when aggregating to small slice
-        large_cluster = np.count_nonzero(c.mc_neighbours_m) >= 5
-        penalty = self.penalty / 1e3 * (not aggregate)
-        extra_reward =  self.penalty / 1e3 * (large_cluster == aggregate)
-        extra_penalty =  self.penalty / 5e1 * (large_cluster and not aggregate)
-        # penalize when aggregating if neighbours < 5
-        # penalize when seeding new slide if neighbours > 5
-        reward = self.reward(slice_state, mc_state) + extra_reward - penalty - extra_penalty
+        # compute reward        
+        reward = self.reward(slice_state, mc_state)
 
         # move to the next node in the clustering sequence
         self.set_next_node()

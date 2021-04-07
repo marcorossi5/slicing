@@ -40,8 +40,8 @@ class Event:
             include = len(in_slice_m) >= min_hits
             mcstate = np.array(
                        [calohits[0][in_slice_m].sum(),  # cumulative energy
-                        calohits[0][in_slice_m].sum(),  # cumulative x
-                        calohits[0][in_slice_m].sum()]  # cumulative z
+                        calohits[1][in_slice_m].sum(),  # cumulative x
+                        calohits[2][in_slice_m].sum()]  # cumulative z
                       )
             # find the k closest calohits in (x,z) plane
             sqdist = (calohits[1] - c[1])**2 + (calohits[2] - c[2])**2

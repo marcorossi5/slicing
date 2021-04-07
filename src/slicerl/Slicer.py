@@ -32,6 +32,7 @@ class ContinuousSlicer(AbstractSlicer):
         self.actor = actor
         self.action_max = 1.0
         self.eps = np.finfo(np.float32).eps
+        self.nbins = 128
 
     #----------------------------------------------------------------------
     def _slicing(self, event):
@@ -40,26 +41,15 @@ class ContinuousSlicer(AbstractSlicer):
         index, do not keep track of slices cumulative statistics. Delegate
         slice checks to diagnostics.
         """
-        slice_count = 0
-
         for i in range(len(event.calohits)):
             c = event.calohits[i]
-            if i == 0:
-                # first calohit seeds a new slice automatically
-                c.status = 0
-                slice_count += 1
-                continue
-
+            
             state = event.state(i)
             action = self.actor.predict_on_batch(np.array([[state]])).flatten()
-            action = np.clip(action, -self.action_max, self.action_max-self.eps)
+            action = np.clip(action, 0., self.action_max-self.eps)
 
-            if action[0] >= 0:
-                idx = math.floor(action*slice_count)
-                c.status = idx
-            else:
-                c.status = slice_count
-                slice_count += 1
+            idx = math.floor(action*self.nbins)
+            c.status = idx
         
         return event
 
