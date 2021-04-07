@@ -4,6 +4,7 @@ import numpy as np
 import math
 from energyflow.emd import emd
 
+eps = np.finfo(np.float64).eps
 
 #----------------------------------------------------------------------
 def mass(events, noPU=False):
@@ -77,3 +78,25 @@ def confusion_matrix_per_event(scores):
         tn.append(len(np.where(preds[~truths] == 0)[0])/tot)
     
     return np.array(tp), np.array(fp), np.array(fn), np.array(tn)
+
+#----------------------------------------------------------------------
+def m_lin_fit(x,y):
+    """ Compute the angular coefficient of a linear fit. """
+    assert x.shape == y.shape
+    n = x.shape[0]
+    num = n * (x*y).sum() - x.sum()*y.sum()
+    den = n * (x*x).sum() - (x.sum())**2
+    return num / (den + eps)
+
+#----------------------------------------------------------------------
+def pearson_distance(x,y):
+    """ Computes modified pearson distance. """
+    xc = x - x.mean()
+    yc = y - y.mean()
+    num = (xc * yc).sum()
+    den = (xc**2).sum() * (yc**2).sum()
+    return 1 - num**2 / (den + eps)
+
+#----------------------------------------------------------------------
+def mse(x,y):
+    return ((x-y)**2).mean()

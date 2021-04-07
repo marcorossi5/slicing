@@ -1,17 +1,17 @@
 {
     "slicerl_env": {
         "fn": "test_data_2GeV.csv.gz",
-        "nev": 5,
+        "nev": -1,
         "width": 1.0,
-        "min_hits": 250,
+        "min_hits": 1,
         "penalty": 1,
-        "k": 10,
+        "k": 50,
         "reward": "cauchy"
     },
     "rl_agent": {
         "learning_rate": 1e-4,
-        "nstep": 10000,
-        "memory": 5,
+        "nstep": 15000,
+        "memory": 1,
         "actor": {
             "dropout": 0.01,
             "nb_layers": 3,

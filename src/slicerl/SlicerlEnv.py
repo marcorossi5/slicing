@@ -6,7 +6,7 @@ from slicerl.Event import Event
 from gym import spaces, Env
 from gym.utils import seeding
 import numpy as np
-from slicerl.tools import quality_metric
+from slicerl.tools import mse, m_lin_fit, pearson_distance
 from copy import deepcopy
 
 #======================================================================
@@ -101,7 +101,7 @@ class SlicerlEnv(Env):
     #----------------------------------------------------------------------
     def reward(self, slice_state, mc_state):
         """Full reward function."""
-        x = quality_metric(slice_state, mc_state)
+        x = mse(slice_state, mc_state)
         return self.__reward(x/self.width)
 
     #----------------------------------------------------------------------
@@ -135,15 +135,15 @@ class SlicerlEnvContinuous(SlicerlEnv):
         self.action_max = 1.0
         self.action_space = spaces.Box(low=0., high=self.action_max,
                                        shape=(1,), dtype=np.float32)
-        self.nbins = 128 # the maximum number of slices
-        self.slices = np.zeros((self.nbins, 3))
+        self.nbins  = 128                             # the maximum number of slices
+        self.slices = [[] for i in range(self.nbins)] # contains slice calohit idx
 
     #----------------------------------------------------------------------
     def reset_current_event(self):
         """Reset the current event."""
         self.event       = deepcopy(random.choice(self.events))
         self.index       = -1
-        self.slices      = np.zeros((self.nbins, 3))
+        self.slices      = [[] for i in range(self.nbins)]
         self.set_next_node()
 
     #----------------------------------------------------------------------
@@ -156,7 +156,6 @@ class SlicerlEnvContinuous(SlicerlEnv):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         c = self.event.calohits[self.index]
         mc_state = c.mc_state
-        calohit_state = self.state[0,1:4]
 
         # select the correct existing slice to put the calohit in
         idx = math.floor(action[0]*self.nbins)
@@ -165,9 +164,17 @@ class SlicerlEnvContinuous(SlicerlEnv):
         c.status = idx
 
         # add calohit (E,x,z) to cumulative slice state
-        self.slices[idx] += calohit_state
-        slice_state = self.slices[idx]
-
+        self.slices[idx].append(self.index)
+        m = self.slices[idx]
+        x = self.event.array[1][m]
+        z = self.event.array[2][m]
+        slice_state = np.array([
+                                self.event.array[0][m].sum(),
+                                x.mean(),
+                                z.mean(),
+                                m_lin_fit(x, z),
+                                pearson_distance(x, z)
+                               ])
         # compute reward        
         reward = self.reward(slice_state, mc_state)
 

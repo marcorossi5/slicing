@@ -6,6 +6,7 @@ import math
 import json, gzip
 from collections import namedtuple
 from copy import deepcopy
+from slicerl.tools import m_lin_fit, pearson_distance
 
 EventTuple = namedtuple("EventTuple", ["E", "x", "z", "cluster_idx", "pndr_idx",
                                        "mc_idx", "slicerl_idx"])
@@ -32,18 +33,25 @@ class Event:
             - min_hits : int, consider only slices with equal or more than min_hits
             - Lneigh   : neighbourhood radius [10^1 m]
         """
+        self.array = calohits
         self.k = k
         self.calohits = []
         for i,c in enumerate(calohits.T):
             # find calohits indices belonging to the same slice
             in_slice_m = np.where(calohits[5] == c[5])[0]
+            in_slice_x = calohits[1][in_slice_m]
+            in_slice_z = calohits[2][in_slice_m]
+            m_fit      = m_lin_fit(in_slice_x, in_slice_z)
+            pd         = pearson_distance(in_slice_x, in_slice_z)
 
-            include = len(in_slice_m) >= min_hits
             mcstate = np.array(
-                       [calohits[0][in_slice_m].sum(),  # cumulative energy
-                        calohits[1][in_slice_m].sum(),  # cumulative x
-                        calohits[2][in_slice_m].sum()]  # cumulative z
+                       [calohits[0][in_slice_m].sum(), # cumulative energy
+                        in_slice_x.mean(),             # mean x
+                        in_slice_z.mean(),             # mean z
+                        m_fit,                         # angular coefficient linear fit
+                        pd]                            # pearson distance
                       )
+
             # find the k closest calohits in (x,z) plane
             sqdist = (calohits[1] - c[1])**2 + (calohits[2] - c[2])**2
             idx = np.argpartition(sqdist,1+self.k)[:1+self.k]
@@ -56,7 +64,8 @@ class Event:
             # processed. The model focuses on calohits with more calohits
             # than min_hits in the cluster, but the graph is allowed to
             # consider all the calohits.
-            status = c[6] if include else -2.
+            include = len(in_slice_m) >= min_hits
+            status  = c[6] if include else -2.
             self.calohits.append(CaloHit(c[0], c[1], c[2],c[3], c[4], c[5],
                                     neighbourhood=neighbourhood,
                                     mc_neighbours_m=in_slice_m, mcstate=mcstate,
@@ -99,28 +108,20 @@ class Event:
             value of the slice index. Then a reordering is applied before
             returning the array. To put slice indices in positional order.
         """
-        rows = [[] for i in range(7)]
-        for c in self.calohits:
-            rows[0].append(c.E*100)
-            rows[1].append(c.x*1000)
-            rows[2].append(c.z*1000)
-            rows[3].append(c.clusterIdx)
-            rows[4].append(c.pndrIdx)
-            rows[5].append(c.mcIdx)
-            rows[6].append(c.status)
-        rows =  np.array(rows)
+        array = deepcopy(self.array)
+        array[0] = array[0] * 100
+        array[1] = array[1] * 1000
+        array[2] = array[2] * 1000
 
-        # must order the status vector
-        row = deepcopy(rows[6])
-        unique_idx = set(row)
-        count = 0
-        for idx in unique_idx:
-            m = row == idx
-            rows[6][m] = count
-            count += 1
-        return rows
+        sv = np.array([c.status for c in self.calohits]) # status vector
+        mv = deepcopy(sv)                                # modified vector
+        for i, idx in enumerate(set(sv)):
+            m = sv == idx
+            mv[m] = i
         
+        array[-1] = mv
 
+        return array
 
     #----------------------------------------------------------------------
     def calohits_to_namedtuple(self):
