@@ -10,7 +10,8 @@
     },
     "rl_agent": {
         "learning_rate": 1e-4,
-        "nstep": 100000,
+        "nstep": 10000,
+        "memory": 5,
         "actor": {
             "dropout": 0.01,
             "nb_layers": 3,

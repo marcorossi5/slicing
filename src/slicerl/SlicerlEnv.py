@@ -3,7 +3,6 @@
 import random, math, pprint
 from slicerl.read_data import Events
 from slicerl.Event import Event
-from slicerl.SpaceDiscrete import SpaceDiscrete
 from gym import spaces, Env
 from gym.utils import seeding
 import numpy as np

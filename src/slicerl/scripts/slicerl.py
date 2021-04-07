@@ -11,7 +11,6 @@ from slicerl.Slicer import ContinuousSlicer
 from slicerl.keras_to_cpp import keras_to_cpp, check_model
 from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
-import fastjet as fj
 from time import time as tm
 from shutil import copyfile
 from copy import deepcopy
