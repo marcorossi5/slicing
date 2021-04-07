@@ -5,6 +5,7 @@ import numpy as np
 import math
 import json, gzip
 from collections import namedtuple
+from copy import deepcopy
 
 EventTuple = namedtuple("EventTuple", ["E", "x", "z", "cluster_idx", "pndr_idx",
                                        "mc_idx", "slicerl_idx"])
@@ -93,8 +94,10 @@ class Event:
         ----
             - energy is measured in ADC
             - spatial coordinates x and z are converted in cm
-
-
+            Calohit status attribute ranges in [0,128), but may contain holes.
+            Also, in a slice is the subset of calohits that counts, not the
+            value of the slice index. Then a reordering is applied before
+            returning the array. To put slice indices in positional order.
         """
         rows = [[] for i in range(7)]
         for c in self.calohits:
@@ -105,7 +108,19 @@ class Event:
             rows[4].append(c.pndrIdx)
             rows[5].append(c.mcIdx)
             rows[6].append(c.status)
-        return np.array(rows)
+        rows =  np.array(rows)
+
+        # must order the status vector
+        row = deepcopy(rows[6])
+        unique_idx = set(row)
+        count = 0
+        for idx in unique_idx:
+            m = row == idx
+            rows[6][m] = count
+            count += 1
+        return rows
+        
+
 
     #----------------------------------------------------------------------
     def calohits_to_namedtuple(self):

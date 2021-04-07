@@ -264,7 +264,7 @@ def make_plots(events_obj, plotdir):
     plot_multiplicity(events, plotdir)
     plot_slice_size(events, plotdir)
     plot_plane_view(events, plotdir)
-    # plot_EMD(events, events_obj, plotdir)
+    plot_EMD(events, events_obj, plotdir)
 
 #----------------------------------------------------------------------
 def load_and_dump_plots(plotdir, loaddir):
@@ -279,7 +279,7 @@ def load_and_dump_plots(plotdir, loaddir):
     plot_multiplicity(None, plotdir, loaddir)
     plot_slice_size(None, plotdir, loaddir)
     plot_plane_view(None, plotdir, loaddir)
-    # plot_EMD(None, None, plotdir, loaddir)
+    plot_EMD(None, None, plotdir, loaddir)
 
 # TODO: fix plot_EMD function. The problem arises when looping over the slices
 #       indices. It could appen that there are some holes in slice indexing
