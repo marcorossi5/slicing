@@ -4,7 +4,7 @@ import numpy as np
 import math
 from energyflow.emd import emd
 
-eps = np.finfo(np.float64).eps
+eps      = np.finfo(np.float64).eps
 
 #----------------------------------------------------------------------
 def mass(events, noPU=False):

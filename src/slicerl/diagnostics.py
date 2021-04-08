@@ -283,3 +283,5 @@ def load_and_dump_plots(plotdir, loaddir):
 
 # TODO: fix plot_EMD function. The problem arises when looping over the slices
 #       indices. It could appen that there are some holes in slice indexing
+
+# TODO: fix plot_plane_view when loaded from results (it always needs the events)

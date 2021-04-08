@@ -20,16 +20,6 @@
             "nb_layers": 3,
             "nb_units": 100
         }, 
-        "actor": {
-            "dropout": 0.01,
-            "nb_layers": 3,
-            "nb_units": 100
-        },
-        "critic":{
-            "dropout": 0.05,
-            "nb_layers": 4,
-            "nb_units": 100
-        },    
         "optimizer": "Adam"
     },
     "test": {

@@ -23,16 +23,14 @@ class SlicerlEnv(Env):
         - nev: number of events (-1 for all)
         - reward: type of reward function (cauchy, gaussian, ...)
         """
-        # add small penalty for not clustering
-        self.penalty = hps['penalty']
-
         # read in the events
         self.k = hps['k']
         reader = Events(hps['fn'], hps['nev'], k=hps['k'], min_hits=hps['min_hits'])
         self.events = reader.values()
 
-        # set up the count parameters and initial state
-        self.slices        = []
+        # set up the slice list
+        self.nbins  = 128                             # the maximum number of slices
+        self.slices = [[] for i in range(self.nbins)] # contains slice calohit idx
 
         # set up action and observation space
         self.action_space      = spaces.Discrete(2)
@@ -63,7 +61,7 @@ class SlicerlEnv(Env):
         """Reset the current event."""
         self.event       = deepcopy(random.choice(self.events))
         self.index       = -1
-        self.slices      = []
+        self.slices      = [[] for i in range(self.nbins)]
         self.set_next_node()
 
     #----------------------------------------------------------------------
@@ -126,6 +124,52 @@ class SlicerlEnv(Env):
         if self.viewer: self.viewer.close()
 
 #======================================================================
+class SlicerlEnvDiscrete(SlicerlEnv):
+    """Class defining a gym environment for the discrete slicing algorithm."""
+    #----------------------------------------------------------------------
+    def __init__(self, *args, **kwargs):
+        super(SlicerlEnvDiscrete, self).__init__(*args, **kwargs)
+        self.action_space = spaces.Discrete(self.nbins)
+        self.discrete = True
+
+    #----------------------------------------------------------------------
+    def step(self, action):
+        """
+        Perform a step using the current calohit in the event, deciding which
+        slice to add it to. Action is the slice index.
+        """
+        assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
+        c = self.event.calohits[self.index]
+        mc_state = c.mc_state
+
+        # overwrite calohit status attribute with slice index
+        c.status = action
+
+        # add calohit (E,x,z) to cumulative slice state
+        self.slices[action].append(self.index)
+        m = self.slices[action]
+        x = self.event.array[1][m]
+        z = self.event.array[2][m]
+        slice_state = np.array([
+                                self.event.array[0][m].sum(),
+                                x.mean(),
+                                z.mean(),
+                                m_lin_fit(x, z),
+                                pearson_distance(x, z)
+                               ])
+        # compute reward        
+        reward = self.reward(slice_state, mc_state)
+
+        # move to the next node in the clustering sequence
+        self.set_next_node()
+
+        # if we are at the end of the declustering list, then we are done for this event.
+        done = bool(self.index >= len(self.event))
+
+        # return the state, reward, and status
+        return self.state, reward, done, {}
+
+#======================================================================
 class SlicerlEnvContinuous(SlicerlEnv):
     """Class defining a gym environment for the continuous slicing algorithm."""
     #----------------------------------------------------------------------
@@ -135,22 +179,14 @@ class SlicerlEnvContinuous(SlicerlEnv):
         self.action_max = 1.0
         self.action_space = spaces.Box(low=0., high=self.action_max,
                                        shape=(1,), dtype=np.float32)
-        self.nbins  = 128                             # the maximum number of slices
-        self.slices = [[] for i in range(self.nbins)] # contains slice calohit idx
-
-    #----------------------------------------------------------------------
-    def reset_current_event(self):
-        """Reset the current event."""
-        self.event       = deepcopy(random.choice(self.events))
-        self.index       = -1
-        self.slices      = [[] for i in range(self.nbins)]
-        self.set_next_node()
+        self.discrete = False
 
     #----------------------------------------------------------------------
     def step(self, action):
         """
         Perform a step using the current calohit in the event, deciding which
-        slice to add it to.
+        slice to add it to. Action is a score that falls inside a bin in the
+        unit interval. The bin index is the slice index.
         """
         action = np.clip(action, 0., self.action_max-self.eps)
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))

@@ -6,20 +6,12 @@
         "min_hits": 1,
         "k": 50,
         "reward": "cauchy",
-        "discrete": true
+        "discrete": false
     },
     "rl_agent": {
         "learning_rate": 1e-4,
         "nstep": 20000,
         "memory": 1,
-        "enable_dueling_network": false,
-        "enable_double_dqn": false,
-        "policy": "boltzmann",
-        "dqn": {
-            "dropout": 0.01,
-            "nb_layers": 3,
-            "nb_units": 100
-        }, 
         "actor": {
             "dropout": 0.01,
             "nb_layers": 3,
