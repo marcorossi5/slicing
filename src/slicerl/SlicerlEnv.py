@@ -154,6 +154,7 @@ class SlicerlEnvDiscrete(SlicerlEnv):
                                 self.event.array[0][m].sum(),
                                 x.mean(),
                                 z.mean(),
+                                len(m),
                                 m_lin_fit(x, z),
                                 pearson_distance(x, z)
                                ])
@@ -208,6 +209,7 @@ class SlicerlEnvContinuous(SlicerlEnv):
                                 self.event.array[0][m].sum(),
                                 x.mean(),
                                 z.mean(),
+                                len(m),
                                 m_lin_fit(x, z),
                                 pearson_distance(x, z)
                                ])

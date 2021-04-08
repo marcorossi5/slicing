@@ -48,6 +48,7 @@ class Event:
                        [calohits[0][in_slice_m].sum(), # cumulative energy
                         in_slice_x.mean(),             # mean x
                         in_slice_z.mean(),             # mean z
+                        np.count_nonzero(in_slice_m),  # length
                         m_fit,                         # angular coefficient linear fit
                         pd]                            # pearson distance
                       )
