@@ -153,7 +153,9 @@ class SlicerlEnvDiscrete(SlicerlEnv):
         slice_state = np.array([
                                 self.event.array[0][m].sum(),
                                 x.mean(),
+                                x.std(),
                                 z.mean(),
+                                z.std(),
                                 len(m),
                                 m_lin_fit(x, z),
                                 pearson_distance(x, z)
@@ -208,7 +210,9 @@ class SlicerlEnvContinuous(SlicerlEnv):
         slice_state = np.array([
                                 self.event.array[0][m].sum(),
                                 x.mean(),
+                                x.std(),
                                 z.mean(),
+                                z.std(),
                                 len(m),
                                 m_lin_fit(x, z),
                                 pearson_distance(x, z)

@@ -4,7 +4,7 @@ import json, gzip, sys, csv
 from abc import ABC, abstractmethod
 import numpy as np
 from math import log, ceil, floor, pi
-from slicerl.Event import Event, CaloHit
+from slicerl.Event import Event
 
 #======================================================================
 class Reader(object):
@@ -127,7 +127,9 @@ class Events(Image):
 
     #----------------------------------------------------------------------
     def process(self, event):
-        return Event(event, self.k, self.min_hits)
+        # order by increasing x
+        idx = np.argsort(event[1])
+        return Event(event[:,idx], self.k, self.min_hits)
 
 #======================================================================
 def load_Events_from_file(filename, nev, k, min_hits=1, num_lines=6):

@@ -193,7 +193,7 @@ def main():
         with open(f'{out}/runcard.json','w') as f:
             json.dump(rl_agent_setup, f, indent=4)
 
-        fnres = '%s/test_predictions.json.gz' % setup['output']
+        fnres = '%s/test_predictions.csv.gz' % setup['output']
 
         print('[+] Done with training, now testing on sample set')
         if os.path.exists(fnres):
@@ -224,7 +224,7 @@ def main():
         fnin    = setup['test']['fn']
         plotdir = '%s/plots' % folder
         loaddir = '%s/results' % plotdir
-        fnres   = '%s/test_predictions.json.gz' % setup['output']
+        fnres   = '%s/test_predictions.csv.gz' % setup['output']
         safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev, setup['slicerl_env']['k'])
 
     # if a data set was given as input, produce plots from it
@@ -233,7 +233,7 @@ def main():
         fnin = os.path.basename(args.data).split(os.extsep)[0]
         plotdir='%s/%s' % (folder, fnin)
         loaddir = '%s/results' % plotdir
-        fnres = '%s/%s_sliced.json.gz' % (plotdir, fnin)
+        fnres = '%s/%s_sliced.csv.gz' % (plotdir, fnin)
         safe_inference_and_plots(slicer, args.data, fnres, plotdir, loaddir, args.nev, setup['slicerl_env']['k'])
 
     # if requested, add cpp output
