@@ -4,7 +4,7 @@ import numpy as np
 import math
 from energyflow.emd import emd
 
-eps      = np.finfo(np.float64).eps
+eps = np.finfo(np.float64).eps
 
 #----------------------------------------------------------------------
 def mass(events, noPU=False):
@@ -100,3 +100,17 @@ def pearson_distance(x,y):
 #----------------------------------------------------------------------
 def mse(x,y):
     return ((x-y)**2).mean()
+
+#----------------------------------------------------------------------
+def bce(x,y):
+    pass
+
+#----------------------------------------------------------------------
+def dice_loss(x,y):
+    ix = 1-x
+    iy = 1-y
+    num1 = (x*y).sum(-1) + eps
+    den1 = (x*x + y*y).sum(-1) + eps
+    num2 = (ix*iy).sum(-1) + eps
+    den2 = (ix*ix + iy*iy).sum(-1) + eps
+    return 1 - (num1/den1 + num2/den2).mean()

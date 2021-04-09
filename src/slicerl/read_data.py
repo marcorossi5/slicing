@@ -63,7 +63,7 @@ class Reader(object):
             if self.num_lines == 7:
                 c.append( self.readline_fn(self.stream) ) # slicerl_idx
             else:
-                c.append( -1*np.ones_like(c[-1]) )
+                c.append( np.full_like(c[-1], -1) )
         except IOError:
             print("# got to end with IOError (maybe gzip structure broken?) around event", self.n, file=sys.stderr)
             return None
@@ -109,30 +109,29 @@ class Events(Image):
     """Read input file with calohits and transform into python events."""
 
     #----------------------------------------------------------------------
-    def __init__(self, infile, nmax, k, min_hits, num_lines=None):
+    def __init__(self, infile, nmax, min_hits, max_hits, num_lines=None):
         """
         Parameters
         ----------
             infile    : str, input file name
             nmax      : int, max number of events to load
-            k         : the number of neighbours calohits to include in the Graph
             min_hits  : int, consider slices with more than min_hits Calohits only
             num_lines : int, number of lines stored in the file. Specifies if the
                         file contains inference results or not.
         """
         Image.__init__(self, infile, nmax, num_lines)
         self.min_hits = min_hits
+        self.max_hits = max_hits
         self.printouts=10
-        self.k = k
 
     #----------------------------------------------------------------------
     def process(self, event):
         # order by increasing x
         idx = np.argsort(event[1])
-        return Event(event[:,idx], self.k, self.min_hits)
+        return Event(event[:,idx], self.min_hits, self.max_hits)
 
 #======================================================================
-def load_Events_from_file(filename, nev, k, min_hits=1, num_lines=6):
+def load_Events_from_file(filename, nev, min_hits=1, max_hits=15000, num_lines=6):
     """
     Utility function to load Events object from file. Return a list of Event
     objects.
@@ -141,8 +140,8 @@ def load_Events_from_file(filename, nev, k, min_hits=1, num_lines=6):
     ----------
         - filename  : str, file to load events from
         - nev       : int, number of events to load
-        - k         : the number of neighbours calohits to include in the Graph
         - min_hits  : int, consider slices with more than min_hits Calohits only
+        - max_hits  : int, max hits to be processed by network
         - num_lines : int, number of lines stored in the file. Lines stand for:
                       energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
                       slicerl_idx (optional). 
@@ -152,7 +151,7 @@ def load_Events_from_file(filename, nev, k, min_hits=1, num_lines=6):
         - list
             list of loaded Event object (with length equal to nev)
     """
-    reader = Events(filename, nev, k, min_hits, num_lines)
+    reader = Events(filename, nev, min_hits, max_hits, num_lines)
     return reader.values()
 
 #======================================================================

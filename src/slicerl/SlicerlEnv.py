@@ -6,7 +6,7 @@ from slicerl.Event import Event
 from gym import spaces, Env
 from gym.utils import seeding
 import numpy as np
-from slicerl.tools import mse, m_lin_fit, pearson_distance
+from slicerl.tools import dice_loss, mse, m_lin_fit, pearson_distance
 from copy import deepcopy
 
 #======================================================================
@@ -23,14 +23,10 @@ class SlicerlEnv(Env):
         - nev: number of events (-1 for all)
         - reward: type of reward function (cauchy, gaussian, ...)
         """
+        self.max_hits = hps['max_hits']
         # read in the events
-        self.k = hps['k']
-        reader = Events(hps['fn'], hps['nev'], k=hps['k'], min_hits=hps['min_hits'])
+        reader = Events(hps['fn'], hps['nev'], hps['min_hits'], hps['max_hits'])
         self.events = reader.values()
-
-        # set up the slice list
-        self.nbins  = 128                             # the maximum number of slices
-        self.slices = [[] for i in range(self.nbins)] # contains slice calohit idx
 
         # set up action and observation space
         self.action_space      = spaces.Discrete(2)
@@ -65,8 +61,8 @@ class SlicerlEnv(Env):
         self.set_next_node()
 
     #----------------------------------------------------------------------
-    def set_next_node(self, is_reset=False):
-        """Set the current particle using the event list."""
+    def set_next_node(self):
+        """Set the current calohit using the event list."""
         # print('setting node up')
         while self.index < len(self.event):
             self.index += 1
@@ -99,7 +95,7 @@ class SlicerlEnv(Env):
     #----------------------------------------------------------------------
     def reward(self, slice_state, mc_state):
         """Full reward function."""
-        x = mse(slice_state, mc_state)
+        x = dice_loss(slice_state, mc_state)
         return self.__reward(x/self.width)
 
     #----------------------------------------------------------------------
@@ -131,6 +127,10 @@ class SlicerlEnvDiscrete(SlicerlEnv):
         super(SlicerlEnvDiscrete, self).__init__(*args, **kwargs)
         self.action_space = spaces.Discrete(self.nbins)
         self.discrete = True
+
+        # set up the slice list
+        self.nbins  = 128                             # the maximum number of slices
+        self.slices = [[] for i in range(self.nbins)] # contains slice calohit idx
 
     #----------------------------------------------------------------------
     def step(self, action):
@@ -176,13 +176,31 @@ class SlicerlEnvDiscrete(SlicerlEnv):
 class SlicerlEnvContinuous(SlicerlEnv):
     """Class defining a gym environment for the continuous slicing algorithm."""
     #----------------------------------------------------------------------
-    def __init__(self, *args, **kwargs):
-        super(SlicerlEnvContinuous, self).__init__(*args, **kwargs)
-        self.eps = np.finfo(np.float32).eps
-        self.action_max = 1.0
-        self.action_space = spaces.Box(low=0., high=self.action_max,
-                                       shape=(1,), dtype=np.float32)
-        self.discrete = False
+    def __init__(self, hps, **kwargs):
+        super(SlicerlEnvContinuous, self).__init__(hps, **kwargs)
+        self.action_space = spaces.Box(low=0., high=1.,
+                                    shape=(hps['max_hits'],), dtype=np.float32)
+        self.discrete         = False
+        self.threshold        = 0.5
+        self.nb_max_episode_steps = 128
+    
+    #----------------------------------------------------------------------
+    def set_next_node(self):
+        """Prepare the current step to seed a new slice."""
+        # print('setting node up')
+        self.index += 1
+        # TODO: check if this pad could be done somwhere else
+        mc_state = (self.event.ordered_mc_idx == self.index).astype(np.int16)
+        pad = (0, self.max_hits - mc_state.shape[0])
+        self.mc_state = np.pad(mc_state, pad)
+        self.state = deepcopy(self.event.state())
+
+    #----------------------------------------------------------------------
+    def reset_current_event(self):
+        """Reset the current event."""
+        self.event       = deepcopy(random.choice(self.events))
+        self.index       = -1
+        self.set_next_node()
 
     #----------------------------------------------------------------------
     def step(self, action):
@@ -191,45 +209,35 @@ class SlicerlEnvContinuous(SlicerlEnv):
         slice to add it to. Action is a score that falls inside a bin in the
         unit interval. The bin index is the slice index.
         """
-        action = np.clip(action, 0., self.action_max-self.eps)
+        # action shape is (max_hits,)
+        # ddpg with random_process may drift the action out of action_space bounds
+        # TODO: check random process
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-        c = self.event.calohits[self.index]
-        mc_state = c.mc_state
 
-        # select the correct existing slice to put the calohit in
-        idx = math.floor(action[0]*self.nbins)
+        # threshold the action to output a mask and apply it to the current status
+        m = np.logical_and(self.event.point_cloud[-1] == -1, action > self.threshold)
+        self.event.point_cloud[-1][m] = self.index
 
-        # overwrite calohit status attribute with slice index
-        c.status = idx
-
-        # add calohit (E,x,z) to cumulative slice state
-        self.slices[idx].append(self.index)
-        m = self.slices[idx]
-        x = self.event.array[1][m]
-        z = self.event.array[2][m]
-        slice_state = np.array([
-                                self.event.array[0][m].sum(),
-                                x.mean(),
-                                x.std(),
-                                z.mean(),
-                                z.std(),
-                                len(m),
-                                m_lin_fit(x, z),
-                                pearson_distance(x, z)
-                               ])
         # compute reward        
-        reward = self.reward(slice_state, mc_state)
+        # reward = self.reward(np.stack([action, m]), mc_state)
+        # penalize if no calohit is predicted above threshold
 
-        # move to the next node in the clustering sequence
+        penalty = -1 if np.count_nonzero(m) == 0 else 0
+        reward = self.reward(action, self.mc_state) + penalty
+
+        # prepare next step
         self.set_next_node()
 
         # if we are at the end of the declustering list, then we are done for this event.
-        done = bool(self.index >= len(self.event))
+        done = bool( (np.count_nonzero(self.event.point_cloud[-1] == -1) == 0) \
+                     or (self.index >= self.nb_max_episode_steps) )
 
         # return the state, reward, and status
         return self.state, reward, done, {}
 
 """
-TODO: split the observation space in 3-dim Box plut
-TODO: implement the env.step function
+TODO: implement a proper reward function (bce/dice_loss)
+Maybe dice loss is better since it's bounded, while bce is not. Moreover, it is
+not affected by unbalancing, since we want to identify small cluster inside big
+set of calohits.
 """

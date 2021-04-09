@@ -3,29 +3,48 @@ import os
 from tensorflow.keras.utils import Progbar
 from slicerl.Event import Event
 from slicerl.tools import quality_metric
+import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
 import math
 
 #----------------------------------------------------------------------
+"""
+Color list. An exhaustive list of colors can be retrieved from matplotlib
+printing matplotlib.colors.CSS4_COLORS.keys().
+"""
+
 colors = [
-    "lightsalmon",
-    "orange",
-    "springgreen",
-    "fuchsia",
-    "lime",
-    "lightcoral",
-    "pink",
-    "darkseagreen",
-    "gold",
-    "red",
-    "deepskyblue",
-    "lightgreen",
-    "coral",
-    "aqua",
-    "lightgreen",
-    "mediumaquamarine"
-]
+    'black', 'peru', 'deepskyblue', 'darkorchid', 'darkgoldenrod', 'teal',
+    'dodgerblue', 'brown', 'darkslategrey', 'turquoise', 'lightsalmon', 'plum',
+    'darkcyan', 'orange', 'slategrey', 'darkmagenta', 'limegreen', 'deeppink',
+    'red', 'springgreen', 'midnightblue','green', 'mediumpurple',
+    'mediumvioletred', 'dimgrey', 'blueviolet', 'lightskyblue', 'darksalmon',
+    'royalblue', 'fuchsia', 'mediumaquamarine', 'mediumblue', 'grey', 'sienna',
+    'mediumslateblue', 'seagreen', 'purple', 'greenyellow', 'darkviolet', 'coral',
+    'darkblue', 'goldenrod', 'lime', 'cornflowerblue', 'darkturquoise', 'orangered',
+    'cadetblue', 'lightcoral', 'skyblue', 'mediumseagreen', 'tomato', 'blue',
+    'pink', 'olivedrab', 'rosybrown', 'darkseagreen', 'orchid', 'olive',
+    'lightseagreen', 'cyan', 'dimgrey', 'magenta', 'darkolivegreen', 'slateblue',
+    'lightgreen', 'navy', 'indianred', 'lawngreen', 'sandybrown', 'steelblue',
+    'salmon', 'hotpink', 'darkgrey', 'violet',
+    'cornflowerblue', 'snow', 'peru', 'dimgray', 'lightyellow',
+    'indianred', 'palegoldenrod', 'darkgrey', 'mediumblue',
+    'peachpuff', 'hotpink', 'green', 'brown', 'lightgoldenrodyellow',
+    'mediumturquoise', 'lightslategrey', 'slateblue', 'purple',
+    'ivory', 'lemonchiffon', 'orchid', 'darkred', 'chocolate',
+    'aquamarine', 'cadetblue', 'thistle', 'orange', 'darkkhaki',
+    'yellowgreen', 'lightsalmon', 'lightsteelblue', 'olivedrab',
+    'mediumorchid', 'papayawhip', 'lime', 'gainsboro', 'teal', 'coral',
+    'lightslategray', 'cyan', 'lightgrey', 'honeydew', 'mediumvioletred',
+    'chartreuse', 'slategray', 'steelblue', 'gray', 'orangered',
+    'mediumseagreen', 'aqua', 'rebeccapurple', 'saddlebrown',
+    'lawngreen', 'powderblue', 'darkseagreen'
+        ]
+cmap = mpl.colors.ListedColormap(colors)
+boundaries = np.arange(len(colors)+1) - 1.5
+norm = mpl.colors.BoundaryNorm(boundaries, cmap.N, clip=True)
+
 l = len(colors)
 
 #----------------------------------------------------------------------
@@ -49,8 +68,8 @@ def plot_multiplicity(events, output_folder='./', loaddir=None):
         fname = '%s/nddpg.npy' % loaddir
         nddpg = np.load(fname)
     else:
-        nmc = np.array( [int(event.mc_idx.max()) + 1 for event in events] )
-        nddpg = np.array( [int(event.slicerl_idx.max()) + 1 for event in events] )
+        nmc = np.array( [len(set(event.mc_idx)) for event in events] )
+        nddpg = np.array( [len(set(event.slicerl_idx)) for event in events] )
     
     bins = np.linspace(0, 200, 201)
     hnmc, _   = np.histogram(nmc, bins=bins)
@@ -91,7 +110,7 @@ def plot_EMD(events, events_obj, output_folder='./', loaddir=None):
                 slice_state = np.array([Es, xs, zs])
                 # get the index of the first calohit in the slice
                 cidx = np.argwhere(m)[0,0]
-                mc_state = events_obj[i].calohits[cidx].mc_state
+                mc_state = events_obj[i].calohits[cidx].mc_idx
                 emdddpg.append(quality_metric(slice_state, mc_state))
         emdddpg = np.array(emdddpg)
     
@@ -155,28 +174,84 @@ def plot_plane_view(events, output_folder='./', loaddir=None):
     ax.set_title(f"Slicing Algorithm Output, 2D plane view")
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("z [mm]")
-    num_clusters = int(event_arr.slicerl_idx.max()) + 1
-    sort_fn = lambda x: np.count_nonzero( event_arr.slicerl_idx == x )
-    sorted_indices = sorted( range(num_clusters), key=sort_fn, reverse=True)
+    num_rl_clusters = len(set(event_arr.slicerl_idx))
     # sort all the cluster with greater number of hits
-    print(f"Plotting {num_clusters} Slices in event over {event_arr.slicerl_idx.shape[0]} particles")
-    for index in sorted_indices[:min(len(sorted_indices), 200)]:
-        m = event_arr.slicerl_idx == index
-        ax.scatter(event_arr.x[m], event_arr.z[m], marker='.', color=colors[index%l])
+    print(f"Plotting event with {len(event_arr.x)} calohits")
+    print(f"Plotting {num_rl_clusters} slices in event")
+    ax.scatter(event_arr.x, event_arr.z, s=0.5, c=event_arr.slicerl_idx, marker='.', cmap=cmap, norm=norm)
     ax.set_box_aspect(1)
 
     ax = fig.add_subplot(122)
     ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
     ax.set_xlabel("x [mm]")
     ax.set_ylabel("z [mm]")
-    num_clusters = int(event_arr.mc_idx.max()) + 1
-    print(f"Plotting {num_clusters} true Slices in event")
-    for index in range(num_clusters):
-        m = event_arr.mc_idx == index
-        ax.scatter(event_arr.x[m], event_arr.z[m], marker='.', color=colors[index%l])
+    num_mc_clusters = int(event_arr.mc_idx.max()) + 1
+    print(f"Plotting {num_mc_clusters} true slices in event")
+    ax.scatter(event_arr.x, event_arr.z, s=0.5, c=event_arr.mc_idx, marker='.', cmap=cmap, norm=norm)
     ax.set_box_aspect(1)
     fname = f"{output_folder}/pview.pdf"
     plt.savefig(fname, bbox_inches='tight')
+
+#----------------------------------------------------------------------
+def produce_slicing_animation(nmd, fname):
+    """
+    Produce an output animation to visualize event processing.
+    
+    Parameters
+    ----------
+        - nmd   : EventTuple, namedtuple from event
+        - fname : str, output animation filename
+    """
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(figsize=(6.4*2, 4.8))
+
+    # at this point the mc_idx must already be sorted in increasing order
+    # the agent must learn to capture the largest slice first
+    # so i do not need to sort here
+    # just plot all the colors stored in mc_idx
+    ax = fig.add_subplot(122)
+    ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
+    ax.set_xlabel("x [mm]")
+    ax.set_ylabel("z [mm]")
+    ax.scatter(nmd.x, nmd.z, s=0.5, c=nmd.mc_idx, marker='.', cmap=cmap, norm=norm)
+    ax.set_box_aspect(1)
+
+    num_clusters = len(set(nmd.slicerl_idx))
+
+    # now plot the first frame with all black points
+    # every new frame shows a new slice with a new color
+    c = np.full_like(nmd.z, -1)
+
+    sort_fn = lambda x: np.count_nonzero(nmd.slicerl_idx == x)
+    s_idx = sorted(list(set(nmd.slicerl_idx)), key=sort_fn, reverse=True)
+
+    ax = fig.add_subplot(121)
+    ax.set_title(f"Slicing Algorithm Output, 2D plane view")
+    ax.set_xlabel("x [mm]")
+    ax.set_ylabel("z [mm]")
+    scatt = ax.scatter(nmd.x, nmd.z, s=0.5, c=c, marker='.', cmap=cmap, norm=norm)
+    ax.set_xlabel(f"Episode start")
+
+    def animate(i, scatterplot):
+        # FuncAnimation repeats twice the first frame, but skip that since it's
+        # already built. First color in colors list is black.
+        if i == -1:
+            return (scatterplot,)
+        idx = s_idx[i]
+        m = nmd.slicerl_idx == s_idx[i]
+        c[m] = i
+        scatterplot.set_array(c)
+        ax.xaxis.label.set_color(colors[i+1])
+        ax.set_xlabel(f"Slice: {i}")
+        return (scatterplot,) # must return an iterable
+
+    anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, num_clusters), interval=2000, fargs=(scatt,), blit=True)
+
+    writergif = mpl.animation.PillowWriter(fps=1)
+    anim.save(fname, writer=writergif)    
+
+    # close figure
+    plt.close()
 
 #----------------------------------------------------------------------
 def plot_ROC(scores, output_folder='./', loaddir=None):
@@ -264,7 +339,8 @@ def make_plots(events_obj, plotdir):
     plot_multiplicity(events, plotdir)
     plot_slice_size(events, plotdir)
     plot_plane_view(events, plotdir)
-    plot_EMD(events, events_obj, plotdir)
+    # plot_EMD(events, events_obj, plotdir)
+    produce_slicing_animation(events[0], f"{plotdir}/slicing.gif")
 
 #----------------------------------------------------------------------
 def load_and_dump_plots(plotdir, loaddir):
@@ -279,9 +355,7 @@ def load_and_dump_plots(plotdir, loaddir):
     plot_multiplicity(None, plotdir, loaddir)
     plot_slice_size(None, plotdir, loaddir)
     plot_plane_view(None, plotdir, loaddir)
-    plot_EMD(None, None, plotdir, loaddir)
-
-# TODO: fix plot_EMD function. The problem arises when looping over the slices
-#       indices. It could appen that there are some holes in slice indexing
+    # plot_EMD(None, None, plotdir, loaddir)
 
 # TODO: fix plot_plane_view when loaded from results (it always needs the events)
+# TODO: fix EMD function in this version

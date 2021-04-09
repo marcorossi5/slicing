@@ -90,9 +90,8 @@ class ContinuousSlicer(AbstractSlicer):
         """Initialisation of the Slicer."""
         # load a ddpg instance here
         self.actor = actor
-        self.action_max = 1.0
-        self.eps = np.finfo(np.float32).eps
-        self.nbins = 128
+        self.threshold = 0.5
+        self.nb_max_episode_steps = 128
 
     #----------------------------------------------------------------------
     def _slicing(self, event):
@@ -101,12 +100,23 @@ class ContinuousSlicer(AbstractSlicer):
         index, do not keep track of slices cumulative statistics. Delegate
         slice checks to diagnostics.
         """
-        for i in range(len(event.calohits)):
-            c = event.calohits[i]            
-            state = event.state(i)
+        done = False
+        index = 0
+        while not done:
+            state = event.state()
             action = self.actor.predict_on_batch(np.array([[state]])).flatten()
-            action = np.clip(action, 0., self.action_max-self.eps)
-            c.status = math.floor(action*self.nbins)
+
+            # threshold the action to output a mask and apply it to the current status
+            m = np.logical_and(event.point_cloud[-1] == -1, action > self.threshold)
+            event.point_cloud[-1][m] = index
+
+            index += 1
+            # if we are at the end of the declustering list, then we are done for this event.
+            done = bool( (np.count_nonzero(event.point_cloud[-1] == -1) == 0) \
+                         or (index >= self.nb_max_episode_steps) )
+        
+        remaining_calohits = event.point_cloud[-1] == -1
+        event.point_cloud[-1][remaining_calohits] = index
         return event
 
     #----------------------------------------------------------------------

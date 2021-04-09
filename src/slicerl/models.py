@@ -96,49 +96,41 @@ def build_dqn(hps, input_dim, k, output_dim):
     return agent
 
 #----------------------------------------------------------------------
-def build_actor_model(hps, input_dim, k):
+def build_actor_model(hps, input_dim):
     """Construct the actor model used by the DDPG. Outputs the action"""
-    input_state     = Input(shape=(1,) + input_dim, name='actor_input')    
-    graphBlock      = Block(hps, 'GraphBlock', 'linear')
-    aggregatorBlock = Block(hps, 'AggregatorBlock', 'linear')
-    finalBlock      = Block(hps, 'FinalBlock', 'sigmoid')
-    
-    reshaped_state = Reshape(input_dim)(input_state)
-    c, notc = tf.split(reshaped_state, [1,k], -2)
-    c = Reshape((6,))(c)
-    
-    neigh_state = graphBlock(notc)
-    neigh_state = Reshape((k,))(neigh_state)
-    aggr_state = aggregatorBlock(neigh_state)
+    input_state   = Input(shape=(1,) + input_dim, name='actor_input')    
+    encoderBlock  = Block(hps, 'actor_encoder', 'linear')
+    decoderBlock  = Block(hps, 'actor_decoder', tf.nn.sigmoid, output_dim=input_dim[1])
 
-    cat_state = Concatenate(axis=-1)([c, aggr_state])
-    out = finalBlock(cat_state)
+    flat_state    = Flatten(name='actor_flatten')(input_state)
+    encoded_state = encoderBlock(flat_state)
+    decoded_state = decoderBlock(encoded_state)
 
-    model = Model(inputs=input_state, outputs=out, name="Actor")
+    model = Model(inputs=input_state, outputs=decoded_state, name="Actor")
     model.summary()
     return model
 
 #----------------------------------------------------------------------
-def build_critic_model(hps, input_dim, k):
+def build_critic_model(hps, input_dim):
     """
     Construct the critic model used by the DDPG. Judge the goodness of the
     predicted action
     """
-    action_input = Input(shape=(1,), name='action_input')
+    action_input = Input(shape=(input_dim[1],), name='action_input')
     obs_input    = Input(shape=(1,)+input_dim, name='observation_input')
-    criticBlock  = Block(hps, 'critic', 'linear')
-
-    c, _ = tf.split(obs_input, [1,k], -2)
-    flattened_obs = Flatten()(c)
-    x = Concatenate()([action_input, flattened_obs])
-    x = criticBlock(x)
+    criticBlock  = Block(hps, 'critic', 'softmax')
     
-    model = Model(inputs=[action_input, obs_input], outputs=x, name="Critic")
+    flat_obs     = Flatten(name='critic_flatten_obs')(obs_input)
+    flat_act     = Flatten(name='critic_flatten_act')(action_input)
+    concat       = Concatenate(name='critic_concat')([flat_obs, flat_act])
+    policy       = criticBlock(concat)
+
+    model = Model(inputs=[action_input, obs_input], outputs=policy, name="Critic")
     model.summary()
     return model, action_input
 
 #----------------------------------------------------------------------
-def build_ddpg(hps, input_dim, k):
+def build_ddpg(hps, input_dim):
     """Create a DDPG agent to be used on pandora inputs."""
 
     print('[+] Constructing DDPG agent, model setup:')
@@ -146,16 +138,17 @@ def build_ddpg(hps, input_dim, k):
 
     # set up the agent
     K.clear_session()
-    actor_model = build_actor_model(hps['actor'], input_dim, k)
+    actor_model = build_actor_model(hps['actor'], input_dim)
     critic_input_dim = input_dim
-    critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim, k)
+    critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim)
 
     memory = SequentialMemory(limit=500000, window_length=1)
-    random_process = OrnsteinUhlenbeckProcess(size=1, theta=.15, mu=0., sigma=.3)
+    # random_process = OrnsteinUhlenbeckProcess(size=input_dim[1], theta=.15, mu=0., sigma=.3)
+    random_process = None
     agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model,
-                          critic_action_input=action_input, nb_actions=1,
-                          memory=memory, nb_steps_warmup_actor=100,
-                          nb_steps_warmup_critic=100, target_model_update=1e-2,
+                          critic_action_input=action_input, nb_actions=input_dim[-1],
+                          memory=memory, nb_steps_warmup_actor=128,
+                          nb_steps_warmup_critic=256, target_model_update=1e-2,
                           random_process=random_process)
 
     if hps['optimizer'] == 'Adam':
@@ -176,65 +169,36 @@ def load_runcard(runcard):
     """Read in a runcard json file and set up dimensions correctly."""
     with open(runcard,'r') as f:
         res = json.load(f)
-    # if there is a state_dim variable, set up LundCoordinates accordingly
-    # unless we are doing a scan (in which case it needs to be done later)
     env_setup = res.get("slicerl_env")
     return res
 
 #----------------------------------------------------------------------
 def loss_calc(dqn, fn, nev):
     pass
-    # reader = Events(fn, nev)
-    # subtractor = dqn.subtractor()
-    # self.jet_pairs_list = reader.values()
-    # for jet_pairs in reader:
-    #     if len(jet_pairs)==0:
-    #         continue
-    #     events = Event(jet_pairs)
-    #     for event in events:
-    #         if
-    #     reader_sig = Jets(fn_sig, nev) # load validation set
-    #     reader_bkg = Jets(fn_bkg, nev) # load validation set
-    #     groomed_jets_sig = []
-    #     for jet in reader_sig.values():
-    #         groomed_jets_sig.append(dqn.groomer()(jet))
-    #     masses_sig = np.array(mass(groomed_jets_sig))
-    #     lower, upper, median = get_window_width(masses_sig)
-    #     groomed_jets_bkg = []
-    #     for jet in reader_bkg.values():
-    #         groomed_jets_bkg.append(dqn.groomer()(jet))
-    #     masses_bkg = np.array(mass(groomed_jets_bkg))
-    #     # calculate the loss function
-    #     count_bkg = ((masses_bkg > lower) & (masses_bkg < upper)).sum()
-    #     frac_bkg = count_bkg/float(len(masses_bkg))
-    #     loss = abs(upper-lower)/5 + abs(median-massref) + frac_bkg*20
-    #     return loss, (lower,upper,median)
 
 #----------------------------------------------------------------------
 def load_environment(env_setup):
     low = np.array(
         [
-            0.,                     # squared distance
             0.,                     # E
             -0.37260447692861504,   # x
             -0.35284,               # z
             0.,                     # cluster idx
             0.,                     # status
         ], dtype=np.float32
-    ).reshape(1,-1)
-    low = np.repeat(low, 1+env_setup['k'], 0)
+    ).reshape(5,1)
+    low = np.repeat(low, env_setup['max_hits'], 1)
 
     high = np.array(
         [
-            3.,                     # squared distance
             500.,                   # E
             0.37260447692861504,    # x
             0.91702,                # z
-            1.50,                   # cluster idx / 100
-            15.,                    # status / 100
+            150,                    # cluster idx
+            128.,                   # status
         ], dtype=np.float32
-    ).reshape(1,-1)
-    high = np.repeat(high, 1+env_setup['k'], 0)
+    ).reshape(5,1)
+    high = np.repeat(high, env_setup['max_hits'], 1)
 
     if env_setup["discrete"]:
         slicerl_env = SlicerlEnvDiscrete(env_setup, low=low, high=high)
@@ -252,9 +216,9 @@ def build_and_train_model(slicerl_agent_setup, slicerl_env=None):
 
     agent_setup = slicerl_agent_setup.get('rl_agent')
     if slicerl_env.discrete:
-        agent = build_dqn(agent_setup, slicerl_env.observation_space.shape, slicerl_env.k, slicerl_env.nbins)
+        agent = build_dqn(agent_setup, slicerl_env.observation_space.shape, slicerl_env.max_hits, slicerl_env.nbins)
     else:
-        agent = build_ddpg(agent_setup, slicerl_env.observation_space.shape, slicerl_env.k)
+        agent = build_ddpg(agent_setup, slicerl_env.observation_space.shape)
 
     logdir = '%s/logs/{}'.format(time()) % slicerl_agent_setup['output']
     print(f'[+] Constructing tensorboard log in {logdir}')
@@ -262,7 +226,8 @@ def build_and_train_model(slicerl_agent_setup, slicerl_env=None):
 
     print('[+] Fitting agent...')
     r = agent.fit(slicerl_env, nb_steps=agent_setup['nstep'],
-                visualize=False, verbose=1, callbacks=[tensorboard])
+                visualize=False, verbose=1, callbacks=[tensorboard],
+                log_interval=128, nb_max_episode_steps=128)
 
     # compute nominal reward after training
     median_reward = np.median(r.history['episode_reward'])
