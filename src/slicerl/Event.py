@@ -70,6 +70,8 @@ class Event:
         padding           = ((0,0),(0, self.max_hits - self.num_calohits))
         self.point_cloud  = np.pad(point_cloud, padding)
 
+        print(f"Num calohits {self.num_calohits}")
+
     #----------------------------------------------------------------------
     def __len__(self):
         return self.num_calohits
@@ -82,9 +84,9 @@ class Event:
         
         Returns
         -------
-            - array of shape=(5, max_hits)
+            - array of shape=(max_hits, 5)
         """
-        return self.point_cloud
+        return self.point_cloud.T
 
     #----------------------------------------------------------------------
     def calohits_to_array(self):
