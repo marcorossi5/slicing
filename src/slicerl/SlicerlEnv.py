@@ -6,7 +6,7 @@ from slicerl.Event import Event
 from gym import spaces, Env
 from gym.utils import seeding
 import numpy as np
-from slicerl.tools import dice_loss, mse, m_lin_fit, pearson_distance
+from slicerl.tools import dice_loss, mse, m_lin_fit, pearson_distance, efficiency_rejection_rate_loss
 from copy import deepcopy
 
 #======================================================================
@@ -189,10 +189,7 @@ class SlicerlEnvContinuous(SlicerlEnv):
         """Prepare the current step to seed a new slice."""
         # print('setting node up')
         self.index += 1
-        # TODO: check if this pad could be done somwhere else
-        mc_state = (self.event.ordered_mc_idx == self.index).astype(np.int16)
-        pad = (0, self.max_hits - mc_state.shape[0])
-        self.mc_state = np.pad(mc_state, pad)
+        self.mc_state = (self.event.ordered_mc_idx == self.index)
         self.state = deepcopy(self.event.state())
 
     #----------------------------------------------------------------------
@@ -203,6 +200,18 @@ class SlicerlEnvContinuous(SlicerlEnv):
         self.set_next_node()
 
     #----------------------------------------------------------------------
+    def reward(self, slice_state, mask_state, mc_state):
+        """
+        Full reward function. slice_state contain actor scores in range [0,1].
+        mask_state and mc_state are boolean masks.
+        """
+        er_rate_loss = efficiency_rejection_rate_loss(mask_state, mc_state)
+        dice         = dice_loss(slice_state, mc_state.astype(slice_state.dtype))
+        x = er_rate_loss + dice
+
+        return self._SlicerlEnv__reward(x/self.width)
+
+    #----------------------------------------------------------------------
     def step(self, action):
         """
         Perform a step using the current calohit in the event, deciding which
@@ -210,26 +219,29 @@ class SlicerlEnvContinuous(SlicerlEnv):
         unit interval. The bin index is the slice index.
         """
         # action shape is (max_hits,)
-        # ddpg with random_process may drift the action out of action_space bounds
-        # TODO: check random process
+        # clip action since random process could drift the action out of action_space bounds
+        action = np.clip(action, 0., 1.)
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
 
+        valid_action   = action[:self.event.num_calohits]
+        current_status = self.event.point_cloud[-1][:self.event.num_calohits]
+
         # threshold the action to output a mask and apply it to the current status
-        m = np.logical_and(self.event.point_cloud[-1] == -1, action > self.threshold)
-        self.event.point_cloud[-1][m] = self.index
+        m = np.logical_and(current_status == -1, valid_action > self.threshold)
+        current_status[m] = self.index
 
-        # compute reward        
-        # reward = self.reward(np.stack([action, m]), mc_state)
+        # print(f"action range: [{valid_action.min():.5f}, {valid_action.max():.5f}], update hits: {np.count_nonzero(m)},",
+        #       f"to update: {np.count_nonzero(self.mc_state)}, num calohits: {self.event.num_calohits}, new status vector range: [{current_status.min()}, {current_status.max()}]")
+        # compute reward only on valid calohits, not padded ones
         # penalize if no calohit is predicted above threshold
-
-        penalty = -1 if np.count_nonzero(m) == 0 else 0
-        reward = self.reward(action, self.mc_state) + penalty
+        penalty = -2 if np.count_nonzero(m) == 0 else 0
+        reward = self.reward(valid_action, m, self.mc_state) + penalty
 
         # prepare next step
         self.set_next_node()
 
         # if we are at the end of the declustering list, then we are done for this event.
-        done = bool( (np.count_nonzero(self.event.point_cloud[-1] == -1) == 0) \
+        done = bool( (np.count_nonzero(current_status == -1) == 0) \
                      or (self.index >= self.nb_max_episode_steps) )
 
         # return the state, reward, and status

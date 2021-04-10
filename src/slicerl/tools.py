@@ -102,8 +102,11 @@ def mse(x,y):
     return ((x-y)**2).mean()
 
 #----------------------------------------------------------------------
-def bce(x,y):
-    pass
+def bce_loss(x,y):
+    # Warning: computing log is expensive
+    ratio = 0.1 # percentage of ones over zeros
+    loss = - y*np.log(x + eps)/ratio - (1-y)*np.log(1-x + eps)/(1-ratio)
+    return loss.mean()
 
 #----------------------------------------------------------------------
 def dice_loss(x,y):
@@ -114,3 +117,9 @@ def dice_loss(x,y):
     num2 = (ix*iy).sum(-1) + eps
     den2 = (ix*ix + iy*iy).sum(-1) + eps
     return 1 - (num1/den1 + num2/den2).mean()
+
+#----------------------------------------------------------------------
+def efficiency_rejection_rate_loss(x,y):
+    efficiency     = np.count_nonzero(x[y]) / (np.count_nonzero(y) + eps )
+    rejection_rate = np.count_nonzero(x[~y]) / (np.count_nonzero(~y) + eps)
+    return 1 - efficiency + rejection_rate

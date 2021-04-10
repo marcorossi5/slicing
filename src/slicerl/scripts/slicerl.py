@@ -80,24 +80,30 @@ def makedir(folder):
         raise Exception('Output folder %s already exists.' % folder)
 
 #----------------------------------------------------------------------
-def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev):
+def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev, visualize=False, gifname=None):
     """
     Make inference from dataset at fnin and save results at fnres. Output
     diagnostic plots in plotdir and plot data in loaddir. Perform checks trying
     to skip already stored computations. This function never overwrites files.
 
+    try to make plotdir-loaddir.
+    if they already exist and contain data --> load_and_dump
+    else do nothing
+    if they did not exist
+        if inference data file already exist --> load Events and make plots
+        else --> make inference
+        make plots
+    
+
     Parameters
     ----------
-        fnin: str
-            input dataset file name
-        fnres: str
-            inference results file name
-        plotdir: str
-            folder name to store diagnostic plots
-        loaddir: str
-            folder name to store diagnostic plots data (to tweak plots only)
-        nev: int
-            number of event to load
+        fnin      : str, input dataset file name
+        fnres     : str, inference results file name
+        plotdir   : str, folder name to store diagnostic plots
+        loaddir   : str, folder name to store diagnostic plots data (to tweak plots only)
+        nev       : int, number of event to load
+        visualize : bool, wether to create gif animation of actor scores
+        gifname   : str, filename to save gif
     """
     try:
         makedir(plotdir)
@@ -106,6 +112,7 @@ def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev):
         if len(os.listdir(loaddir)) > 0:
             print(f'[+] Plotting on previously collected results: {loaddir} already exists')
             load_and_dump_plots(plotdir, loaddir)
+            # TODO: we cannot plot_plane_view without loading the events
         else:
             print(f'[+] Ignoring plots: {loaddir} already exists, but is empty')
     else:
@@ -117,10 +124,13 @@ def safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, nev):
             events = load_Events_from_file(fnres, nev, num_lines=7)
         else:
             events = load_Events_from_file(fnin, nev)
-            events = inference(slicer, events)
+            if visualize:
+                if gifname is None:
+                    raise ValueError('Invalid gifname')
+                assert gifname.split(os.extsep)[-1] == 'gif', f"got {gifname}, gif filename must have .gif extension"
+            events = inference(slicer, events, visualize, gifname)
             save_Event_list_to_file(events, fnres)
         make_plots(events, plotdir)
-
 
 #----------------------------------------------------------------------
 def main():
@@ -135,6 +145,7 @@ def main():
     parser.add_argument('--output', '-o', type=str, default=None,
                         help='The output folder.')
     parser.add_argument('--plot',action='store_true',dest='plot')
+    parser.add_argument('--visualize',action='store_true',dest='visualize')
     parser.add_argument('--force', '-f', action='store_true',dest='force',
                         help='Overwrite existing files if present')
     parser.add_argument('--cpp',action='store_true',dest='cpp')
@@ -201,7 +212,8 @@ def main():
 
         slicer = ddpg.slicer()
         events = load_Events_from_file(setup['test']['fn'], args.nev)
-        events = inference(slicer, events)
+        gifname = '%s/test_predictions_actor_scores.gif' % setup['output']
+        events = inference(slicer, events, visualize=args.visualize, gifname=gifname)
         save_Event_list_to_file(events, fnres)
 
         # define the folder where to do the plotting/cpp conversation
@@ -225,7 +237,8 @@ def main():
         plotdir = '%s/plots' % folder
         loaddir = '%s/results' % plotdir
         fnres   = '%s/test_predictions.csv.gz' % setup['output']
-        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev)
+        gifname = '%s/test_predictions_actor_scores.gif' % setup['output']
+        safe_inference_and_plots(slicer, fnin, fnres, plotdir, loaddir, args.nev, args.visualize, gifname)
 
     # if a data set was given as input, produce plots from it
     # always check if inference data is already there
@@ -233,8 +246,9 @@ def main():
         fnin = os.path.basename(args.data).split(os.extsep)[0]
         plotdir='%s/%s' % (folder, fnin)
         loaddir = '%s/results' % plotdir
-        fnres = '%s/%s_sliced.csv.gz' % (plotdir, fnin)
-        safe_inference_and_plots(slicer, args.data, fnres, plotdir, loaddir, args.nev)
+        fnres = '%s/%s_sliced.csv.gz' % (folder, fnin)
+        gifname = '%s/%s_sliced_actor_scores.gif' % (folder, fnin)
+        safe_inference_and_plots(slicer, args.data, fnres, plotdir, loaddir, args.nev, args.visualize, gifname)
 
     # if requested, add cpp output
     if args.cpp:

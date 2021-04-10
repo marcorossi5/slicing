@@ -6,16 +6,17 @@ import math, json
 from abc import ABC, abstractmethod
 from rl.policy import GreedyQPolicy
 from tensorflow.keras.models import model_from_json
+from slicerl.diagnostics import render
 
 #======================================================================
 class AbstractSlicer(ABC):
     """AbstractSlicer class."""
 
     #----------------------------------------------------------------------
-    def __call__(self, event):
+    def __call__(self, event, visualize=False):
         """Apply the slicer to an event and returned the cleaned event."""
         # TODO: implement
-        return self._slicing(event)
+        return self._slicing(event, visualize)
 
     #----------------------------------------------------------------------
     @abstractmethod
@@ -32,7 +33,7 @@ class DiscreteSlicer(AbstractSlicer):
         self.policy = policy
 
     #----------------------------------------------------------------------
-    def _slicing(self, event):
+    def _slicing(self, event, visualize=False):
         """
         Apply Slicer to an event. Just overwrite calohit status with slice
         index, do not keep track of slices cumulative statistics. Delegate
@@ -94,30 +95,52 @@ class ContinuousSlicer(AbstractSlicer):
         self.nb_max_episode_steps = 128
 
     #----------------------------------------------------------------------
-    def _slicing(self, event):
+    def _slicing(self, event, visualize=False):
         """
         Apply Slicer to an event. Just overwrite calohit status with slice
         index, do not keep track of slices cumulative statistics. Delegate
         slice checks to diagnostics.
+
+        Parameters
+        ----------
+            event     : Event, event to be processed
+            visualize : bool, wether to create gif animation of actor scores
+        
+        Returns
+        -------
+            - processed event
+            - actor_scores if visualize=True
         """
+        if visualize:
+            actor_scores = []
         done = False
         index = 0
         while not done:
-            state = event.state()
-            action = self.actor.predict_on_batch(np.array([[state]])).flatten()
+            state          = event.state()
+            action         = self.actor.predict_on_batch(np.array([[state]])).flatten()
+            valid_action   = action[:event.num_calohits]
+            current_status = event.point_cloud[-1][:event.num_calohits]
+
+            if visualize:
+                actor_scores.append(valid_action)
 
             # threshold the action to output a mask and apply it to the current status
-            m = np.logical_and(event.point_cloud[-1] == -1, action > self.threshold)
-            event.point_cloud[-1][m] = index
+            m = np.logical_and(current_status == -1, valid_action > self.threshold)
+            current_status[m] = index
 
             index += 1
             # if we are at the end of the declustering list, then we are done for this event.
-            done = bool( (np.count_nonzero(event.point_cloud[-1] == -1) == 0) \
+            done = bool( (np.count_nonzero(current_status == -1) == 0) \
                          or (index >= self.nb_max_episode_steps) )
         
-        remaining_calohits = event.point_cloud[-1] == -1
-        event.point_cloud[-1][remaining_calohits] = index
+        # TODO: think about having an index value that we can recognize
+        remaining_calohits = current_status == -1
+        current_status[remaining_calohits] = index
+            
+        if visualize:
+            return event, np.stack(actor_scores)
         return event
+
 
     #----------------------------------------------------------------------
     def load_with_json(self, jsonfile, weightfile):

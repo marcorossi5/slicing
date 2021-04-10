@@ -8,7 +8,7 @@ from slicerl.AgentSlicerl import DQNAgentSlicerl, DDPGAgentSlicerl
 from slicerl.read_data import Events
 from rl.policy import BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
-from rl.random import OrnsteinUhlenbeckProcess
+from rl.random import OrnsteinUhlenbeckProcess, GaussianWhiteNoiseProcess
 
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
@@ -143,12 +143,12 @@ def build_ddpg(hps, input_dim):
     critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim)
 
     memory = SequentialMemory(limit=500000, window_length=1)
-    # random_process = OrnsteinUhlenbeckProcess(size=input_dim[1], theta=.15, mu=0., sigma=.3)
-    random_process = None
+    # random_process = OrnsteinUhlenbeckProcess(size=input_dim[1], theta=.15, mu=0., sigma=.1)
+    random_process = GaussianWhiteNoiseProcess(size=input_dim[1], mu=0., sigma=0.3)
     agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model,
                           critic_action_input=action_input, nb_actions=input_dim[-1],
-                          memory=memory, nb_steps_warmup_actor=128,
-                          nb_steps_warmup_critic=256, target_model_update=1e-2,
+                          memory=memory, nb_steps_warmup_actor=34,
+                          nb_steps_warmup_critic=34, target_model_update=1e-2,
                           random_process=random_process)
 
     if hps['optimizer'] == 'Adam':

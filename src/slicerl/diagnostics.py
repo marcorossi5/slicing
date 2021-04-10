@@ -7,6 +7,7 @@ import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
 import math
+from time import time as tm
 
 #----------------------------------------------------------------------
 """
@@ -15,10 +16,10 @@ printing matplotlib.colors.CSS4_COLORS.keys().
 """
 
 colors = [
-    'black', 'peru', 'deepskyblue', 'darkorchid', 'darkgoldenrod', 'teal',
+    'black', 'deepskyblue', 'peru', 'darkorchid', 'darkgoldenrod', 'teal',
     'dodgerblue', 'brown', 'darkslategrey', 'turquoise', 'lightsalmon', 'plum',
     'darkcyan', 'orange', 'slategrey', 'darkmagenta', 'limegreen', 'deeppink',
-    'red', 'springgreen', 'midnightblue','green', 'mediumpurple',
+    'gold', 'springgreen', 'midnightblue','green', 'mediumpurple',
     'mediumvioletred', 'dimgrey', 'blueviolet', 'lightskyblue', 'darksalmon',
     'royalblue', 'fuchsia', 'mediumaquamarine', 'mediumblue', 'grey', 'sienna',
     'mediumslateblue', 'seagreen', 'purple', 'greenyellow', 'darkviolet', 'coral',
@@ -39,7 +40,7 @@ colors = [
     'lightslategray', 'cyan', 'lightgrey', 'honeydew', 'mediumvioletred',
     'chartreuse', 'slategray', 'steelblue', 'gray', 'orangered',
     'mediumseagreen', 'aqua', 'rebeccapurple', 'saddlebrown',
-    'lawngreen', 'powderblue', 'darkseagreen'
+    'lawngreen', 'powderblue', 'darkseagreen', 'red'
         ]
 cmap = mpl.colors.ListedColormap(colors)
 boundaries = np.arange(len(colors)+1) - 1.5
@@ -172,22 +173,22 @@ def plot_plane_view(events, output_folder='./', loaddir=None):
     fig = plt.figure(figsize=(18*2,14))
     ax = fig.add_subplot(121)
     ax.set_title(f"Slicing Algorithm Output, 2D plane view")
-    ax.set_xlabel("x [mm]")
-    ax.set_ylabel("z [mm]")
+    ax.set_xlabel("x [cm]")
+    ax.set_ylabel("z [cm]")
     num_rl_clusters = len(set(event_arr.slicerl_idx))
     # sort all the cluster with greater number of hits
     print(f"Plotting event with {len(event_arr.x)} calohits")
     print(f"Plotting {num_rl_clusters} slices in event")
-    ax.scatter(event_arr.x, event_arr.z, s=0.5, c=event_arr.slicerl_idx, marker='.', cmap=cmap, norm=norm)
+    ax.scatter(event_arr.x, event_arr.z, s=1, c=event_arr.slicerl_idx, marker='.', cmap=cmap, norm=norm)
     ax.set_box_aspect(1)
 
     ax = fig.add_subplot(122)
     ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
-    ax.set_xlabel("x [mm]")
-    ax.set_ylabel("z [mm]")
+    ax.set_xlabel("x [cm]")
+    ax.set_ylabel("z [cm]")
     num_mc_clusters = int(event_arr.mc_idx.max()) + 1
     print(f"Plotting {num_mc_clusters} true slices in event")
-    ax.scatter(event_arr.x, event_arr.z, s=0.5, c=event_arr.mc_idx, marker='.', cmap=cmap, norm=norm)
+    ax.scatter(event_arr.x, event_arr.z, s=1, c=event_arr.mc_idx, marker='.', cmap=cmap, norm=norm)
     ax.set_box_aspect(1)
     fname = f"{output_folder}/pview.pdf"
     plt.savefig(fname, bbox_inches='tight')
@@ -211,9 +212,9 @@ def produce_slicing_animation(nmd, fname):
     # just plot all the colors stored in mc_idx
     ax = fig.add_subplot(122)
     ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
-    ax.set_xlabel("x [mm]")
-    ax.set_ylabel("z [mm]")
-    ax.scatter(nmd.x, nmd.z, s=0.5, c=nmd.mc_idx, marker='.', cmap=cmap, norm=norm)
+    ax.set_xlabel("x [cm]")
+    ax.set_ylabel("z [cm]")
+    ax.scatter(nmd.x, nmd.z, s=1, c=nmd.mc_idx, marker='.', cmap=cmap, norm=norm)
     ax.set_box_aspect(1)
 
     num_clusters = len(set(nmd.slicerl_idx))
@@ -227,9 +228,9 @@ def produce_slicing_animation(nmd, fname):
 
     ax = fig.add_subplot(121)
     ax.set_title(f"Slicing Algorithm Output, 2D plane view")
-    ax.set_xlabel("x [mm]")
-    ax.set_ylabel("z [mm]")
-    scatt = ax.scatter(nmd.x, nmd.z, s=0.5, c=c, marker='.', cmap=cmap, norm=norm)
+    ax.set_xlabel("x [cm]")
+    ax.set_ylabel("z [cm]")
+    scatt = ax.scatter(nmd.x, nmd.z, s=1, c=c, marker='.', cmap=cmap, norm=norm)
     ax.set_xlabel(f"Episode start")
 
     def animate(i, scatterplot):
@@ -238,11 +239,11 @@ def produce_slicing_animation(nmd, fname):
         if i == -1:
             return (scatterplot,)
         idx = s_idx[i]
-        m = nmd.slicerl_idx == s_idx[i]
-        c[m] = i
+        m = nmd.slicerl_idx == idx
+        c[m] = idx
         scatterplot.set_array(c)
-        ax.xaxis.label.set_color(colors[i+1])
-        ax.set_xlabel(f"Slice: {i}")
+        ax.xaxis.label.set_color(colors[int(idx)+1])
+        ax.set_xlabel(f"Slice: {int(idx)}")
         return (scatterplot,) # must return an iterable
 
     anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, num_clusters), interval=2000, fargs=(scatt,), blit=True)
@@ -254,62 +255,91 @@ def produce_slicing_animation(nmd, fname):
     plt.close()
 
 #----------------------------------------------------------------------
-def plot_ROC(scores, output_folder='./', loaddir=None):
-    """Plot the ROC curve for particle classification and output some statistics."""
-    # particle: list of np.arrays of shape=(num particles, 2) for all events
-    if loaddir is not None:
-        fname = '%s/confusion.npy' % loaddir
-        tp, fp, fn, tn = np.load(fname)
-    else:
-        tp, fp, fn, tn = confusion_matrix_per_event(scores)
-    efficiency = tp / (tp + fn)
-    irejection = fp / (tn + fp)
+def render(event, action_scores, fname):
+    """
+    Produce an output animation to visualize event processing. On the left
+    subsequent actions. On the right the current mc slice. Start frame is just
+    scatterplot without colors.
+    
+    Parameters
+    ----------
+        - event         : Event
+        - action_scores : np.array, shape=(num_slices, num_calohits)
+        - fname         : str, output animation filename
+    """
+    x = event.calohits[1] * 1000 # restore original unit measures [cm]
+    z = event.calohits[2] * 1000 # restore original unit measures [cm]
+    mc_idx = event.ordered_mc_idx
+    null_score = np.zeros_like(action_scores[0])
 
-    sqrtn = math.sqrt(len(tp))
-    tp_avg = tp.mean() * 100
-    tp_unc = tp.std() / sqrtn * 100
-    fn_avg = fn.mean() * 100
-    fn_unc = fn.std() / sqrtn * 100
-    fp_avg = fp.mean() * 100
-    fp_unc = fp.std() / sqrtn * 100
-    tn_avg = tn.mean() * 100
-    tn_unc = tn.std() / sqrtn * 100
-    PU_unc = np.sqrt(tp_unc**2 + fn_unc**2)
-    LV_unc = np.sqrt(tn_unc**2 + fp_unc**2)
+    vcmap = 'plasma'
+    vnorm = mpl.colors.Normalize(vmin=0., vmax=1.)
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(figsize=(6.4*2, 4.8))
 
-    print(f"Dataset balancing: \t PU particles: {tp_avg+fn_avg:.2f}+-{PU_unc:.2f} % \t LV particles: {tn_avg+fp_avg:.2f}+-{LV_unc:.2f} % ")
-    print("Average confusion matrix:")
-    print( "\t\  true |        |        |")
-    print( "\t  ----  |   PU   |   LV   |")
-    print( "\t pred  \|        |        |")
-    print( "\t---------------------------")
-    print(f"\t   PU   |{tp_avg:>5.2f} % |{fp_avg:>5.2f} % |")
-    print( "\t---------------------------")
-    print(f"\t   LV   |{fn_avg:>5.2f} % |{tn_avg:>5.2f} % |")
-    print( "\t---------------------------")
+    # num_slices = max(len(set(mc_idx)), action_scores.shape[0])
+    num_slices = len(set(mc_idx))
+    if num_slices > action_scores.shape[0]:
+        pad = np.zeros([num_slices - action_scores.shape[0], action_scores.shape[1]])
+        action_scores = np.concatenate([action_scores, pad])
 
-    plt.rcParams.update({'font.size': 20})
-    plt.figure(figsize=(18,14))
-    plt.scatter(efficiency, irejection, marker='.', color="blue", label="DQN-Subtracting")
+    # now plot the first frame with all black points
+    # every new frame shows a new slice with a new color
+    c = np.zeros_like(z)
 
-    plt.xlabel("Efficiency $\epsilon$", loc='right')
-    plt.ylabel("$1/R$", loc="top")
-    plt.xlim((0,1))
-    plt.ylim((0,1))
-    plt.legend()
-    fname = f"{output_folder}/ROC.pdf"
-    plt.savefig(fname, bbox_inches='tight')
-        
-    print_stats('Efficiency' , efficiency   , 0, output_folder=output_folder)
-    print_stats('1/Rejection', irejection   , 0, output_folder=output_folder)
-    resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/confusion.npy", np.stack([tp, fp, fn, tn]))
+    ax0 = fig.add_subplot(121)
+    ax0.set_title("Slicing Algorithm Output, 2D plane view")
+    ax0.set_xlabel("x [cm]")
+    ax0.set_ylabel("z [cm]")
+    scatt0 = ax0.scatter(x, z, s=1, c=c, marker='.', norm=vnorm)
+    ax0.set_xlabel("Episode start")
+    ax0.set_box_aspect(1)
+
+    # at this point the mc_idx must already be sorted in increasing order
+    # just plot all the colors stored in mc_idx
+    ax1 = fig.add_subplot(122)
+    ax1.set_title("Cheating Algorithm Truths, 2D plane view")
+    ax1.set_xlabel("x [cm]")
+    ax1.set_ylabel("z [cm]")
+    scatt1 = ax1.scatter(x, z, s=1, c=mc_idx, marker='.', cmap=cmap, norm=norm)
+    ax1.set_xlabel("MC slices")
+    ax1.set_box_aspect(1)
+
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.82, 0.15, 0.01, 0.7])
+    fig.colorbar(mpl.cm.ScalarMappable(norm=vnorm, cmap=vcmap), cax=cbar_ax)
+    # fig.colorbar(z, cax=cbar_ax)
+
+    def animate(i, scatterplot0, scatterplot1):
+        # FuncAnimation repeats twice the first frame, but skip that since it's
+        # already built. First color in colors list is black.
+        if i == -1:
+            return (scatterplot0, scatterplot1)
+        scatterplot0.set_array(action_scores[i])
+        ax0.set_xlabel(f"Slice: {i}")
+
+        # plot the mask of the current mc slice
+        scatterplot1.set_array((mc_idx == i).astype(np.int16))
+        ax1.set_xlabel(f"Slice: {i}")
+        if i == 0:
+            scatterplot0.set_cmap(vcmap)
+            scatterplot1.set_cmap(vcmap)
+            scatterplot1.set_norm(vnorm)
+        return (scatterplot0, scatterplot1) # must return an iterable
+
+    anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, num_slices), interval=2000, fargs=(scatt0, scatt1), blit=True)
+
+    writergif = mpl.animation.PillowWriter(fps=1)
+    anim.save(fname, writer=writergif)    
+
+    # close figure
+    plt.close()
 
 #----------------------------------------------------------------------
-def inference(slicer, events):
+def inference(slicer, events, visualize=False, gifname=None):
     """
     Slice calohits from a list of Events objects. Returns the list of
-    processed Events.
+    processed Events. Visualize just the first event
 
     Parameters
     ----------
@@ -321,8 +351,17 @@ def inference(slicer, events):
     """
     progbar = Progbar(len(events))
     for i, event in enumerate(events):
-        slicer(event)
+        if i == 0 and visualize:
+            _, actor_scores = slicer(event, visualize)
+            continue
+        slicer(event)        
         progbar.update(i+1)
+    if visualize:
+        print("[+] Rendering inference event")
+        start = tm()
+        render(events[0], actor_scores, gifname)
+        print(f"[+] Saving gif to {gifname}")
+        print(f"done, took {tm()-start} s")
     return events
 
 #----------------------------------------------------------------------

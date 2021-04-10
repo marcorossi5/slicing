@@ -35,6 +35,11 @@ class Event:
         """
         self.calohits = calohits
 
+        # check if (E,x,z) inputs are in range
+        assert np.all(calohits[0] < 500)
+        assert np.all(np.logical_and(calohits[1] >= -0.37260447692861504,  calohits[1] <= 0.37260447692861504))
+        assert np.all(np.logical_and(calohits[2] >= -0.35284, calohits[2] <= 0.91702))
+
         # build the mc slice size ordering
         # TODO: mc_idx contains some -1, think about masking out those
         # un-associated calohits and then make the ordering
@@ -97,7 +102,7 @@ class Event:
             - spatial coordinates x and z are converted in cm
         """
         # remove padding and restore natural measure units
-        array    = self.point_cloud[:, :self.num_calohits]
+        array    = deepcopy(self.point_cloud[:, :self.num_calohits])
         array[0] = array[0] * 100  # to ADC
         array[1] = array[1] * 1000 # to cm
         array[2] = array[2] * 1000 # to cm
@@ -110,7 +115,7 @@ class Event:
                         array[-1:]               # status vector
                     ])
 
-        return deepcopy(array)
+        return array
 
     #----------------------------------------------------------------------
     def calohits_to_namedtuple(self):
