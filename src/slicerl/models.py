@@ -33,15 +33,12 @@ from time import time
 import pprint, json
 
 #----------------------------------------------------------------------
-def Block(hps, name, activation, output_dim=1):
+def Block(nb_units_layers, name):
     model = Sequential(name=name)
-    for i in range(hps['nb_layers']):
-        model.add(Dense(hps['nb_units']))
-        model.add(Activation('relu'))
-    if hps['dropout']>0.0:
-        model.add(Dropout(hps['dropout']))
-    model.add(Dense(output_dim))
-    model.add(Activation(activation))
+    for i, nb_units in enumerate(nb_units_layers):
+        model.add(Dense(nb_units, name=f"{name}_dense_{i}"))
+        # model.add(BatchNormalization(name=f"{name}_bnorm_{i}"))
+        model.add(Activation('relu', name=f"{name}_relu_{i}"))
     return model
 
 #----------------------------------------------------------------------
@@ -108,90 +105,107 @@ def build_dqn(hps, input_dim, k, output_dim):
 #----------------------------------------------------------------------
 def build_actor_model(hps, input_dim):
     """Construct the actor model used by the DDPG. Outputs the action"""
-    input_state = Input(shape=(1,) + input_dim, name='actor_input')
+    obs_state = Input(shape=(1,) + input_dim, name='a_obs_input')
 
-    nb_units_local  = [64, 64]
-    dense_local     = [Dense(nb_units, name=f'a_dense_local_{i}') for i, nb_units in enumerate(nb_units_local)]
-    bn_local        = [BatchNormalization(name=f'a_bnorm_local_{i}') for i in range(len(nb_units_local))]
-    relu_local      = [ReLU(name=f'a_relu_local_{i}') for i in range(len(nb_units_local))]
+    """
+    encoderBlock  = Block(hps, 'actor_encoder', 'linear')
+    decoderBlock  = Block(hps, 'actor_decoder', tf.nn.sigmoid, output_dim=input_dim[0])
 
-    nb_units_global = [64, 128, 1024]
-    dense_global    = [Dense(nb_units, name=f'a_dense_global_{i}') for i, nb_units in enumerate(nb_units_global)]
-    bn_global       = [BatchNormalization(name=f'a_bnorm_global_{i}') for i in range(len(nb_units_global))]
-    relu_global     = [ReLU(name=f'a_relu_global_{i}') for i in range(len(nb_units_global))]
+    flat_state    = Flatten(name='actor_flatten')(obs_state)
+    encoded_state = encoderBlock(flat_state)
+    final_state = decoderBlock(encoded_state)
+    """
+    nb_units_local  = [32, 32]
+    a_local         = Block(nb_units_local, "a_local")
+    # dense_local     = [Dense(nb_units, name=f'a_dense_local_{i}') for i, nb_units in enumerate(nb_units_local)]
+    # bn_local        = [BatchNormalization(name=f'a_bnorm_local_{i}') for i in range(len(nb_units_local))]
+    # relu_local      = [ReLU(name=f'a_relu_local_{i}') for i in range(len(nb_units_local))]
+
+    nb_units_global = [32, 64, 512]
+    a_global        = Block(nb_units_global, "a_global")
+    # dense_global    = [Dense(nb_units, name=f'a_dense_global_{i}') for i, nb_units in enumerate(nb_units_global)]
+    # bn_global       = [BatchNormalization(name=f'a_bnorm_global_{i}') for i in range(len(nb_units_global))]
+    # relu_global     = [ReLU(name=f'a_relu_global_{i}') for i in range(len(nb_units_global))]
 
     concat          = Concatenate(-1, name='a_concat_local_global')
 
-    nb_units_cat    = [512, 256, 128, 64]
-    dense_cat       = [Dense(nb_units, name=f'a_dense_cat_{i}') for i, nb_units in enumerate(nb_units_cat)]
-    bn_cat          = [BatchNormalization(name=f'a_bnorm_cat_{i}') for i in range(len(nb_units_cat))]
-    relu_cat        = [ReLU(name=f'relu_cat_{i}') for i in range(len(nb_units_cat))]
+    nb_units_cat    = [256, 512, 64, 32]
+    a_cat           = Block(nb_units_cat, "a_cat")
+    # dense_cat       = [Dense(nb_units, name=f'a_dense_cat_{i}') for i, nb_units in enumerate(nb_units_cat)]
+    # bn_cat          = [BatchNormalization(name=f'a_bnorm_cat_{i}') for i in range(len(nb_units_cat))]
+    # relu_cat        = [ReLU(name=f'relu_cat_{i}') for i in range(len(nb_units_cat))]
 
-    dense_final     = Dense(1, name='a_dense_final')
+    a_final         = Dense(1, name='a_final_dense')
     activation      = Activation('sigmoid', name='a_activation')
     reshape         = Reshape((input_dim[0],), name='a_reshape')
 
-    x = input_state
-    for dense, bn, relu in zip(dense_local, bn_local, relu_local):
-        x = relu(bn(dense(x)))
-    
-    y = x
-    for dense, bn, relu in zip(dense_global, bn_global, relu_global):
-        y = relu(bn(dense(y)))
-    
-    y = tf.math.reduce_max(y, axis=-2, keepdims=True, name='a_max_pool')
-    y = tf.repeat(y, input_dim[0], axis=-2, name='a_repeat')
-    
-    cat_state = concat([x,y])
-    for dense, bn, relu in zip(dense_cat, bn_cat, relu_cat):
-        cat_state = relu(bn(dense(cat_state)))
+    local_state = a_local(obs_state)
+    # x = obs_state
+    # for dense, bn, relu in zip(dense_local, bn_local, relu_local):
+    #     x = relu(bn(dense(x)))
 
-    final_state = reshape(activation(dense_final(cat_state)))
+    global_state = a_global(local_state)
+    # y = x
+    # for dense, bn, relu in zip(dense_global, bn_global, relu_global):
+    #     y = relu(bn(dense(y)))
     
-    model = Model(inputs=input_state, outputs=final_state, name="Actor")
+    global_state = tf.math.reduce_max(global_state, axis=-2, keepdims=True, name='a_max_pool')
+    global_state = tf.repeat(global_state, input_dim[0], axis=-2, name='a_repeat')
+    
+    cat_state = a_cat(concat([local_state, global_state]))
+    # for dense, bn, relu in zip(dense_cat, bn_cat, relu_cat):
+    #     cat_state = relu(bn(dense(cat_state)))
+
+    final_state = reshape(activation(a_final(cat_state)))
+
+    model = Model(inputs=obs_state, outputs=final_state, name="Actor")
     model.summary()
     return model
 
 #----------------------------------------------------------------------
 def build_critic_model(hps, input_dim):
     """
-    Construct the critic model used by the DDPG. Judge the goodness of the
+    Construct the critic model used by the DDPG. Judges the goodness of the
     predicted action
     """
-    obs_input       = Input(shape=(1,)+input_dim, name='observation_input')
-    action_input    = Input(shape=(input_dim[0],), name='action_input')
+    action_input    = Input(shape=(input_dim[0],), name='c_act_input')
+    obs_input       = Input(shape=(1,)+input_dim, name='c_obs_input')
 
-    reshape_obs     = Reshape((input_dim[0],5), name='c_reshape_obs')
     reshape_act     = Reshape((input_dim[0],1), name='c_reshape_act')
+    reshape_obs     = Reshape((input_dim[0],5), name='c_reshape_obs')
 
     concat          = Concatenate(-1, name='c_concat_obs_act')
 
-    nb_units_local  = [64, 256, 1024]
-    dense_local     = [Dense(nb_units, name=f'c_dense_local_{i}') for i, nb_units in enumerate(nb_units_local)]
-    bn_local        = [BatchNormalization(name=f'c_bnorm_local_{i}') for i in range(len(nb_units_local))]
-    relu_local      = [ReLU(name=f'c_relu_local_{i}') for i in range(len(nb_units_local))]
+    nb_units_local  = [32, 128, 512]
+    c_local         = Block(nb_units_local, "c_local")
+    # dense_local     = [Dense(nb_units, name=f'c_dense_local_{i}') for i, nb_units in enumerate(nb_units_local)]
+    # bn_local        = [BatchNormalization(name=f'c_bnorm_local_{i}') for i in range(len(nb_units_local))]
+    # relu_local      = [ReLU(name=f'c_relu_local_{i}') for i in range(len(nb_units_local))]
 
     flatten         = Flatten(name='c_flatten')
 
-    nb_units_global = [256, 64, 32]
-    dense_global    = [Dense(nb_units, name=f'c_dense_global_{i}') for i, nb_units in enumerate(nb_units_global)]
-    bn_global       = [BatchNormalization(name=f'c_bnorm_global_{i}') for i in range(len(nb_units_global))]
-    relu_global     = [ReLU(name=f'c_relu_global_{i}') for i in range(len(nb_units_global))]
+    nb_units_global = [128, 32, 16]
+    c_global        = Block(nb_units_global, "c_global")
+    # dense_global   = [Dense(nb_units, name=f'c_dense_global_{i}') for i, nb_units in enumerate(nb_units_global)]
+    # bn_global      = [BatchNormalization(name=f'c_bnorm_global_{i}') for i in range(len(nb_units_global))]
+    # relu_global    = [ReLU(name=f'c_relu_global_{i}') for i in range(len(nb_units_global))]
 
     dropout         = Dropout(hps['dropout'], name='c_dropout')
-    dense_final     = Dense(1, name='c_dense_final')
+    c_final         = Dense(1, name='c_final_dense')
     activation      = Activation('sigmoid', name='c_activation')
 
     x = concat([reshape_obs(obs_input), reshape_act(action_input)])
-    for dense, bn, relu in zip(dense_local, bn_local, relu_local):
-        x = relu(bn(dense(x)))
+    local_state = c_local(x)
+    # for dense, relu in zip(dense_local, bn_local, relu_local):
+    #     x = relu(dense(x))
     
-    x = flatten( tf.math.reduce_max(x, axis=-2, name='c_max_pool') )
+    local_state = flatten( tf.math.reduce_max(local_state, axis=-2, name='c_max_pool') )
 
-    for dense, bn, relu in zip(dense_global, bn_global, relu_global):
-        x = relu(bn(dense(x)))
+    global_state = c_global(local_state)
+    # for dense, bn, relu in zip(dense_global, bn_global, relu_global):
+    #     x = relu(bn(dense(x)))
 
-    policy = activation(dense_final(dropout(x)))
+    policy = activation(c_final(dropout(global_state)))
 
     model = Model(inputs=[action_input, obs_input], outputs=policy, name="Critic")
     model.summary()
@@ -207,8 +221,7 @@ def build_ddpg(hps, input_dim):
     # set up the agent
     K.clear_session()
     actor_model = build_actor_model(hps['actor'], input_dim)
-    critic_input_dim = input_dim
-    critic_model, action_input = build_critic_model(hps['critic'], critic_input_dim)
+    critic_model, action_input = build_critic_model(hps['critic'], input_dim)
 
     memory = SequentialMemory(limit=500000, window_length=1)
     # random_process = OrnsteinUhlenbeckProcess(size=input_dim[0], theta=.15, mu=0., sigma=.1)

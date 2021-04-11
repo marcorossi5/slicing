@@ -16,7 +16,7 @@ class Event:
     """Event class keeping track of calohits in a 2D plane view."""
     
     #----------------------------------------------------------------------
-    def __init__(self, calohits, min_hits=1, max_hits=15000):
+    def __init__(self, calohits, min_hits=1, max_hits=12000):
         """
         Parameters
         ----------
@@ -58,9 +58,17 @@ class Event:
         for i, idx in enumerate(self.sorted_pndr_idx):
             self.ordered_pndr_idx[calohits[4] == idx] = i
         
+        # build pfo cluster list ordering
+        self.cluster_idx         = calohits[3]
+        self.ordered_cluster_idx = deepcopy(calohits[3])
+        sort_fn = lambda x: np.count_nonzero(calohits[3] == x)
+        self.sorted_cluster_idx = sorted(list(set(calohits[3])), key=sort_fn, reverse=True)
+        for i, idx in enumerate(self.sorted_cluster_idx):
+            self.ordered_cluster_idx[calohits[3] == idx] = i
+
         # point cloud to be passed to the agent:
         # (energy, x, z, pfo cluster idx, current status)
-        point_cloud  = np.concatenate([calohits[:4], calohits[6:]])
+        point_cloud  = np.concatenate([calohits[:3], [self.ordered_cluster_idx], calohits[6:]])
         self.num_calohits = point_cloud.shape[1]
 
         # pad the point cloud according to max_calohits
@@ -69,8 +77,6 @@ class Event:
         assert self.num_calohits < self.max_hits
         padding           = ((0,0),(0, self.max_hits - self.num_calohits))
         self.point_cloud  = np.pad(point_cloud, padding)
-
-        print(f"Num calohits {self.num_calohits}")
 
     #----------------------------------------------------------------------
     def __len__(self):
