@@ -189,8 +189,8 @@ class SlicerlEnvContinuous(SlicerlEnv):
         """Prepare the current step to seed a new slice."""
         # print('setting node up')
         self.index += 1
+        self.state = deepcopy(self.event.state(step=self.index, is_training=True))
         self.mc_state = (self.event.ordered_mc_idx == self.index)
-        self.state = deepcopy(self.event.state())
 
     #----------------------------------------------------------------------
     def reset_current_event(self):
@@ -200,14 +200,22 @@ class SlicerlEnvContinuous(SlicerlEnv):
         self.set_next_node()
 
     #----------------------------------------------------------------------
-    def reward(self, slice_state, mask_state, mc_state):
+    def reward(self, slice_state):
         """
-        Full reward function. slice_state contain actor scores in range [0,1].
-        mask_state and mc_state are boolean masks.
+        Outputs reward function for SlicerlEnvContinuous.
+
+        Parameters
+        ----------
+            slice_state : np.array, shape=(num_calohits), actor scores in range
+                          [0,1].
         """
-        er_rate_loss = efficiency_rejection_rate_loss(mask_state, mc_state)
-        dice         = dice_loss(slice_state, mc_state.astype(slice_state.dtype))
-        x = er_rate_loss + dice
+        mask_state   = slice_state > self.threshold
+        er_rate_loss = efficiency_rejection_rate_loss(mask_state, self.mc_state)       # in [0,2]
+        dice         = dice_loss(slice_state, self.mc_state.astype(slice_state.dtype)) # in [0,1]
+
+        # penalize actions that do not seed a new slice
+        penalty = 10 if np.count_nonzero(mask_state) == 0 else 0
+        x = er_rate_loss + dice + penalty # in [0,3]
 
         return self._SlicerlEnv__reward(x/self.width)
 
@@ -219,30 +227,31 @@ class SlicerlEnvContinuous(SlicerlEnv):
         unit interval. The bin index is the slice index.
         """
         # action shape is (max_hits,)
-        # clip action since random process could drift the action out of action_space bounds
+        # clip action preventing random process to drift action out of action_space bounds
         action = np.clip(action, 0., 1.)
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
 
-        valid_action   = action[:self.event.num_calohits]
-        current_status = self.event.point_cloud[-1][:self.event.num_calohits]
+        valid_action   = action[:self.event.nconsidered]
+        current_status = self.event.status[self.event.considered]
 
         # threshold the action to output a mask and apply it to the current status
-        m = np.logical_and(current_status == -1, valid_action > self.threshold)
+        # if we have drawn from mc (low probability around 5-10%), this means that
+        # we may overwrite previously predicted slice indices
+        m = valid_action > self.threshold
         current_status[m] = self.index
 
-        # print(f"action range: [{valid_action.min():.5f}, {valid_action.max():.5f}], update hits: {np.count_nonzero(m)},",
-        #       f"to update: {np.count_nonzero(self.mc_state)}, num calohits: {self.event.num_calohits}, new status vector range: [{current_status.min()}, {current_status.max()}]")
-        # compute reward only on valid calohits, not padded ones
-        # penalize if no calohit is predicted above threshold
-        penalty = -2 if np.count_nonzero(m) == 0 else 0
-        reward = self.reward(valid_action, m, self.mc_state) + penalty
+        slice_state = np.zeros_like(self.mc_state)
+        slice_state[self.event.considered] = valid_action
+
+        # compute step reward
+        reward = self.reward(slice_state)
 
         # prepare next step
         self.set_next_node()
 
-        # if we are at the end of the declustering list, then we are done for this event.
-        done = bool( (np.count_nonzero(current_status == -1) == 0) \
-                     or (self.index >= self.nb_max_episode_steps) )
+        # if all the hits in the event have a label, then we are done for this event.
+        done = bool( (self.index >= self.nb_max_episode_steps) \
+                     or (self.event.nconsidered == 0) )
 
         # return the state, reward, and status
         return self.state, reward, done, {}

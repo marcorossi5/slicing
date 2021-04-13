@@ -4,7 +4,7 @@
         "nev": 2,
         "width": 1.0,
         "min_hits": 1,
-        "max_hits": 12000,
+        "max_hits": 15000,
         "reward": "cauchy",
         "discrete": false
     },

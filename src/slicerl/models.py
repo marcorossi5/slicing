@@ -13,16 +13,19 @@ from rl.random import OrnsteinUhlenbeckProcess, GaussianWhiteNoiseProcess
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import (
-    Dense,
-    Activation,
-    Flatten,
-    Dropout,
     Input,
-    Concatenate,
+    Dense,
+    Flatten,
+    Activation,
     Reshape,
+    Concatenate,
     BatchNormalization,
-    ReLU
+    ReLU,
+    Dropout,
+    Masking,
+    Permute
 )
+
 from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 import tensorflow.keras.backend as K
 from tensorflow.keras.callbacks import TensorBoard
@@ -104,59 +107,58 @@ def build_dqn(hps, input_dim, k, output_dim):
 
 #----------------------------------------------------------------------
 def build_actor_model(hps, input_dim):
-    """Construct the actor model used by the DDPG. Outputs the action"""
-    obs_state = Input(shape=(1,) + input_dim, name='a_obs_input')
+    """Construct the actor model used by the DDPG. Outputs the action. """
+    # TODO: include the possibility to process memory experience
+    nmemory, ncalohits, nfeatures = input_dim
+    nlatent = 256
 
-    """
-    encoderBlock  = Block(hps, 'actor_encoder', 'linear')
-    decoderBlock  = Block(hps, 'actor_decoder', tf.nn.sigmoid, output_dim=input_dim[0])
+    # declare layers
+    obs_state       = Input(shape=input_dim, name='a_obs_input')
 
-    flat_state    = Flatten(name='actor_flatten')(obs_state)
-    encoded_state = encoderBlock(flat_state)
-    final_state = decoderBlock(encoded_state)
-    """
-    nb_units_local  = [32, 32]
+    mask            = Masking(mask_value=0., name='a_mask')
+
+    permute         = Permute((1,3,2), name='a_permute')
+    nb_units_dnsz   = [nlatent] # [1024, 512, nlatent]
+    a_downsize      = Block(nb_units_dnsz, "a_downsize")
+
+    nb_units_local  = [64,64]
     a_local         = Block(nb_units_local, "a_local")
-    # dense_local     = [Dense(nb_units, name=f'a_dense_local_{i}') for i, nb_units in enumerate(nb_units_local)]
-    # bn_local        = [BatchNormalization(name=f'a_bnorm_local_{i}') for i in range(len(nb_units_local))]
-    # relu_local      = [ReLU(name=f'a_relu_local_{i}') for i in range(len(nb_units_local))]
 
-    nb_units_global = [32, 64, 512]
+    nb_units_global = [64,128,256]
     a_global        = Block(nb_units_global, "a_global")
-    # dense_global    = [Dense(nb_units, name=f'a_dense_global_{i}') for i, nb_units in enumerate(nb_units_global)]
-    # bn_global       = [BatchNormalization(name=f'a_bnorm_global_{i}') for i in range(len(nb_units_global))]
-    # relu_global     = [ReLU(name=f'a_relu_global_{i}') for i in range(len(nb_units_global))]
 
     concat          = Concatenate(-1, name='a_concat_local_global')
-
-    nb_units_cat    = [256, 512, 64, 32]
+    nb_units_cat    = [128,64,32,16]
     a_cat           = Block(nb_units_cat, "a_cat")
-    # dense_cat       = [Dense(nb_units, name=f'a_dense_cat_{i}') for i, nb_units in enumerate(nb_units_cat)]
-    # bn_cat          = [BatchNormalization(name=f'a_bnorm_cat_{i}') for i in range(len(nb_units_cat))]
-    # relu_cat        = [ReLU(name=f'relu_cat_{i}') for i in range(len(nb_units_cat))]
+
+    nb_units_upsz   = [ncalohits] # [512, 1024, ncalohits]
+    a_upsize        = Block(nb_units_upsz, "a_upsize") 
 
     a_final         = Dense(1, name='a_final_dense')
     activation      = Activation('sigmoid', name='a_activation')
-    reshape         = Reshape((input_dim[0],), name='a_reshape')
 
-    local_state = a_local(obs_state)
-    # x = obs_state
-    # for dense, bn, relu in zip(dense_local, bn_local, relu_local):
-    #     x = relu(bn(dense(x)))
+    shape           = (ncalohits,)
+    reshape         = Reshape(shape, name='a_reshape')
+
+    # declare forward pass
+    masked_state = mask(obs_state)
+
+    dnsz_state  = permute(a_downsize(permute(masked_state)))
+
+    local_state = a_local(dnsz_state)
 
     global_state = a_global(local_state)
-    # y = x
-    # for dense, bn, relu in zip(dense_global, bn_global, relu_global):
-    #     y = relu(bn(dense(y)))
     
     global_state = tf.math.reduce_max(global_state, axis=-2, keepdims=True, name='a_max_pool')
-    global_state = tf.repeat(global_state, input_dim[0], axis=-2, name='a_repeat')
+    global_state = tf.repeat(global_state, nlatent, axis=-2, name='a_repeat')
     
     cat_state = a_cat(concat([local_state, global_state]))
-    # for dense, bn, relu in zip(dense_cat, bn_cat, relu_cat):
-    #     cat_state = relu(bn(dense(cat_state)))
 
-    final_state = reshape(activation(a_final(cat_state)))
+    # if memory window length > 1 at this point it would break
+    # we would have to involve also memory axis in computation
+    up_state    = permute(a_upsize(permute(cat_state)))
+
+    final_state = reshape(activation(a_final(up_state)))
 
     model = Model(inputs=obs_state, outputs=final_state, name="Actor")
     model.summary()
@@ -168,42 +170,44 @@ def build_critic_model(hps, input_dim):
     Construct the critic model used by the DDPG. Judges the goodness of the
     predicted action
     """
-    action_input    = Input(shape=(input_dim[0],), name='c_act_input')
-    obs_input       = Input(shape=(1,)+input_dim, name='c_obs_input')
+    # TODO: think about adding a small epsilon to the action to mask it properly
+    # In any case there's the random_process that sums to the action, so padded
+    # calohits are not zero at the end, that's why the mask here could be useless
+    nmemory, ncalohits, nfeatures = input_dim
+    nlatent = 256
 
-    reshape_act     = Reshape((input_dim[0],1), name='c_reshape_act')
-    reshape_obs     = Reshape((input_dim[0],5), name='c_reshape_obs')
+    action_input    = Input(shape=(ncalohits,), name='c_act_input')
+    obs_input       = Input(shape=input_dim, name='c_obs_input')
+
+    reshape_act     = Reshape((ncalohits,1), name='c_reshape_act')
+    reshape_obs     = Reshape((ncalohits,4), name='c_reshape_obs') # works only if nmemory == 1
 
     concat          = Concatenate(-1, name='c_concat_obs_act')
 
+    permute         = Permute((2,1), name='c_permute')
+    nb_units_dnsz   = [nlatent] # [1024, 512, nlatent]
+    c_downsize      = Block(nb_units_dnsz, "c_downsize")
+
     nb_units_local  = [32, 128, 512]
     c_local         = Block(nb_units_local, "c_local")
-    # dense_local     = [Dense(nb_units, name=f'c_dense_local_{i}') for i, nb_units in enumerate(nb_units_local)]
-    # bn_local        = [BatchNormalization(name=f'c_bnorm_local_{i}') for i in range(len(nb_units_local))]
-    # relu_local      = [ReLU(name=f'c_relu_local_{i}') for i in range(len(nb_units_local))]
 
     flatten         = Flatten(name='c_flatten')
 
-    nb_units_global = [128, 32, 16]
+    nb_units_global = [64, 16, 8]
     c_global        = Block(nb_units_global, "c_global")
-    # dense_global   = [Dense(nb_units, name=f'c_dense_global_{i}') for i, nb_units in enumerate(nb_units_global)]
-    # bn_global      = [BatchNormalization(name=f'c_bnorm_global_{i}') for i in range(len(nb_units_global))]
-    # relu_global    = [ReLU(name=f'c_relu_global_{i}') for i in range(len(nb_units_global))]
 
     dropout         = Dropout(hps['dropout'], name='c_dropout')
     c_final         = Dense(1, name='c_final_dense')
     activation      = Activation('sigmoid', name='c_activation')
 
     x = concat([reshape_obs(obs_input), reshape_act(action_input)])
-    local_state = c_local(x)
-    # for dense, relu in zip(dense_local, bn_local, relu_local):
-    #     x = relu(dense(x))
+
+    dnsz_state  = permute(c_downsize(permute(x)))
+    local_state = c_local(dnsz_state)
     
     local_state = flatten( tf.math.reduce_max(local_state, axis=-2, name='c_max_pool') )
 
     global_state = c_global(local_state)
-    # for dense, bn, relu in zip(dense_global, bn_global, relu_global):
-    #     x = relu(bn(dense(x)))
 
     policy = activation(c_final(dropout(global_state)))
 
@@ -214,9 +218,9 @@ def build_critic_model(hps, input_dim):
 #----------------------------------------------------------------------
 def build_ddpg(hps, input_dim):
     """Create a DDPG agent to be used on pandora inputs."""
-
     print('[+] Constructing DDPG agent, model setup:')
     pprint.pprint(hps)
+    nmemory, ncalohits, nfeatures = input_dim
 
     # set up the agent
     K.clear_session()
@@ -224,10 +228,10 @@ def build_ddpg(hps, input_dim):
     critic_model, action_input = build_critic_model(hps['critic'], input_dim)
 
     memory = SequentialMemory(limit=500000, window_length=1)
-    # random_process = OrnsteinUhlenbeckProcess(size=input_dim[0], theta=.15, mu=0., sigma=.1)
-    random_process = GaussianWhiteNoiseProcess(size=input_dim[0], mu=0., sigma=0.3)
+    # random_process = OrnsteinUhlenbeckProcess(size=ncalohits, theta=.15, mu=0., sigma=.1)
+    random_process = GaussianWhiteNoiseProcess(size=ncalohits, mu=0., sigma=0.3)
     agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model,
-                          critic_action_input=action_input, nb_actions=input_dim[0],
+                          critic_action_input=action_input, nb_actions=ncalohits,
                           memory=memory, nb_steps_warmup_actor=34,
                           nb_steps_warmup_critic=34, target_model_update=1e-2,
                           random_process=random_process)
@@ -265,9 +269,8 @@ def load_environment(env_setup):
             -0.37260447692861504,   # x
             -0.35284,               # z
             0.,                     # cluster idx
-            0.,                     # status
         ], dtype=np.float32
-    ).reshape(1,5)
+    ).reshape(1,4)
     low = np.repeat(low, env_setup['max_hits'], 0)
 
     high = np.array(
@@ -276,9 +279,8 @@ def load_environment(env_setup):
             0.37260447692861504,    # x
             0.91702,                # z
             150,                    # cluster idx
-            128.,                   # status
         ], dtype=np.float32
-    ).reshape(1,5)
+    ).reshape(1,4)
     high = np.repeat(high, env_setup['max_hits'], 0)
 
     if env_setup["discrete"]:
@@ -299,12 +301,11 @@ def build_and_train_model(slicerl_agent_setup, slicerl_env=None):
     if slicerl_env.discrete:
         agent = build_dqn(agent_setup, slicerl_env.observation_space.shape, slicerl_env.max_hits, slicerl_env.nbins)
     else:
-        agent = build_ddpg(agent_setup, slicerl_env.observation_space.shape)
+        agent = build_ddpg(agent_setup, (agent_setup['memory'],) + slicerl_env.observation_space.shape)
 
     logdir = '%s/logs/{}'.format(time()) % slicerl_agent_setup['output']
     print(f'[+] Constructing tensorboard log in {logdir}')
     tensorboard = TensorBoard(log_dir=logdir)
-
     print('[+] Fitting agent...')
     r = agent.fit(slicerl_env, nb_steps=agent_setup['nstep'],
                 visualize=False, verbose=1, callbacks=[tensorboard],

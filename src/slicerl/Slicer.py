@@ -119,19 +119,19 @@ class ContinuousSlicer(AbstractSlicer):
             state          = event.state()
             action         = self.actor.predict_on_batch(np.array([[state]])).flatten()
             valid_action   = action[:event.num_calohits]
-            current_status = event.point_cloud[-1][:event.num_calohits]
+            current_status = event.status[event.considered]
 
             if visualize:
                 actor_scores.append(valid_action)
 
             # threshold the action to output a mask and apply it to the current status
-            m = np.logical_and(current_status == -1, valid_action > self.threshold)
+            m = valid_action > self.threshold
             current_status[m] = index
 
             index += 1
-            # if we are at the end of the declustering list, then we are done for this event.
-            done = bool( (np.count_nonzero(current_status == -1) == 0) \
-                         or (index >= self.nb_max_episode_steps) )
+            # if all the hits in the event have a label, then we are done for this event.
+            done = bool( (index >= self.nb_max_episode_steps) \
+                     or (event.nconsidered == 0) )
         
         # TODO: think about having an index value that we can recognize
         remaining_calohits = current_status == -1

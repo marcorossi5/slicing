@@ -16,7 +16,7 @@ class Event:
     """Event class keeping track of calohits in a 2D plane view."""
     
     #----------------------------------------------------------------------
-    def __init__(self, calohits, min_hits=1, max_hits=12000):
+    def __init__(self, calohits, min_hits=1, max_hits=15000):
         """
         Parameters
         ----------
@@ -34,6 +34,10 @@ class Event:
             - max_hits : int, max hits to be processed by network
         """
         self.calohits = calohits
+
+        # probability to draw observation state from mc slices rather than current
+        # available calohits (only while training)
+        self.rnd_draw = 0.05
 
         # check if (E,x,z) inputs are in range
         assert np.all(calohits[0] < 500)
@@ -67,32 +71,62 @@ class Event:
             self.ordered_cluster_idx[calohits[3] == idx] = i
 
         # point cloud to be passed to the agent:
-        # (energy, x, z, pfo cluster idx, current status)
-        point_cloud  = np.concatenate([calohits[:3], [self.ordered_cluster_idx], calohits[6:]])
-        self.num_calohits = point_cloud.shape[1]
+        # (energy, x, z, pfo cluster idx)
+        self.point_cloud  = np.concatenate([calohits[:3], [self.ordered_cluster_idx]])
+        self.status = calohits[6]
+        self.num_calohits = len(self.status)
 
         # pad the point cloud according to max_calohits
         self.max_hits = max_hits
         # TODO: not block the training, but skip the event and raise a warning
         assert self.num_calohits < self.max_hits
-        padding           = ((0,0),(0, self.max_hits - self.num_calohits))
-        self.point_cloud  = np.pad(point_cloud, padding)
 
     #----------------------------------------------------------------------
     def __len__(self):
         return self.num_calohits
 
     #----------------------------------------------------------------------
-    def state(self):
+    def state(self, step=None, is_training=False):
         """
         Return the observable state: padded point cloud, describing 
         (E, x, z, pfo cluster idx, current status) for each calohit
+
+        Parameter
+        ---------
+            - step        : int, episode_step (needed during training only)
+            - is_training : bool, training mode or not
         
         Returns
         -------
-            - array of shape=(max_hits, 5)
+            - array of shape=(max_hits, 4)
         """
-        return self.point_cloud.T
+        # mc_idx[mc_idx>=index] and status[status==-1] may differ (if the algorithm is not perfect)
+        # this means that we can remove wrong partlices and them won't be available in future steps
+        # or we fail to remove particles that enter steps when they should not be in
+        
+        # put here an is_training flag and while training draw with some percentage either perfect inputs
+        # or inputs caused by actions taken before
+
+        # when comparing arrays and masks to compute the reward, the reward should not be dependendent on the
+        # number of input calohits (they are indeed percentages)
+
+
+        # keep track of indices in self.current_status that are going to be involved in the next computation
+        self.drawn_from_mc = np.random.rand() < self.rnd_draw
+        if is_training and self.drawn_from_mc:
+            self.considered = np.argwhere(self.ordered_mc_idx >= step).flatten()
+        else:
+            self.considered = np.argwhere(self.status == -1).flatten()
+                
+        # number of unlabelled calohits involved in the computation
+        self.nconsidered = len(self.considered)
+
+        if self.nconsidered:
+            point_cloud = self.point_cloud.T[self.considered]
+            padding = ((0,self.max_hits - len(self.considered)),(0,0))
+            return np.pad(point_cloud, padding)
+        else:
+            return np.zeros((self.max_hits, 4))
 
     #----------------------------------------------------------------------
     def calohits_to_array(self):

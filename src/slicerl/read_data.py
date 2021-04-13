@@ -131,7 +131,7 @@ class Events(Image):
         return Event(event[:,idx], self.min_hits, self.max_hits)
 
 #======================================================================
-def load_Events_from_file(filename, nev, min_hits=1, max_hits=12000, num_lines=6):
+def load_Events_from_file(filename, nev, min_hits=1, max_hits=15000, num_lines=6):
     """
     Utility function to load Events object from file. Return a list of Event
     objects.
