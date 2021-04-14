@@ -118,15 +118,18 @@ class ContinuousSlicer(AbstractSlicer):
         while not done:
             state          = event.state()
             action         = self.actor.predict_on_batch(np.array([[state]])).flatten()
-            valid_action   = action[:event.num_calohits]
+            valid_action   = action[:event.nconsidered]
             current_status = event.status[event.considered]
 
             if visualize:
-                actor_scores.append(valid_action)
+                pred = np.zeros_like(event.status)
+                pred[event.considered] = valid_action
+                actor_scores.append(pred)
 
             # threshold the action to output a mask and apply it to the current status
             m = valid_action > self.threshold
             current_status[m] = index
+            event.status[event.considered] = current_status
 
             index += 1
             # if all the hits in the event have a label, then we are done for this event.
@@ -134,8 +137,7 @@ class ContinuousSlicer(AbstractSlicer):
                      or (event.nconsidered == 0) )
         
         # TODO: think about having an index value that we can recognize
-        remaining_calohits = current_status == -1
-        current_status[remaining_calohits] = index
+        event.status[event.status == -1] = 128
             
         if visualize:
             return event, np.stack(actor_scores)

@@ -189,7 +189,7 @@ class SlicerlEnvContinuous(SlicerlEnv):
         """Prepare the current step to seed a new slice."""
         # print('setting node up')
         self.index += 1
-        self.state = deepcopy(self.event.state(step=self.index, is_training=True))
+        self.state = self.event.state(step=self.index, is_training=True)
         self.mc_state = (self.event.ordered_mc_idx == self.index)
 
     #----------------------------------------------------------------------
@@ -216,8 +216,10 @@ class SlicerlEnvContinuous(SlicerlEnv):
         # penalize actions that do not seed a new slice
         penalty = 10 if np.count_nonzero(mask_state) == 0 else 0
         x = er_rate_loss + dice + penalty # in [0,3]
+        weight = np.count_nonzero(self.mc_state)/self.event.n_first_mc_slice
+        w = 1 + np.exp(-10*weight)
 
-        return self._SlicerlEnv__reward(x/self.width)
+        return self._SlicerlEnv__reward(x*w/self.width)
 
     #----------------------------------------------------------------------
     def step(self, action):
@@ -239,6 +241,7 @@ class SlicerlEnvContinuous(SlicerlEnv):
         # we may overwrite previously predicted slice indices
         m = valid_action > self.threshold
         current_status[m] = self.index
+        self.event.status[self.event.considered] = current_status
 
         slice_state = np.zeros_like(self.mc_state)
         slice_state[self.event.considered] = valid_action

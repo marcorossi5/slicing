@@ -229,11 +229,11 @@ def build_ddpg(hps, input_dim):
 
     memory = SequentialMemory(limit=500000, window_length=1)
     # random_process = OrnsteinUhlenbeckProcess(size=ncalohits, theta=.15, mu=0., sigma=.1)
-    random_process = GaussianWhiteNoiseProcess(size=ncalohits, mu=0., sigma=0.3)
-    agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model,
+    random_process = GaussianWhiteNoiseProcess(size=ncalohits, mu=0., sigma=0.1)
+    agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model, batch_size=1,
                           critic_action_input=action_input, nb_actions=ncalohits,
-                          memory=memory, nb_steps_warmup_actor=34,
-                          nb_steps_warmup_critic=34, target_model_update=1e-2,
+                          memory=memory, nb_steps_warmup_actor=2,
+                          nb_steps_warmup_critic=2, target_model_update=1e-2,
                           random_process=random_process)
 
     if hps['optimizer'] == 'Adam':

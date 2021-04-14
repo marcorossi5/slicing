@@ -10,6 +10,7 @@ import math
 from time import time as tm
 
 #----------------------------------------------------------------------
+# available cmaps
 """
 Color list. An exhaustive list of colors can be retrieved from matplotlib
 printing matplotlib.colors.CSS4_COLORS.keys().
@@ -47,6 +48,9 @@ boundaries = np.arange(len(colors)+1) - 1.5
 norm = mpl.colors.BoundaryNorm(boundaries, cmap.N, clip=True)
 
 l = len(colors)
+
+vcmap = 'plasma'
+vnorm = mpl.colors.Normalize(vmin=0., vmax=1.)
 
 #----------------------------------------------------------------------
 def print_stats(name, data, mass_ref, output_folder='./'):
@@ -94,45 +98,6 @@ def plot_multiplicity(events, output_folder='./', loaddir=None):
     np.save(f"{resultsdir}/nddpg.npy", nddpg)
 
 #----------------------------------------------------------------------
-def plot_EMD(events, events_obj, output_folder='./', loaddir=None):
-    """Plot the energy movers distance between slices and output some statistics."""
-    if loaddir is not None:
-        fname = '%s/emdddpg.npy' % loaddir
-        emdddpg = np.load(fname)
-    else:
-        emdddpg  = []
-        for i, event in enumerate(events):
-            num_clusters = event.slicerl_idx.max().astype(np.int32) + 1
-            for idx in range(num_clusters):
-                m = event.slicerl_idx == idx
-                Es = event.E[m].sum()
-                xs = event.x[m].sum()
-                zs = event.z[m].sum()
-                slice_state = np.array([Es, xs, zs])
-                # get the index of the first calohit in the slice
-                cidx = np.argwhere(m)[0,0]
-                mc_state = events_obj[i].calohits[cidx].mc_idx
-                emdddpg.append(quality_metric(slice_state, mc_state))
-        emdddpg = np.array(emdddpg)
-    
-    bins = np.linspace(0, 200, 201)
-    hemdddpg, _ = np.histogram(emdddpg, bins=bins)
-
-    plt.rcParams.update({'font.size': 20})
-    plt.figure(figsize=(18,14))
-    
-    plt.hist(bins[:-1], bins, weights=hemdddpg, histtype='step', color='red')
-
-    plt.xlabel("emd", loc='right')
-    plt.xlim((bins[0], bins[-1]))
-    fname = f"{output_folder}/emd.pdf"
-    plt.savefig(fname, bbox_inches='tight')
-        
-    print_stats('Slice EMD', emdddpg, 0, output_folder=output_folder)
-    resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/emdddpg.npy", emdddpg)
-
-#----------------------------------------------------------------------
 def plot_slice_size(events, output_folder='./', loaddir=None):
     """Plot the slice size distribution and output some statistics."""
     bins = np.linspace(0, 100, 101)
@@ -176,10 +141,12 @@ def plot_plane_view(events, output_folder='./', loaddir=None):
     ax.set_xlabel("x [cm]")
     ax.set_ylabel("z [cm]")
     num_rl_clusters = len(set(event_arr.slicerl_idx))
+    m = event_arr.slicerl_idx != -1
+    # print(f"Hits not labelled: {np.count_nonzero(~m)}")
     # sort all the cluster with greater number of hits
     print(f"Plotting event with {len(event_arr.x)} calohits")
     print(f"Plotting {num_rl_clusters} slices in event")
-    ax.scatter(event_arr.x, event_arr.z, s=1, c=event_arr.slicerl_idx, marker='.', cmap=cmap, norm=norm)
+    ax.scatter(event_arr.x[m], event_arr.z[m], s=1, c=event_arr.slicerl_idx[m], marker='.', cmap=cmap, norm=norm)
     ax.set_box_aspect(1)
 
     ax = fig.add_subplot(122)
@@ -205,50 +172,62 @@ def produce_slicing_animation(nmd, fname):
     """
     plt.rcParams.update({'font.size': 10})
     fig = plt.figure(figsize=(6.4*2, 4.8))
-
-    # at this point the mc_idx must already be sorted in increasing order
-    # the agent must learn to capture the largest slice first
-    # so i do not need to sort here
-    # just plot all the colors stored in mc_idx
-    ax = fig.add_subplot(122)
-    ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
-    ax.set_xlabel("x [cm]")
-    ax.set_ylabel("z [cm]")
-    ax.scatter(nmd.x, nmd.z, s=1, c=nmd.mc_idx, marker='.', cmap=cmap, norm=norm)
-    ax.set_box_aspect(1)
-
-    num_clusters = len(set(nmd.slicerl_idx))
-
+    
     # now plot the first frame with all black points
     # every new frame shows a new slice with a new color
-    c = np.full_like(nmd.z, -1)
+    sort_fn    = lambda x: np.count_nonzero(nmd.slicerl_idx == x)
+    s_idx      = sorted(list(set(nmd.slicerl_idx)), key=sort_fn, reverse=True)
+    nslices    = len(s_idx)
 
-    sort_fn = lambda x: np.count_nonzero(nmd.slicerl_idx == x)
-    s_idx = sorted(list(set(nmd.slicerl_idx)), key=sort_fn, reverse=True)
+    sort_fn    = lambda x: np.count_nonzero(nmd.mc_idx == x)
+    mc_idx     = sorted(list(set(nmd.mc_idx)), key=sort_fn, reverse=True)
+    # nmcslices  = len(mc_idx)
 
-    ax = fig.add_subplot(121)
-    ax.set_title(f"Slicing Algorithm Output, 2D plane view")
-    ax.set_xlabel("x [cm]")
-    ax.set_ylabel("z [cm]")
-    scatt = ax.scatter(nmd.x, nmd.z, s=1, c=c, marker='.', cmap=cmap, norm=norm)
-    ax.set_xlabel(f"Episode start")
+    ax0 = fig.add_subplot(121)
+    ax0.set_title(f"Slicing Algorithm Output, 2D plane view")
+    ax0.set_xlabel("x [cm]")
+    ax0.set_ylabel("z [cm]")
+    scatt0 = ax0.scatter(nmd.x, nmd.z, s=1, c=nmd.slicerl_idx, marker='.', cmap=cmap, norm=norm)
+    ax0.set_xlabel(f"Episode start")
 
-    def animate(i, scatterplot):
+    ax1 = fig.add_subplot(122)
+    ax1.set_title(f"Cheating Algorithm Truths, 2D plane view")
+    ax1.set_xlabel("x [cm]")
+    ax1.set_ylabel("z [cm]")
+    scatt1 = ax1.scatter(nmd.x, nmd.z, s=1, c=nmd.mc_idx, marker='.', cmap=cmap, norm=norm)
+    ax1.set_box_aspect(1)
+
+    def animate(i, scatterplot0, scatterplot1):
         # FuncAnimation repeats twice the first frame, but skip that since it's
         # already built. First color in colors list is black.
         if i == -1:
-            return (scatterplot,)
+            return (scatterplot0, scatterplot1)
+        # if i == 0:
+        #     scatterplot0.set_cmap(vcmap)
+        #     scatterplot0.set_norm(vnorm)
+        #     scatterplot1.set_cmap(vcmap)
+        #     scatterplot1.set_norm(vnorm)
         idx = s_idx[i]
         m = nmd.slicerl_idx == idx
-        c[m] = idx
-        scatterplot.set_array(c)
-        ax.xaxis.label.set_color(colors[int(idx)+1])
-        ax.set_xlabel(f"Slice: {int(idx)}")
-        return (scatterplot,) # must return an iterable
+        # c[m] = idx
+        # scatterplot0.set_array(c)
+        scatterplot0.set_array(np.where(m, 1, 0))
+        ax0.xaxis.label.set_color(colors[int(idx)+1])
+        ax0.set_xlabel(f"z [cm]    Slice: {int(idx)}")
 
-    anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, num_clusters), interval=2000, fargs=(scatt,), blit=True)
+        idx = mc_idx[i]
+        m = nmd.mc_idx == idx
+        # c[m] = idx
+        # scatterplot0.set_array(c)
+        scatterplot1.set_array(np.where(m, 1, 0))
+        ax1.xaxis.label.set_color(colors[int(idx)+1])
+        ax1.set_xlabel(f"z [cm]    Slice: {int(idx)}")
 
-    writergif = mpl.animation.PillowWriter(fps=1)
+        return (scatterplot0, scatterplot1) # must return an iterable
+
+    anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, nslices), interval=5000, fargs=(scatt0, scatt1), blit=True)
+
+    writergif = mpl.animation.PillowWriter(fps=0.5)
     anim.save(fname, writer=writergif)    
 
     # close figure
@@ -272,8 +251,6 @@ def render(event, action_scores, fname):
     mc_idx = event.ordered_mc_idx
     null_score = np.zeros_like(action_scores[0])
 
-    vcmap = 'plasma'
-    vnorm = mpl.colors.Normalize(vmin=0., vmax=1.)
     plt.rcParams.update({'font.size': 10})
     fig = plt.figure(figsize=(6.4*2, 4.8))
 
@@ -319,6 +296,7 @@ def render(event, action_scores, fname):
         ax0.set_xlabel(f"Slice: {i}")
 
         # plot the mask of the current mc slice
+        
         scatterplot1.set_array((mc_idx == i).astype(np.int16))
         ax1.set_xlabel(f"Slice: {i}")
         if i == 0:
@@ -353,6 +331,7 @@ def inference(slicer, events, visualize=False, gifname=None):
     for i, event in enumerate(events):
         if i == 0 and visualize:
             _, actor_scores = slicer(event, visualize)
+            progbar.update(i+1)
             continue
         slicer(event)        
         progbar.update(i+1)
@@ -378,7 +357,6 @@ def make_plots(events_obj, plotdir):
     plot_multiplicity(events, plotdir)
     plot_slice_size(events, plotdir)
     plot_plane_view(events, plotdir)
-    # plot_EMD(events, events_obj, plotdir)
     produce_slicing_animation(events[0], f"{plotdir}/slicing.gif")
 
 #----------------------------------------------------------------------
@@ -394,7 +372,6 @@ def load_and_dump_plots(plotdir, loaddir):
     plot_multiplicity(None, plotdir, loaddir)
     plot_slice_size(None, plotdir, loaddir)
     plot_plane_view(None, plotdir, loaddir)
-    # plot_EMD(None, None, plotdir, loaddir)
 
 # TODO: fix plot_plane_view when loaded from results (it always needs the events)
 # TODO: fix EMD function in this version

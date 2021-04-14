@@ -37,7 +37,7 @@ class Event:
 
         # probability to draw observation state from mc slices rather than current
         # available calohits (only while training)
-        self.rnd_draw = 0.05
+        self.rnd_draw = 0.2
 
         # check if (E,x,z) inputs are in range
         assert np.all(calohits[0] < 500)
@@ -53,6 +53,8 @@ class Event:
         self.sorted_mc_idx = sorted(list(set(calohits[5])), key=sort_fn, reverse=True)
         for i, idx in enumerate(self.sorted_mc_idx):
             self.ordered_mc_idx[calohits[5] == idx] = i
+        
+        self.n_first_mc_slice = np.count_nonzero(self.ordered_mc_idx == 0)
         
         # build the pndr_slice ordering (useful for testing)
         self.pndr_idx         = calohits[4]
@@ -112,8 +114,14 @@ class Event:
 
 
         # keep track of indices in self.current_status that are going to be involved in the next computation
-        self.drawn_from_mc = np.random.rand() < self.rnd_draw
-        if is_training and self.drawn_from_mc:
+        self.drawn_from_mc = np.random.rand() <= self.rnd_draw
+        training_warmup = is_training                      and \
+                          step < 15
+        training        = is_training                      and \
+                          step >= 15                       and \
+                          step < self.ordered_mc_idx.max() and \
+                          self.drawn_from_mc
+        if training_warmup or training :
             self.considered = np.argwhere(self.ordered_mc_idx >= step).flatten()
         else:
             self.considered = np.argwhere(self.status == -1).flatten()
@@ -144,17 +152,17 @@ class Event:
             - spatial coordinates x and z are converted in cm
         """
         # remove padding and restore natural measure units
-        array    = deepcopy(self.point_cloud[:, :self.num_calohits])
+        array    = deepcopy(self.calohits[:4])
         array[0] = array[0] * 100  # to ADC
         array[1] = array[1] * 1000 # to cm
         array[2] = array[2] * 1000 # to cm
 
         # concatenate pndr idx row
         array = np.concatenate([
-                        array[:4],               # (E, x, z, pfo cluster idx)
+                        array,                   # (E, x, z, pfo cluster idx)
                         [self.pndr_idx],         # size pndr idx (original order)
                         [self.mc_idx],           # size mc idx   (original order)
-                        array[-1:]               # status vector
+                        [self.status]            # status vector
                     ])
 
         return array
