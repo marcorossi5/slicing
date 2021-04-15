@@ -115,7 +115,7 @@ def build_actor_model(hps, input_dim):
     # declare layers
     obs_state       = Input(shape=input_dim, name='a_obs_input')
 
-    mask            = Masking(mask_value=0., name='a_mask')
+    mask            = Masking(mask_value=-2, name='a_mask')
 
     permute         = Permute((1,3,2), name='a_permute')
     nb_units_dnsz   = [nlatent] # [1024, 512, nlatent]
@@ -229,11 +229,11 @@ def build_ddpg(hps, input_dim):
 
     memory = SequentialMemory(limit=500000, window_length=1)
     # random_process = OrnsteinUhlenbeckProcess(size=ncalohits, theta=.15, mu=0., sigma=.1)
-    random_process = GaussianWhiteNoiseProcess(size=ncalohits, mu=0., sigma=0.1)
+    random_process = GaussianWhiteNoiseProcess(size=ncalohits, mu=0., sigma=0.01)
     agent = DDPGAgentSlicerl(actor=actor_model, critic=critic_model, batch_size=1,
                           critic_action_input=action_input, nb_actions=ncalohits,
                           memory=memory, nb_steps_warmup_actor=2,
-                          nb_steps_warmup_critic=2, target_model_update=1e-2,
+                          nb_steps_warmup_critic=2, target_model_update=0.5,
                           random_process=random_process)
 
     if hps['optimizer'] == 'Adam':
@@ -265,10 +265,10 @@ def loss_calc(dqn, fn, nev):
 def load_environment(env_setup):
     low = np.array(
         [
-            0.,                     # E
-            -0.37260447692861504,   # x
-            -0.35284,               # z
-            0.,                     # cluster idx
+            -2., # 0.,                     # E
+            -2., # -0.37260447692861504,   # x
+            -2., # -0.35284,               # z
+            -2., # 0.,                     # cluster idx
         ], dtype=np.float32
     ).reshape(1,4)
     low = np.repeat(low, env_setup['max_hits'], 0)

@@ -33,6 +33,9 @@ class Event:
             - min_hits : int, consider only slices with equal or more than min_hits
             - max_hits : int, max hits to be processed by network
         """
+        if min_hits > 1:
+            filter_fn = lambda x: np.count_nonzero(calohits[5] == x[5]) > min_hits
+            calohits = np.stack(list(filter(filter_fn, list(calohits.T))), -1)
         self.calohits = calohits
 
         # probability to draw observation state from mc slices rather than current
@@ -132,7 +135,7 @@ class Event:
         if self.nconsidered:
             point_cloud = self.point_cloud.T[self.considered]
             padding = ((0,self.max_hits - len(self.considered)),(0,0))
-            return np.pad(point_cloud, padding)
+            return np.pad(point_cloud, padding, constant_values=-2)
         else:
             return np.zeros((self.max_hits, 4))
 
