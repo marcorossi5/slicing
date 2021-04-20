@@ -32,4 +32,3 @@ setup(name= "slicerl",
             'Topic :: Scientific/Engineering :: Physics',
             ],
      )
-
