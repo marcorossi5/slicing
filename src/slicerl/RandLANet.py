@@ -4,8 +4,10 @@ from tensorflow.keras.layers import Layer
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     Input,
+    InputLayer,
     Dense,
     Activation,
+    Flatten,
     Reshape,
     Concatenate,
     Dropout,
@@ -25,19 +27,27 @@ def float_me(x):
 def int_me(x):
     return tf.constant(x, dtype=TF_DTYPE_INT)
 
+def py_knn(points, queries, K):
+    return knn.knn_batch(points, queries, K=K,omp=True)
+
+
 #======================================================================
 class LocSE(Layer):
     """ Class defining Local Spatial Encoding Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, K=8, activation='relu', **kwargs):
+    def __init__(self, units, K=8, dims=2, activation='relu', **kwargs):
         """
         Parameters
         ----------
+            - units      : int, output channels (twice of input channels)
             - K          : int, number of nearest neighbors
+            - dims       : int, point cloud spatial dimensions number
             - activation : str, MLP layer activation
         """
         super(LocSE, self).__init__(**kwargs)
+        self.units      = units
         self.K          = K
+        self.dims       = dims
         self.activation = activation
         self._cache     = None
         self._is_cached = False
@@ -72,11 +82,12 @@ class LocSE(Layer):
         """
         spatial, features = input_shape
         B , N , dims   = spatial
-        B_, N_, n_feat = features
-        assert B == B_, f"Batches number mismatch in input point cloud, got {B} and {B_}"
-        assert N == N_, f"Points number mismatch in input point cloud, got {N} and {N_}"
+        # B_, N_, n_feat = features
+        # tf.debugging.assert_equal(B, B_, message=f"Batches number mismatch in input point cloud, got {B} and {B_}")
+        # tf.debugging.assert_equal(N, N_, message=f"Points number mismatch in input point cloud, got {N} and {N_}")
 
-        self.MLP = Conv1D(n_feat, 1, input_shape=(N, dims),
+        self.ch_dims  = self.dims*3 + 1 # point + neighbor point + relative space dims + 1 (the norm)
+        self.MLP = Conv1D(self.units//2, 1, input_shape=(self.K, self.ch_dims),
                           activation=self.activation, 
                           kernel_initializer='glorot_uniform',
                           bias_initializer='zeros',
@@ -101,12 +112,19 @@ class LocSE(Layer):
         Note: dims (spatial dimensions) equal to 2
         """
         pc, feats = inputs
+        shape = tf.shape(pc)
+        B = shape[0]
+        N = shape[1]
         if cached and self._is_cached:
-            rppe, n_feats = self._cache
+            rppe, n_idx = self._cache
+            shape    = [None,None,self.K]
+            n_idx    = tf.ensure_shape(n_idx, shape)
         else:
-            n_idx    = knn.knn_batch(pc, pc, K=self.K, omp=True)
+            inp      = [pc,pc,self.K]
+            n_idx    = tf.py_function(func=py_knn, inp=inp, Tout=TF_DTYPE_INT, name='knn_search')
+            shape    = [None,None,self.K]
+            n_idx    = tf.ensure_shape(n_idx, shape)
             n_points = self.gather_neighbours(pc, n_idx)
-            n_feats  = self.gather_neighbours(feats, n_idx)
             
             # point cloud with K expanded axis
             Kpc   = tf.repeat(tf.expand_dims(pc,-2), self.K, -2)
@@ -115,10 +133,16 @@ class LocSE(Layer):
 
             # relative point position encoding
             rppe = self.cat([Kpc, n_points, relp, norms])
-            self._cache     = [rppe, n_feats]
+            self._cache     = [rppe, n_idx]
             self._is_cached = True
-        
+
+        # force shapes: n_feats, rppe
+        # shape depends on input shape which is not known in graph mode
+        rppe = tf.ensure_shape(rppe, [None,None,self.K,self.ch_dims])
         r = self.MLP(rppe)
+
+        n_feats  = self.gather_neighbours(feats, n_idx)
+        n_feats = tf.ensure_shape(n_feats,[None,None,self.K,self.units//2] )
         return self.cat([n_feats, r])
 
     #----------------------------------------------------------------------
@@ -144,8 +168,11 @@ class LocSE(Layer):
         -------
             tf.Tensor of shape=(B,N,K,dims)
         """
-        B, N, dims = tf.shape(pc, name='pc_shape')
-        K          = tf.shape(n_idx, name='K_shape')[-1]
+        shape      = tf.shape(pc)
+        B          = shape[0]
+        N          = shape[1]
+        dims       = shape[2]
+        K          = tf.shape(n_idx)[-1]
         idx_input  = tf.reshape(n_idx, [B,-1])
         features   = tf.gather(pc, idx_input, axis=1, batch_dims=1, name='gather_neighbours')
         return tf.reshape(features, [B,N,K,dims])
@@ -154,16 +181,19 @@ class LocSE(Layer):
 class AttentivePooling(Layer):
     """ Class defining Attentive Pooling Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, units=1, activation='relu', **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', **kwargs):
         """
         Parameters
         ----------
-            - units      : int, number of output units
-            - activation : str, MLP layer activation
+            - input_units : int, number of input_units
+            - units       : int, number of output units
+            - activation  : str, MLP layer activation
         """
         super(AttentivePooling, self).__init__(**kwargs)
-        self.units      = units
-        self.activation = activation
+        self.input_units = input_units
+        self.units       = units
+        self.K           = K
+        self.activation  = activation
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
@@ -171,13 +201,13 @@ class AttentivePooling(Layer):
         Note: the MLP kernel has size 1. This means that point features are
               not mixed across neighbours.
         """
-
-        self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=input_shape[-2:],
+        shape = (self.input_units, self.K)
+        self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=shape,
                           activation='softmax', 
                           kernel_initializer='glorot_uniform',
                           bias_initializer='zeros',
                           name='attention_score_MLP')
-        self.MLP_final = Conv1D(self.units, 1, input_shape=input_shape[-2:],
+        self.MLP_final = Conv1D(self.units, 1, input_shape=shape,
                           activation=self.activation, 
                           kernel_initializer='glorot_uniform',
                           bias_initializer='zeros',
@@ -206,8 +236,10 @@ class AttentivePooling(Layer):
     def get_config(self):
         config = super(AttentivePooling, self).get_config()
         config.update({
-            "units"      : self.units,
-            "activation" : self.activation
+            "input_units" : self.input_units,
+            "units"       : self.units,
+            "K"           : self.K,
+            "activation"  : self.activation
         })
         return config
 
@@ -215,18 +247,20 @@ class AttentivePooling(Layer):
 class DilatedResBlock(Layer):
     """ Class defining Dilated Residual Block. """
     #----------------------------------------------------------------------
-    def __init__(self, units=1, K=8, activation='relu', **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', **kwargs):
         """
         Parameters
         ----------
-            - units      : int, number of output units, divisible by 4
-            - K          : int, number of nearest neighbors
-            - activation : str, MLP layer activation
+            - input_units : int, number of input_units
+            - units       : int, number of output units, divisible by 4
+            - K           : int, number of nearest neighbors
+            - activation  : str, MLP layer activation
         """
         super(DilatedResBlock, self).__init__(**kwargs)
-        self.units      = units
-        self.K          = K
-        self.activation = activation
+        self.input_units    = input_units
+        self.units          = units
+        self.K              = K
+        self.activation     = activation
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
@@ -237,30 +271,30 @@ class DilatedResBlock(Layer):
         spatial, features = input_shape
         B , N , dims   = spatial
         B_, N_, n_feat = features
-        assert B == B_, f"Batches number mismatch in input point cloud, got {B} and {B_}"
-        assert N == N_, f"Points number mismatch in input point cloud, got {N} and {N_}"
+        # tf.debugging.assert_equal(B, B_, message=f"Batches number mismatch in input point cloud, got {B} and {B_}")
+        # tf.debugging.assert_equal(N, N_, message=f"Points number mismatch in input point cloud, got {N} and {N_}")
 
-        self.MLP_0   = Conv1D(self.units//4, 1, input_shape=(N, n_feat),
+        self.MLP_0   = Conv1D(self.units//4, 1, input_shape=(None, self.input_units),
                               activation=self.activation, 
                               kernel_initializer='glorot_uniform',
                               bias_initializer='zeros',
                               name='MLP_0')
-        self.MLP_1   = Conv1D(self.units, 1, input_shape=(N, self.units//2),
+        self.MLP_1   = Conv1D(self.units, 1, input_shape=(None, self.units//2),
                               activation=self.activation, 
                               kernel_initializer='glorot_uniform',
                               bias_initializer='zeros',
                               name='MLP_2')
-        self.MLP_res = Conv1D(self.units, 1, input_shape=(N, n_feat),
+        self.MLP_res = Conv1D(self.units, 1, input_shape=(None, self.input_units),
                               activation=self.activation, 
                               kernel_initializer='glorot_uniform',
                               bias_initializer='zeros',
                               name='MLP_res')
 
-        self.locse_0 = LocSE(K=self.K, name='locse_0')
-        self.locse_1 = LocSE(K=self.K, name='locse_1')
+        self.locse_0 = LocSE(self.units//2, K=self.K, name='locse_0')
+        self.locse_1 = LocSE(self.units, K=self.K, name='locse_1')
 
-        self.att_0 = AttentivePooling(self.units//4, name='attention_0')
-        self.att_1 = AttentivePooling(self.units//2, name='attention_1')
+        self.att_0 = AttentivePooling(self.units//2, self.units//2, K=self.K, activation=self.activation, name='attention_0')
+        self.att_1 = AttentivePooling(self.units, self.units, K=self.K, activation=self.activation, name='attention_1')
 
         self.act = Activation(tf.nn.leaky_relu, name='lrelu')
 
@@ -299,9 +333,10 @@ class DilatedResBlock(Layer):
     def get_config(self):
         config = super(DilatedResBlock, self).get_config()
         config.update({
-            "units"      : self.units,
-            "K"          : self.K,
-            "activation" : self.activation
+            "input_units" : self.input_units,
+            "units"       : self.units,
+            "K"           : self.K,
+            "activation"  : self.activation
         })
         return config
 
@@ -331,16 +366,28 @@ class RandomSample(Layer):
         -------
             - tf.Tensor, point cloud of shape=(B,N//scale,dims)
             - tf.Tensor, features of shape=(B,N//scale,f_dims)
+            - tf.Tensor, valid neighbours for invalid points of shape=(B,N//scale)
+            - tf.Tensor, random permutation of pc points of shape=(B,N)
         """
         pc, feats = inputs
 
-        B, N, dims = tf.shape(pc)
-        B_, N_, f_dims = tf.shape(feats)
-        assert B == B_, f"Batches number mismatch in input point cloud, got {B} and {B_}"
-        assert N == N_, f"Points number mismatch in input point cloud, got {N} and {N_}"
+        shape = tf.shape(feats)
+        B    = shape[0]
+        N    = shape[1]
+        dims = shape[2]
 
-        rnds = [tf.random.shuffle(tf.range(N)) for i in range(B)]
-        rnds = tf.stack(rnds)
+        # shape  = tf.shape(feats)
+        # B_     = shape[0]
+        # N_     = shape[1]
+        # f_dims = shape[2]
+        
+        # tf.debugging.assert_equal(B, B_, message=f"Batches number mismatch in input point cloud, got {B} and {B_}")
+        # tf.debugging.assert_equal(N, N_, message=f"Points number mismatch in input point cloud, got {N} and {N_}")
+
+        rnds = tf.TensorArray(TF_DTYPE_INT, size=B)
+        for i in tf.range(B):
+            rnds = rnds.write(i, tf.random.shuffle(tf.range(N)))
+        rnds = rnds.stack()
 
         valid_idx   = rnds[:,:N//2]
         invalid_idx = rnds[:,N//2:]
@@ -349,12 +396,14 @@ class RandomSample(Layer):
         valid_pc = tf.gather(pc, valid_idx, axis=1, batch_dims=1, name='downsample_pc')
         valid_feats = tf.gather(feats, valid_idx, axis=1, batch_dims=1, name='downsample_features')
 
-        # store info for upsampling
+        # info for upsampling
         invalid_pc = tf.gather(pc, invalid_idx, axis=1, batch_dims=1)
-        n_idx = int_me(knn.knn_batch(valid_pc, invalid_pc, K=2, omp=True)[:,:,1])
-        self.upsample_idx = [n_idx, rnds]
+        inp      = [valid_pc, invalid_pc, 2]
+        n_idx    = tf.py_function(func=py_knn, inp=inp, Tout=TF_DTYPE_INT, name='RS_knn_search')[:,:,1]
+        shape    = [None]*2
+        n_idx    = tf.ensure_shape(n_idx, shape)
 
-        return valid_pc, valid_feats
+        return valid_pc, valid_feats, n_idx, rnds
 
     #----------------------------------------------------------------------
     def get_config(self):
@@ -368,15 +417,23 @@ class RandomSample(Layer):
 class UpSample(Layer):
     """ Class defining Upsampling Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, scale=2, **kwargs):
+    def __init__(self, input_units, units, scale=2, activation='relu', **kwargs):
         """
         Parameters
         ----------
             - scale: int, scaling factor of the input cloud
         """
         super(UpSample, self).__init__(**kwargs)
-        self.scale = scale
-        self.cat = Concatenate(axis=1, name='cat')
+        self.input_units = input_units
+        self.units       = units
+        self.scale       = scale
+        self.activation  = activation
+    
+    #----------------------------------------------------------------------
+    def build(self, input_shape):
+        self.MLP  = Conv1D(self.units, 1, input_shape=(None,None,self.input_units),
+                          activation=self.activation, kernel_initializer='glorot_uniform',
+                          bias_initializer='zeros', name='MLP')
 
     #----------------------------------------------------------------------
     def call(self, inputs):
@@ -386,38 +443,47 @@ class UpSample(Layer):
             - inputs : list of tf.Tensors,
                        feature point cloud of shape=(B,N//scale,f_dims),
                        interpolating indices of shape=(B,N//scale),
-                       upsampling indices of shape=(B,N)
-        
+                       upsampling indices of shape=(B,N),
+                       residual feature point cloud of shape=(B,N,f_dims)        
         Returns
         -------
             - tf.Tensor, features of shape=(B,N,f_dims)
         """
-        feats, interpolate_idx, upsample_idx = inputs
+        feats, interpolate_idx, upsample_idx, res = inputs
 
         copy_feats = tf.gather(feats, interpolate_idx, axis=1,
                                        batch_dims=1, name='copy_features')
 
-        interpolated_feats = self.cat([feats, copy_feats])
+        interpolated_feats = tf.concat([feats, copy_feats], axis=1)
 
         shape = tf.shape(interpolated_feats)
         
         first = tf.repeat(tf.expand_dims(tf.range(shape[0]), 1), shape[1], axis=1)
         indices = tf.stack([first, upsample_idx], axis=-1)
 
-        return tf.scatter_nd(indices, interpolated_feats, shape, name='upsample_features')
+        feats = tf.scatter_nd(indices, interpolated_feats, shape, name='upsample_features')
+
+        feats = tf.concat([res,feats], axis=-1, name=f'res_cat')
+        return self.MLP(feats)
+
+
 
     #----------------------------------------------------------------------
     def get_config(self):
         config = super(UpSample, self).get_config()
         config.update({
-            "scale"          : self.scale,
+            "input_units" : self.input_units,
+            "units"       : self.units,
+            "scale"       : self.scale,
+            "activation"  : self.activation
         })
         return config
 
 #======================================================================
 class RandLANet(Model):
     """ Class deifining RandLA-Net. """
-    def __init__(self, input_f_dims=2, K=16, scale_factor=2, nb_layers=4, **kwargs):
+    def __init__(self, dims=2, f_dims=2, num_classes=1, K=16, scale_factor=2,
+                 nb_layers=4, activation='relu', name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -425,27 +491,29 @@ class RandLANet(Model):
             - scale_factor : int, scale factor for down/up-sampling
             - nb_layers    : int, number of inner enocding/decoding layers
         """
-        super(RandLANet, self).__init__(**kwargs)
+        super(RandLANet, self).__init__(name=name, **kwargs)
 
         # store args
-        self.input_f_dims = input_f_dims
-        self.K = K
+        self.dims         = dims
+        self.f_dims       = f_dims
+        self.num_classes  = num_classes
+        self.K            = K
         self.scale_factor = scale_factor
-        self.nb_layers = nb_layers
+        self.nb_layers    = nb_layers
+        self.activation   = activation
 
         # store some useful parameters
-        self.num_classes = 2
         self.fc_units = [8, 64, 32, self.num_classes]
-        self.fc_acts  = ['relu']*3 + ['softmax']
+        self.fc_acts  = [self.activation]*3 + ['sigmoid']
         self.latent_f_dim = 32
-        self.enc_units = [
+        self.enc_units  = [
             self.latent_f_dim*self.scale_factor**i \
                 for i in range(self.nb_layers)
-                           ]
-        self.dec_units = self.enc_units[-2::-1] + [self.fc_units[0]]
+                          ]
+        self.enc_iunits = [8] + self.enc_units[:-1]
+        self.dec_units  = self.enc_units[-2::-1] + [self.fc_units[0]]
 
         # build layers
-        # self.input = Input(shape=(None, input_f_dims) , name='input') # TODO: check if this is needed
         self.fcs = [
             Dense(units, activation=act, name=f'fc{i}') \
                 for i, (units, act) in enumerate(zip(self.fc_units, self.fc_acts))
@@ -453,34 +521,30 @@ class RandLANet(Model):
 
         self.encoding   = self.build_encoder()
         self.middle_MLP = Conv1D(self.enc_units[-1], 1,
-                              activation='relu', 
+                              activation=self.activation,
                               kernel_initializer='glorot_uniform',
                               bias_initializer='zeros',
-                              name='MLP_middle')
+                              name='MLP')
         self.decoding   = self.build_decoder()
-
+        
     #----------------------------------------------------------------------
     def build_encoder(self):
         self.encoder = [
-            DilatedResBlock(units=units, K=self.K, name=f'encoder_DRB{i}') \
-                                for i, units in enumerate(self.enc_units)
+            DilatedResBlock(input_units=iunits, units=units, K=self.K, activation=self.activation, name=f'DRB{i}') \
+                                for i, (iunits, units) in enumerate(zip(self.enc_iunits, self.enc_units))
                        ]
         self.RSs = [
-            RandomSample(self.scale_factor, name=f'encoder_RS{i}') \
+            RandomSample(self.scale_factor, name=f'RS{i}') \
                 for i in range(self.nb_layers)
                    ]
 
     #----------------------------------------------------------------------
     def build_decoder(self):
-        self.decoder = [
-            Conv1D(units, 1, activation='relu', kernel_initializer='glorot_uniform',
-                   bias_initializer='zeros', name=f'upsample_MLP{i}') \
-                for i, units in enumerate(self.dec_units)
-                       ]
-        self.cat = Concatenate(axis=-1, name='upsample_cat')
+        self.dec_iunits = self.enc_units[::-1]
+        
         self.USs = [
-            UpSample(self.scale_factor, name=f'upsample_US{i}') \
-                for i in range(self.nb_layers)
+            UpSample(iunits, self.scale_factor, activation=self.activation, name=f'US{i}') \
+                for i, (iunits, units) in enumerate(zip(self.dec_iunits, self.dec_units))
                    ]
 
     #----------------------------------------------------------------------
@@ -498,23 +562,50 @@ class RandLANet(Model):
         pc, feats = inputs
 
         residuals = []
-        rs_idxs   = []
+        n_idxs    = []
+        rndss     = []
+
 
         feats = self.fcs[0](feats)
         residuals.append(feats)
+
         for drb, rs  in zip(self.encoder, self.RSs):
             feats = drb( [pc, feats] )
-            pc, feats = rs([pc, feats])
-            rs_idxs.append(rs.upsample_idx)
+            pc, feats, n_idx, rnds = rs([pc, feats])
+            n_idxs.append(n_idx)
+            rndss.append(rnds)
             residuals.append(feats)
-        
-        feats = self.middle_MLP(feats)
 
-        for us, mlp, rs_idx, res in zip(self.USs, self.decoder, rs_idxs[::-1], residuals[-2::-1]):
-            feats = us([feats, *rs_idx])
-            feats = mlp( self.cat([res,feats]) )
+        feats = self.middle_MLP(feats)
+        for i, (us, interp, ups, res) in enumerate(zip(self.USs, n_idxs[::-1], rndss[::-1], residuals[-2::-1])):
+            feats = us([feats, interp, ups, res])
 
         for fc in self.fcs[1:]:
             feats = fc(feats)
-        return feats
-        # TODO: check model step by step
+
+        # tf.debugging.assert_equal(tf.shape(feats)[-1], int_me([1]), message="Flattening outputs with multiple classes")
+        return tf.squeeze(feats, -1)
+    #----------------------------------------------------------------------
+    def model(self):
+        pc = Input(shape=(None, self.dims), name='pc')
+        feats = Input(shape=(None, self.f_dims), name='feats')
+        return Model(inputs=[pc, feats], outputs=self.call([pc,feats]), name=self.name)
+
+    #----------------------------------------------------------------------
+    def get_prediction(self, inputs):
+        """
+        Predict over a iterable of inputs
+
+        Parameters
+        ----------
+            - inputs : list, elements of shape [(1,N,dims), (1,N,f_dims)]
+        
+        Returns
+        -------
+            list, prediction elements of shape [(1,N)]
+
+        """
+        res = []
+        for inp in inputs:
+            res.append( self.predict_on_batch(inp) )
+        return res

@@ -134,6 +134,8 @@ class Event:
 
         if self.nconsidered:
             point_cloud = self.point_cloud.T[self.considered]
+            # for RandLA-Net return (num_hits, 4)
+            return point_cloud
             padding = ((0,self.max_hits - len(self.considered)),(0,0))
             return np.pad(point_cloud, padding, constant_values=-2)
         else:
