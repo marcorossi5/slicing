@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from time import time as tm
@@ -202,7 +203,26 @@ def split_dataset(data, split=0.5):
 
 #======================================================================
 def main():
-    folder = '../transfer_learning/test'
+    arger = argparse.ArgumentParser(
+        """
+    Example script to train RandLA-Net for slicing
+    """
+    )
+    arger.add_argument(
+        "-e", "--epochs", help="Number of events to be run", type=int, default=2
+    )
+    arger.add_argument(
+        "-l", "--lr", help="Set the lerning rate", type=float, default=1e-2
+    )
+    arger.add_argument(
+        "-n", "--nev", help="Number of events to be run", type=int, default=-1
+    )
+    arger.add_argument(
+        "--output", help="Output folder", type=str, default='../transfer_learning/test'
+    )
+    args = arger.parse_args()
+
+    folder = args.output
     # load train data
     fn       = [
         'data/test_data_05GeV.csv.gz',
@@ -212,7 +232,7 @@ def main():
         'data/test_data_6GeV.csv.gz',
         'data/test_data_7GeV.csv.gz',
         ]
-    nev      = -1
+    nev      = args.nev
     min_hits = 16
     train = build_dataset(fn, nev=nev, min_hits=min_hits)
     train_generator = EventDataset(train, shuffle=True)
@@ -232,8 +252,8 @@ def main():
     # actor = build_actor_model(None, input_dim)
     actor = RandLANet(nb_layers=4, activation=tf.nn.leaky_relu, name='RandLA-Net')
 
-    lr     = 1e-2
-    epochs = 10
+    lr     = args.lr
+    epochs = args.epochs
     t      = 0.5
     actor.compile(
             loss= dice_loss,
@@ -290,7 +310,7 @@ def main():
     ax = plt.subplot(133)
     ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=vcmap, norm=vnorm)
     ax.set_title("pc_true")
-    plt.savefig("../test.png", bbox_inches='tight', dpi=300)
+    plt.savefig(f"{folder}/test.png", bbox_inches='tight', dpi=300)
     # plt.show()
 
 
