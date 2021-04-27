@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from slicerl.tools import onehot, onehot_to_indices
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
@@ -482,11 +483,12 @@ class UpSample(Layer):
 #======================================================================
 class RandLANet(Model):
     """ Class deifining RandLA-Net. """
-    def __init__(self, dims=2, f_dims=2, num_classes=1, K=16, scale_factor=2,
+    def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
                  nb_layers=4, activation='relu', name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
+            - nb_classes   : int, number of output classes for each point in cloud
             - K            : int, number of nearest neighbours to find
             - scale_factor : int, scale factor for down/up-sampling
             - nb_layers    : int, number of inner enocding/decoding layers
@@ -496,15 +498,15 @@ class RandLANet(Model):
         # store args
         self.dims         = dims
         self.f_dims       = f_dims
-        self.num_classes  = num_classes
+        self.nb_classes   = nb_classes
         self.K            = K
         self.scale_factor = scale_factor
         self.nb_layers    = nb_layers
         self.activation   = activation
 
         # store some useful parameters
-        self.fc_units = [8, 64, 32, self.num_classes]
-        self.fc_acts  = [self.activation]*3 + ['sigmoid']
+        self.fc_units = [32, 64, 128, self.nb_classes]
+        self.fc_acts  = [self.activation]*3 + ['linear']
         self.latent_f_dim = 32
         self.enc_units  = [
             self.latent_f_dim*self.scale_factor**i \
@@ -557,7 +559,7 @@ class RandLANet(Model):
 
         Returns
         -------
-            tf.Tensor
+            tf.Tensor, output tensor of shape=(B,N,nb_classes)
         """
         pc, feats = inputs
 
@@ -583,8 +585,8 @@ class RandLANet(Model):
         for fc in self.fcs[1:]:
             feats = fc(feats)
 
-        # tf.debugging.assert_equal(tf.shape(feats)[-1], int_me([1]), message="Flattening outputs with multiple classes")
-        return tf.squeeze(feats, -1)
+        return feats # logits
+        return tf.nn.softmax(feats, axis=-1, name='softmax')
     #----------------------------------------------------------------------
     def model(self):
         pc = Input(shape=(None, self.dims), name='pc')
@@ -598,14 +600,19 @@ class RandLANet(Model):
 
         Parameters
         ----------
-            - inputs : list, elements of shape [(1,N,dims), (1,N,f_dims)]
+            - inputs : list, elements of shape [(1,N,dims), (N,f_dims)]
         
         Returns
         -------
-            list, prediction elements of shape [(1,N)]
-
+            - pred  : list, output list containing np.array of predictions,
+                      each of shape=[(B,N)]
+            - probs : list, output list containing np.array of class probabilities,
+                      each of shape=[(B,N,nb_classes)]
         """
-        res = []
+        pred   = []
+        probs = []
         for inp in inputs:
-            res.append( self.predict_on_batch(inp) )
-        return res
+            out = self.predict_on_batch(inp)
+            pred.append(onehot_to_indices(out))
+            probs.append( tf.nn.softmax(out, axis=-1).numpy() )
+        return pred, probs

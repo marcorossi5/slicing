@@ -59,7 +59,7 @@ class Event:
         for i, idx in enumerate(self.sorted_mc_idx):
             self.ordered_mc_idx[calohits[5] == idx] = i
         
-        self.n_first_mc_slice = np.count_nonzero(self.ordered_mc_idx == 0)
+        # self.n_first_mc_slice = np.count_nonzero(self.ordered_mc_idx == 0)
         
         # build the pndr_slice ordering (useful for testing)
         self.pndr_idx         = calohits[4]
@@ -119,6 +119,9 @@ class Event:
 
 
         # keep track of indices in self.current_status that are going to be involved in the next computation
+        
+        # for multiclass prediction return just the point cloud
+        return self.point_cloud.T
         self.drawn_from_mc = np.random.rand() <= self.rnd_draw
         training_warmup = is_training                      and \
                           step < 15

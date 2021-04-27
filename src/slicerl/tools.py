@@ -123,3 +123,34 @@ def efficiency_rejection_rate_loss(x,y):
     efficiency     = np.count_nonzero(x[y]) / (np.count_nonzero(y) + eps )
     rejection_rate = np.count_nonzero(x[~y]) / (np.count_nonzero(~y) + eps)
     return 1 - efficiency + rejection_rate
+
+#----------------------------------------------------------------------
+def onehot(ind, depth):
+    """
+    One-hot encoding on the last axis
+
+    Parameters
+    ----------
+        - ind   : np.array, array of indices of int dtype
+        - depth : int, length of the one-hot encoding axis
+    
+    Return
+    ------
+        np.array, one-hot encoded array of shape=(ind.shape + (depth,))
+    """
+    return np.eye(depth)[ind.astype(np.int16)]
+
+#----------------------------------------------------------------------
+def onehot_to_indices(onehot):
+    """
+    From one-hot encoding to indices on the last axis
+
+    Parameters
+    ----------
+        - one_hot : np.array, array of one-hot encoded
+    
+    Return
+    ------
+        np.array, indices array of shape=(one_hot.shape[:-1])
+    """
+    return np.argmax(onehot, axis=-1)

@@ -3,12 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from time import time as tm
 import tensorflow as tf
-from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau
 
-from slicerl.models import build_actor_model
+from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau
+# from slicerl.models import build_actor_model
 from slicerl.RandLANet import RandLANet
 
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
+
+from slicerl.tools import onehot, onehot_to_indices
 
 DTYPE = tf.float32
 eps = tf.constant(np.finfo(np.float64).eps, dtype=DTYPE)
@@ -134,7 +136,7 @@ def transform(pc, feats, target):
     return pc, feats, target
 
 #======================================================================
-def build_dataset(fn, nev=-1, min_hits=1, augment=False):
+def build_dataset(fn, nev=-1, min_hits=1, augment=False, nb_classes=128):
     if isinstance(fn, str):
         events  = load_Events_from_file(fn, nev, min_hits)
     elif isinstance(fn, list):
@@ -144,41 +146,19 @@ def build_dataset(fn, nev=-1, min_hits=1, augment=False):
     inputs  = []
     targets = []
     for event in events:
-        index = -1
-        while True:        
-        # for index in range(10):
-            state = event.state()
-            if not event.nconsidered:
-                break
-            index += 1
-            pc = state[:, 1:3]
-            feats = state[:, ::3]
-            # inputs.append(np.expand_dims(event.state(), 0))
-            
-            # generate cheating mask
-            m = event.ordered_mc_idx[event.considered] == index
-            
-            # update status vector
-            current_status = event.status[event.considered]
-            current_status[m] = index
-            event.status[event.considered] = current_status
-
-            # pad and append to targets
-            # padding = (0,event.max_hits-event.nconsidered)
-            # targets.append( np.pad(m, padding) )
-
-            # augment inputs with rotations
-            if augment:
-                pc, feats, target = transform(pc, feats, m)
-            else:
-                pc = pc[None]
-                feats = feats[None]
-                target = m[None]
-
-            # print(f"pc shape: {pc.shape} \t feats shape: {feats.shape} \t targets shape:{target.shape}")
-            inputs.append([pc, feats])
-            targets.append(target)
-    # return np.stack(inputs), np.stack(targets)
+        state = event.state()
+        pc = state[:, 1:3]
+        feats = state[:, ::3]
+        m = event.ordered_mc_idx
+        if augment:
+            pc, feats, target = transform(pc, feats, m)
+        else:
+            pc = pc[None]
+            feats = feats[None]
+            target = m[None]
+        target = onehot(target, nb_classes)
+        inputs.append([pc, feats])
+        targets.append(target)
     return inputs, targets
 
 #======================================================================
@@ -231,9 +211,20 @@ def main():
     parser.add_argument(
         "-n", "--nev", help="Number of events to be run", type=int, default=-1
     )
+    parser.add_argument(
+        "--nb_layers", help="Number of RandLA-Net layers", type=int, default=4
+    )
+    parser.add_argument(
+        "--debug", help="Run TensorFlow eagerly", action="store_true", default=False
+    )
     args = parser.parse_args()
 
     setup = {}
+    
+
+    if args.debug:
+        print("[+] Run all functions eagerly")
+        tf.config.run_functions_eagerly(True)
 
     # create output folder
     if args.output is not None:
@@ -262,12 +253,12 @@ def main():
         ]
     nev      = args.nev
     min_hits = 16
-    train = build_dataset(fn, nev=nev, min_hits=min_hits)
+    train = build_dataset(fn, nev=nev, min_hits=min_hits, augment=True)
     train_generator = EventDataset(train, shuffle=True)
 
     # load val, test data
     fn       = 'data/test_data_03GeV.csv.gz'
-    nev      = 1
+    nev      = -1
     min_hits = 16
     data = build_dataset(fn, nev=nev, min_hits=min_hits)
     (x_test, y_test), val = split_dataset(data)
@@ -275,70 +266,68 @@ def main():
     val_generator  = EventDataset(val, shuffle=False)
     test_generator = EventDataset((x_test, y_test), shuffle=False)
 
-    # input_dim = (1,15000,4)
     batch_size = 1
-    # actor = build_actor_model(None, input_dim)
-    actor = RandLANet(nb_layers=4, activation=tf.nn.leaky_relu, name='RandLA-Net')
+    actor = RandLANet(nb_layers=args.nb_layers, activation=tf.nn.leaky_relu, name='RandLA-Net')
 
     lr     = args.lr
     epochs = args.epochs
     t      = 0.5
     actor.compile(
-            loss= dice_loss,
+            loss= tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1),
             optimizer=tf.keras.optimizers.Adam(lr),
-            metrics=[tf.keras.metrics.Precision(thresholds=t),
-                     tf.keras.metrics.Recall(thresholds=t)]
+            metrics=[tf.keras.metrics.CategoricalAccuracy(name='val_cat_acc')],
+            run_eagerly=args.debug
             )
     
     actor.model().summary()
     # tf.keras.utils.plot_model(actor.model(), to_file='../RandLA-Net.png', expand_nested=True, show_shapes=True)
 
     logdir = f"{setup['output']}/logs"
+    checkpoint_filepath = f"{setup['output']}"+"/actor.h5"
     callbacks = [
         TensorBoard(log_dir=logdir,
                     write_images=True,
                     profile_batch=2),
-        ModelCheckpoint(f"{setup['output']}"+"/actor.h5",
+        ModelCheckpoint(filepath=checkpoint_filepath,
                         save_best_only=True,
                         mode='max',
-                        monitor='val_precision',
+                        monitor='val_cat_acc',
                         verbose=1),
-        ReduceLROnPlateau(monitor='val_precision', factor=0.5, mode='max',
+        ReduceLROnPlateau(monitor='val_cat_acc', factor=0.5, mode='max',
                           verbose=1, patience=2, min_lr=1e-4)
-        
     ]
     actor.fit(train_generator, epochs=epochs,
               validation_data=val_generator,
               callbacks=callbacks,
               verbose=2)
 
+    print("[+] Loading best weights")
+    actor.load_weights(checkpoint_filepath)
     
     results = actor.evaluate(test_generator)
-    print("Test loss, test precision, test recall: ", results)
+    print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}", results)
 
-    y_pred = actor.get_prediction(x_test)
-    # print(f"Start feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
+    y_pred, y_probs = actor.get_prediction(x_test)
+    # print(f"Feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
 
-    from slicerl.diagnostics import vnorm, vcmap
+    from slicerl.diagnostics import norm, cmap
 
-    pc      = x_test[0][0][0] # shape=(N,2)
-    pc_pred = y_pred[0][0]    # shape=(N,)
-    pc_test = y_test[0][0]    # shape=(N,)
+    pc      = x_test[0][0][0]                    # shape=(N,2)
+    pc_pred = y_pred[0][0]                       # shape=(N,)
+    pc_test = onehot_to_indices(y_test[0][0])    # shape=(N,)
+    # print(f"pc shape: {pc.shape} \t pc pred shape: {pc_pred.shape} \t pc test shape: {pc_test.shape}")
 
-    print(f"pc_pred shape: {pc_pred.shape} \t range: [{pc_pred.min()}, {pc_pred.max()}]")
-
-    ax = plt.subplot(131)
-    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_pred, cmap=vcmap, norm=vnorm)
+    fig = plt.figure(figsize=(18*2,14))
+    ax = fig.add_subplot(121)
+    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_pred, cmap=cmap, norm=norm)
     ax.set_title("pc_pred")
 
-    ax = plt.subplot(132)
-    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_pred>0.5, cmap=vcmap, norm=vnorm)
-    ax.set_title("pc_pred > 0.5")
-
-    ax = plt.subplot(133)
-    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=vcmap, norm=vnorm)
+    ax = fig.add_subplot(122)
+    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=cmap, norm=norm)
     ax.set_title("pc_true")
-    plt.savefig(f"{setup['output']}/test.png", bbox_inches='tight', dpi=300)
+    fname = f"{setup['output']}/test.png"
+    plt.savefig(fname, bbox_inches='tight', dpi=300)
+    print(f"[+] Saved plot at {fname}")
     # plt.show()
 
 
