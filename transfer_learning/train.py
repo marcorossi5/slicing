@@ -5,7 +5,6 @@ from time import time as tm
 import tensorflow as tf
 
 from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau
-# from slicerl.models import build_actor_model
 from slicerl.RandLANet import RandLANet
 
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
@@ -223,8 +222,11 @@ def main():
     
 
     if args.debug:
-        print("[+] Run all functions eagerly")
+        print("[+] Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
+    else:
+        print("[+] Run all tf functions in graph mode")
+        tf.compat.v1.disable_eager_execution()
 
     # create output folder
     if args.output is not None:
@@ -275,7 +277,7 @@ def main():
     actor.compile(
             loss= tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1),
             optimizer=tf.keras.optimizers.Adam(lr),
-            metrics=[tf.keras.metrics.CategoricalAccuracy(name='val_cat_acc')],
+            metrics=[tf.keras.metrics.CategoricalAccuracy(name='val_acc')],
             run_eagerly=args.debug
             )
     
@@ -291,9 +293,9 @@ def main():
         ModelCheckpoint(filepath=checkpoint_filepath,
                         save_best_only=True,
                         mode='max',
-                        monitor='val_cat_acc',
+                        monitor='val_acc',
                         verbose=1),
-        ReduceLROnPlateau(monitor='val_cat_acc', factor=0.5, mode='max',
+        ReduceLROnPlateau(monitor='val_acc', factor=0.5, mode='max',
                           verbose=1, patience=2, min_lr=1e-4)
     ]
     actor.fit(train_generator, epochs=epochs,
