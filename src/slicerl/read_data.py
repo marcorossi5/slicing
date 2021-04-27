@@ -155,6 +155,32 @@ def load_Events_from_file(filename, nev=-1, min_hits=1, max_hits=15000, num_line
     return reader.values()
 
 #======================================================================
+def load_Events_from_files(filelist, nev=-1, min_hits=1, max_hits=15000, num_lines=6):
+    """
+    Utility function to load Events object from file. Return a list of Event
+    objects.
+
+    Parameters
+    ----------
+        - filename  : list, list of files to load events from
+        - nev       : int, number of events to load
+        - min_hits  : int, consider slices with more than min_hits Calohits only
+        - max_hits  : int, max hits to be processed by network
+        - num_lines : int, number of lines stored in the file. Lines stand for:
+                      energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
+                      slicerl_idx (optional). 
+    
+    Returns
+    -------
+        - list
+            list of loaded Event object (with length equal to nev)
+    """
+    events = []
+    for fname in filelist:
+        events.extend( Events(fname, nev, min_hits, max_hits, num_lines).values() )
+    return events
+
+#======================================================================
 def save_Event_list_to_file(events, filename):
     """
     Utility function to save Event.particles lists to file. Each line represents

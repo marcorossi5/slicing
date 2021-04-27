@@ -126,7 +126,12 @@ def transform(pc, feats, target):
 
 #======================================================================
 def build_dataset(fn, nev=-1, min_hits=1, augment=False):
-    events  = load_Events_from_file(fn, nev, min_hits)
+    if isinstance(fn, str):
+        events  = load_Events_from_file(fn, nev, min_hits)
+    elif isinstance(fn, list):
+        events  = load_Events_from_files(fn, nev, min_hits)
+    else:
+        raise NotImplementedError, f"please provide string or list, not {type(fn)}"
     inputs  = []
     targets = []
     for event in events:
@@ -199,14 +204,21 @@ def split_dataset(data, split=0.5):
 def main():
     folder = '../transfer_learning/test'
     # load train data
-    fn       = 'test_data_03GeV.csv.gz'
+    fn       = [
+        'data/test_data_05GeV.csv.gz',
+        'data/test_data_1GeV.csv.gz',
+        'data/test_data_2GeV.csv.gz',
+        'data/test_data_3GeV.csv.gz',
+        'data/test_data_6GeV.csv.gz',
+        'data/test_data_7GeV.csv.gz',
+        ]
     nev      = -1
     min_hits = 16
     train = build_dataset(fn, nev=nev, min_hits=min_hits)
     train_generator = EventDataset(train, shuffle=True)
 
     # load val, test data
-    fn       = 'test_data_2GeV.csv.gz'
+    fn       = 'data/test_data_03GeV.csv.gz'
     nev      = 1
     min_hits = 16
     data = build_dataset(fn, nev=nev, min_hits=min_hits)
