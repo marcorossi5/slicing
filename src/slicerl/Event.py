@@ -44,8 +44,10 @@ class Event:
 
         # check if (E,x,z) inputs are in range
         assert np.all(calohits[0] < 500)
-        assert np.all(np.logical_and(calohits[1] >= -0.37260447692861504,  calohits[1] <= 0.37260447692861504))
-        assert np.all(np.logical_and(calohits[2] >= -0.35284, calohits[2] <= 0.91702))
+        assert np.all(np.logical_and(calohits[1] >= -0.38,  calohits[1] <= 0.38)), \
+            f"found calohit x coordinate range: [{calohits[1].min()}, {calohits[1].max()}]"
+        assert np.all(np.logical_and(calohits[2] >= -0.36, calohits[2] <= 0.92)), \
+            f"found calohit z coordinate range: [{calohits[2].min()}, {calohits[2].max()}]"
 
         # build the mc slice size ordering
         # TODO: mc_idx contains some -1, think about masking out those

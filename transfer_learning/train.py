@@ -8,7 +8,7 @@ from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnP
 from slicerl.models import build_actor_model
 from slicerl.RandLANet import RandLANet
 
-from slicerl.read_data import load_Events_from_file
+from slicerl.read_data import load_Events_from_file, load_Events_from_files
 
 DTYPE = tf.float32
 eps = tf.constant(np.finfo(np.float64).eps, dtype=DTYPE)
@@ -132,7 +132,7 @@ def build_dataset(fn, nev=-1, min_hits=1, augment=False):
     elif isinstance(fn, list):
         events  = load_Events_from_files(fn, nev, min_hits)
     else:
-        raise NotImplementedError, f"please provide string or list, not {type(fn)}"
+        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
     inputs  = []
     targets = []
     for event in events:
@@ -209,6 +209,9 @@ def main():
     """
     )
     arger.add_argument(
+        "--output", help="Output folder", type=str, default='../transfer_learning/test'
+    )
+    arger.add_argument(
         "-e", "--epochs", help="Number of events to be run", type=int, default=2
     )
     arger.add_argument(
@@ -216,9 +219,6 @@ def main():
     )
     arger.add_argument(
         "-n", "--nev", help="Number of events to be run", type=int, default=-1
-    )
-    arger.add_argument(
-        "--output", help="Output folder", type=str, default='../transfer_learning/test'
     )
     args = arger.parse_args()
 
@@ -236,6 +236,7 @@ def main():
     min_hits = 16
     train = build_dataset(fn, nev=nev, min_hits=min_hits)
     train_generator = EventDataset(train, shuffle=True)
+    exit()
 
     # load val, test data
     fn       = 'data/test_data_03GeV.csv.gz'

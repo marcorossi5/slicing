@@ -49,7 +49,7 @@ class Reader(object):
     def next_event(self):
         # we have hit the maximum number of events
         if (self.n == self.nmax):
-            print ("# Exiting after having read nmax events")
+            print (f"# Exiting after having read {self.nmax} events")
             return None
         
         try:
@@ -177,6 +177,7 @@ def load_Events_from_files(filelist, nev=-1, min_hits=1, max_hits=15000, num_lin
     """
     events = []
     for fname in filelist:
+        print(f"[+] Reading {fname}")
         events.extend( Events(fname, nev, min_hits, max_hits, num_lines).values() )
     return events
 
