@@ -151,6 +151,7 @@ def load_Events_from_file(filename, nev=-1, min_hits=1, max_hits=15000, num_line
         - list
             list of loaded Event object (with length equal to nev)
     """
+    print(f"[+] Reading {filename}")
     reader = Events(filename, nev, min_hits, max_hits, num_lines)
     return reader.values()
 

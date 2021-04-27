@@ -1,4 +1,4 @@
-import argparse
+import os, argparse, shutil
 import numpy as np
 import matplotlib.pyplot as plt
 from time import time as tm
@@ -12,6 +12,14 @@ from slicerl.read_data import load_Events_from_file, load_Events_from_files
 
 DTYPE = tf.float32
 eps = tf.constant(np.finfo(np.float64).eps, dtype=DTYPE)
+
+#----------------------------------------------------------------------
+def makedir(folder):
+    """Create directory."""
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+    else:
+        raise Exception('Output folder %s already exists.' % folder)
 
 #======================================================================
 class EventDataset(tf.keras.utils.Sequence):
@@ -203,26 +211,46 @@ def split_dataset(data, split=0.5):
 
 #======================================================================
 def main():
-    arger = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         """
     Example script to train RandLA-Net for slicing
     """
     )
-    arger.add_argument(
-        "--output", help="Output folder", type=str, default='../transfer_learning/test'
+    parser.add_argument(
+        "--output", help="Output folder", type=str, default=None
     )
-    arger.add_argument(
+    parser.add_argument(
+        '--force', '-f', help='Overwrite existing files if present', action='store_true', dest='force',                        
+    )
+    parser.add_argument(
         "-e", "--epochs", help="Number of events to be run", type=int, default=2
     )
-    arger.add_argument(
+    parser.add_argument(
         "-l", "--lr", help="Set the lerning rate", type=float, default=1e-2
     )
-    arger.add_argument(
+    parser.add_argument(
         "-n", "--nev", help="Number of events to be run", type=int, default=-1
     )
-    args = arger.parse_args()
+    args = parser.parse_args()
 
-    folder = args.output
+    setup = {}
+
+    # create output folder
+    if args.output is not None:
+        out = args.output
+    try:
+        makedir(out)
+    except Exception as error:
+        if args.force:
+            print(f'WARNING: Overwriting {out} with new model')
+            shutil.rmtree(out)
+            makedir(out)
+        else:
+            print(error)
+            print('Delete or run with "--force" to overwrite.')
+            exit(-1)
+
+    setup['output'] = out
     # load train data
     fn       = [
         'data/test_data_05GeV.csv.gz',
@@ -236,7 +264,6 @@ def main():
     min_hits = 16
     train = build_dataset(fn, nev=nev, min_hits=min_hits)
     train_generator = EventDataset(train, shuffle=True)
-    exit()
 
     # load val, test data
     fn       = 'data/test_data_03GeV.csv.gz'
@@ -266,12 +293,12 @@ def main():
     actor.model().summary()
     # tf.keras.utils.plot_model(actor.model(), to_file='../RandLA-Net.png', expand_nested=True, show_shapes=True)
 
-    logdir = f"{folder}/logs"
+    logdir = f"{setup['output']}/logs"
     callbacks = [
         TensorBoard(log_dir=logdir,
                     write_images=True,
                     profile_batch=2),
-        ModelCheckpoint(f"{folder}"+"/actor.h5",
+        ModelCheckpoint(f"{setup['output']}"+"/actor.h5",
                         save_best_only=True,
                         mode='max',
                         monitor='val_precision',
@@ -311,7 +338,7 @@ def main():
     ax = plt.subplot(133)
     ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=vcmap, norm=vnorm)
     ax.set_title("pc_true")
-    plt.savefig(f"{folder}/test.png", bbox_inches='tight', dpi=300)
+    plt.savefig(f"{setup['output']}/test.png", bbox_inches='tight', dpi=300)
     # plt.show()
 
 
