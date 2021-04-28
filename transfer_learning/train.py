@@ -42,7 +42,7 @@ class EventDataset(tf.keras.utils.Sequence):
     
     #----------------------------------------------------------------------
     def on_epoch_end(self):
-        if self.shuffle == True:
+        if self.shuffle:
             np.random.shuffle(self.indexes)
 
     #----------------------------------------------------------------------
@@ -266,20 +266,18 @@ def main():
     test_generator = EventDataset((x_test, y_test), shuffle=False)
 
     batch_size = 1
-    actor = RandLANet(nb_layers=args.nb_layers, activation=tf.nn.leaky_relu, name='RandLA-Net')
+    actor = RandLANet(nb_layers=args.nb_layers, activation=tf.nn.leaky_relu, fc_type='conv', name='RandLA-Net')
 
-    lr     = args.lr
-    epochs = args.epochs
     t      = 0.5
     actor.compile(
             loss= tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1),
-            optimizer=tf.keras.optimizers.Adam(lr),
-            metrics=[tf.keras.metrics.CategoricalAccuracy(name='val_acc')],
+            optimizer=tf.keras.optimizers.Adam(args.lr),
+            metrics=[tf.keras.metrics.CategoricalAccuracy(name='acc')],
             run_eagerly=args.debug
             )
     
     actor.model().summary()
-    # tf.keras.utils.plot_model(actor.model(), to_file='../RandLA-Net.png', expand_nested=True, show_shapes=True)
+    # tf.keras.utils.plot_model(actor.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
     logdir = f"{setup['output']}/logs"
     checkpoint_filepath = f"{setup['output']}"+"/actor.h5"
@@ -295,12 +293,13 @@ def main():
         ReduceLROnPlateau(monitor='val_acc', factor=0.5, mode='max',
                           verbose=1, patience=2, min_lr=1e-4)
     ]
-    actor.fit(train_generator, epochs=epochs,
+    print(f"[+] Train for {args.epochs} epochs ...")
+    actor.fit(train_generator, epochs=args.epochs,
               validation_data=val_generator,
               callbacks=callbacks,
               verbose=2)
 
-    print("[+] Loading best weights")
+    print("[+] done with training, load best weights")
     actor.load_weights(checkpoint_filepath)
     
     results = actor.evaluate(test_generator)

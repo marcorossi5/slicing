@@ -484,7 +484,7 @@ class UpSample(Layer):
 class RandLANet(Model):
     """ Class deifining RandLA-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
-                 nb_layers=4, activation='relu', name='RandLA-Net', **kwargs):
+                 nb_layers=4, activation='relu', fc_type='conv', name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -492,6 +492,8 @@ class RandLANet(Model):
             - K            : int, number of nearest neighbours to find
             - scale_factor : int, scale factor for down/up-sampling
             - nb_layers    : int, number of inner enocding/decoding layers
+            - fc_type      : str, either 'conv' or 'dense' for the final FC
+                             semantic predicting layers
         """
         super(RandLANet, self).__init__(name=name, **kwargs)
 
@@ -503,6 +505,7 @@ class RandLANet(Model):
         self.scale_factor = scale_factor
         self.nb_layers    = nb_layers
         self.activation   = activation
+        self.fc_type      = fc_type
 
         # store some useful parameters
         self.fc_units = [32, 64, 128, self.nb_classes]
@@ -514,12 +517,22 @@ class RandLANet(Model):
                           ]
         self.enc_iunits = [8] + self.enc_units[:-1]
         self.dec_units  = self.enc_units[-2::-1] + [self.fc_units[0]]
+        self.fc_iunits  = self.dec_units[-1:] + self.fc_units[:-1]
 
         # build layers
-        self.fcs = [
-            Dense(units, activation=act, name=f'fc{i}') \
-                for i, (units, act) in enumerate(zip(self.fc_units, self.fc_acts))
-        ]
+        if self.fc_type == 'conv':
+            self.fcs = [
+                Conv1D(units, 16, padding='same', input_shape=(None,None,None,iunits), activation=act, name=f'fc{i+1}') \
+                    for i, (iunits, units, act) in enumerate(zip(self.fc_iunits[1:], self.fc_units[1:], self.fc_acts[1:]))
+            ]
+            self.fcs.insert(0, Dense(self.fc_units[0], activation=self.fc_acts[0], name=f'fc0') )
+        elif self.fc_type == 'dense':
+            self.fcs = [
+                Dense(units, activation=act, name=f'fc{i}') \
+                    for i, (units, act) in enumerate(zip(self.fc_units, self.fc_acts))
+            ]
+        else:
+            raise NotImplementedError(f"First and final layers must be of type 'conv'|'dense', not {self.fc_type}")
 
         self.encoding   = self.build_encoder()
         self.middle_MLP = Conv1D(self.enc_units[-1], 1,
