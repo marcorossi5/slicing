@@ -13,13 +13,13 @@ with open('README.md') as f:
 
 setup(name= "slicerl",
       version = '1.0.0',
-      description = "Slicing Problem with Reinforcement Learning for DUNE reconstruction",
+      description = "Slicing Problem with RandLA-Net for DUNE reconstruction",
       author = "M. Rossi",
       author_email = "marco.rossi@cern.ch",
       url="https://github.com/marcorossi5/SlicingRL.git",
       long_description = long_desc,
       entry_points = {'console_scripts':
-                      ['slicerl = slicerl.scripts.slicerl:main']},
+                      ['slicerl = slicerl.scripts.randla_train:main']},
       package_dir = {'': 'src'},
       packages = find_packages('src'),
       zip_safe = False,
@@ -31,4 +31,9 @@ setup(name= "slicerl",
             'Topic :: Scientific/Engineering',
             'Topic :: Scientific/Engineering :: Physics',
             ],
+      python_requires='>=3.6',
+      install_requires=[
+          "numpy >= 1.19.2",
+          "matplotlib >= 3.3.0",
+      ]
      )

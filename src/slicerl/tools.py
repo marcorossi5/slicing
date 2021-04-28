@@ -2,7 +2,6 @@
 
 import numpy as np
 import math
-from energyflow.emd import emd
 
 eps = np.finfo(np.float64).eps
 
@@ -36,19 +35,6 @@ def get_window_width(masses, lower_frac=20, upper_frac=80):
     upper = np.nanpercentile(masses, upper_frac)
     median = np.median(masses[(masses > lower) & (masses < upper)])
     return lower, upper, median
-
-#----------------------------------------------------------------------
-def quality_metric(slice_state, mc_state):
-    """ Caluclate EMD metric for two Particle objects """
-    return emd(slice_state, mc_state, R=0.6)
-
-#----------------------------------------------------------------------
-def jet_emd(j_noPU, j):
-    """ Caluclate EMD metric for two FastJet.PseudoJet objects """
-    pT = lambda x: math.sqrt(x.px()**2 + x.py()**2)
-    ev0 = np.array([pT(j_noPU), j_noPU.rap(), j_noPU.phi()])
-    ev1 = np.array([pT(j), j.rap(), j.phi()])
-    return emd(ev0, ev1)
 
 #----------------------------------------------------------------------
 def confusion_matrix_per_event(scores):

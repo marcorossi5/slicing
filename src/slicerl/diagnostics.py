@@ -2,7 +2,6 @@
 import os
 from tensorflow.keras.utils import Progbar
 from slicerl.Event import Event
-from slicerl.tools import quality_metric
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
