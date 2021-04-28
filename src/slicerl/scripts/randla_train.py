@@ -243,11 +243,11 @@ def main():
     setup['output'] = out
     # load train data
     fn       = [
-        #'data/test_data_05GeV.csv.gz',
-        #'data/test_data_1GeV.csv.gz',
-        #'data/test_data_2GeV.csv.gz',
-        #'data/test_data_3GeV.csv.gz',
-        #'data/test_data_6GeV.csv.gz',
+        'data/test_data_05GeV.csv.gz',
+        'data/test_data_1GeV.csv.gz',
+        'data/test_data_2GeV.csv.gz',
+        'data/test_data_3GeV.csv.gz',
+        'data/test_data_6GeV.csv.gz',
         'data/test_data_7GeV.csv.gz',
         ]
     nev      = args.nev
