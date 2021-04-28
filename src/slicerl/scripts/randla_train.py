@@ -243,11 +243,11 @@ def main():
     setup['output'] = out
     # load train data
     fn       = [
-        'data/test_data_05GeV.csv.gz',
-        'data/test_data_1GeV.csv.gz',
-        'data/test_data_2GeV.csv.gz',
-        'data/test_data_3GeV.csv.gz',
-        'data/test_data_6GeV.csv.gz',
+        #'data/test_data_05GeV.csv.gz',
+        #'data/test_data_1GeV.csv.gz',
+        #'data/test_data_2GeV.csv.gz',
+        #'data/test_data_3GeV.csv.gz',
+        #'data/test_data_6GeV.csv.gz',
         'data/test_data_7GeV.csv.gz',
         ]
     nev      = args.nev
@@ -283,7 +283,9 @@ def main():
     checkpoint_filepath = f"{setup['output']}"+"/actor.h5"
     callbacks = [
         TensorBoard(log_dir=logdir,
+                    write_graph=False,
                     write_images=True,
+                    histogram_freq=5,
                     profile_batch=5),
         ModelCheckpoint(filepath=checkpoint_filepath,
                         save_best_only=True,
