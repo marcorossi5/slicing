@@ -293,7 +293,7 @@ def main():
                         monitor='val_acc',
                         verbose=1),
         ReduceLROnPlateau(monitor='val_acc', factor=0.5, mode='max',
-                          verbose=1, patience=2, min_lr=1e-4)
+                          verbose=1, patience=5, min_lr=1e-4)
     ]
     print(f"[+] Train for {args.epochs} epochs ...")
     actor.fit(train_generator, epochs=args.epochs,
