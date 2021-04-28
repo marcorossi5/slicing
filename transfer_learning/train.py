@@ -224,9 +224,6 @@ def main():
     if args.debug:
         print("[+] Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
-    else:
-        print("[+] Run all tf functions in graph mode")
-        tf.compat.v1.disable_eager_execution()
 
     # create output folder
     if args.output is not None:
@@ -289,7 +286,7 @@ def main():
     callbacks = [
         TensorBoard(log_dir=logdir,
                     write_images=True,
-                    profile_batch=2),
+                    profile_batch=5),
         ModelCheckpoint(filepath=checkpoint_filepath,
                         save_best_only=True,
                         mode='max',
@@ -307,7 +304,7 @@ def main():
     actor.load_weights(checkpoint_filepath)
     
     results = actor.evaluate(test_generator)
-    print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}", results)
+    print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
     y_pred, y_probs = actor.get_prediction(x_test)
     # print(f"Feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
