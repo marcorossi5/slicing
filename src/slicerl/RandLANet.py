@@ -385,10 +385,11 @@ class RandomSample(Layer):
         # tf.debugging.assert_equal(B, B_, message=f"Batches number mismatch in input point cloud, got {B} and {B_}")
         # tf.debugging.assert_equal(N, N_, message=f"Points number mismatch in input point cloud, got {N} and {N_}")
 
-        rnds = tf.TensorArray(TF_DTYPE_INT, size=B)
-        for i in tf.range(B):
-            rnds = rnds.write(i, tf.random.shuffle(tf.range(N)))
-        rnds = rnds.stack()
+        rnds = tf.expand_dims(tf.random.shuffle(tf.range(N)), 0)
+        # rnds = tf.TensorArray(TF_DTYPE_INT, size=B)
+        # for i in tf.range(B):
+        #     rnds = rnds.write(i, tf.random.shuffle(tf.range(N)))
+        # rnds = rnds.stack()
 
         valid_idx   = rnds[:,:N//2]
         invalid_idx = rnds[:,N//2:]

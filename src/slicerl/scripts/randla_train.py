@@ -156,8 +156,8 @@ def build_dataset(fn, nev=-1, min_hits=1, augment=False, nb_classes=128):
             feats = feats[None]
             target = m[None]
         target = onehot(target, nb_classes)
-        inputs.append([pc, feats])
-        targets.append(target)
+        inputs.extend([[p[None], f[None]] for p,f in zip(pc,feats)])
+        targets.extend(np.split(target, len(target), axis=0))
     return inputs, targets
 
 #======================================================================
