@@ -558,7 +558,7 @@ class RandLANet(Model):
         self.dec_iunits = self.enc_units[::-1]
         
         self.USs = [
-            UpSample(iunits, self.scale_factor, activation=self.activation, name=f'US{i}') \
+            UpSample(iunits, units, self.scale_factor, activation=self.activation, name=f'US{i}') \
                 for i, (iunits, units) in enumerate(zip(self.dec_iunits, self.dec_units))
                    ]
 
