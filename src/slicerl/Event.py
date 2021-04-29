@@ -146,6 +146,17 @@ class Event:
             return np.zeros((self.max_hits, 4))
 
     #----------------------------------------------------------------------
+    def store_preds(self, pred):
+        """
+        Store predicted slicing info in self.status.
+        
+        Parameters
+        ----------
+            - pred : np.array, predictions array of shape=(num calohits,)
+        """
+        self.status = pred
+
+    #----------------------------------------------------------------------
     def calohits_to_array(self):
         """
         Takes calohits list into a list of arrays for plot rendering.

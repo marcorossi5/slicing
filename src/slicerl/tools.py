@@ -141,8 +141,8 @@ def onehot(ind, depth):
         - ind   : np.array, array of indices of int dtype
         - depth : int, length of the one-hot encoding axis
     
-    Return
-    ------
+    Returns
+    -------
         np.array, one-hot encoded array of shape=(ind.shape + (depth,))
     """
     return np.eye(depth)[ind.astype(np.int16)]
@@ -156,8 +156,8 @@ def onehot_to_indices(onehot):
     ----------
         - one_hot : np.array, array of one-hot encoded
     
-    Return
-    ------
+    Returns
+    -------
         np.array, indices array of shape=(one_hot.shape[:-1])
     """
     return np.argmax(onehot, axis=-1)

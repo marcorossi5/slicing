@@ -36,6 +36,51 @@ class EventDataset(tf.keras.utils.Sequence):
     #----------------------------------------------------------------------
     def __len__(self):
         return len(self.inputs)
+    
+    #----------------------------------------------------------------------
+    def get_pc(self, index):
+        """
+        Get the point cloud at a certain index.
+        
+        Returns
+        -------
+            - np.array, point cloud of shape=(N,2)
+        """
+        return self.inputs[index][0][0]
+    
+    #----------------------------------------------------------------------
+    def get_feats(self, index):
+        """
+        Get the point cloud features at a certain index.
+        
+        Returns
+        -------
+            - np.array, point cloud of shape=(N,2)
+        """
+        return self.inputs[index][1][0]
+
+    #----------------------------------------------------------------------
+    def get_onehot_targets(self, index):
+        """
+        Get the point cloud features at a certain index.
+        
+        Returns
+        -------
+            - np.array, point cloud of shape=(N, nb_classes)
+        """
+        return self.targets[index][0]
+    
+    #----------------------------------------------------------------------
+    def get_targets(self, index):
+        """
+        Get the point cloud features at a certain index.
+        
+        Returns
+        -------
+            - np.array, point cloud of shape=(N,)
+        """
+        return onehot_to_indices( self.targets[index][0] )
+
 
 #======================================================================
 def rotate_pc(pc, t):
@@ -95,6 +140,15 @@ def transform(pc, feats, target):
 
 #======================================================================
 def build_dataset(fn, nev=-1, min_hits=1, augment=False, nb_classes=128):
+    """
+    Returns
+    -------
+        - list, of Event instances
+        - list, of inputs and targets couples:
+            inputs is a list of couples [pc, features], pc of shape=(B,N,2) and
+            features of shape=(B,N);
+            targets is a list on np.arrays of shape=(B,N, nb_classes)
+    """
     if isinstance(fn, str):
         events  = load_Events_from_file(fn, nev, min_hits)
     elif isinstance(fn, list):
@@ -117,7 +171,7 @@ def build_dataset(fn, nev=-1, min_hits=1, augment=False, nb_classes=128):
         target = onehot(target, nb_classes)
         inputs.extend([[p[None], f[None]] for p,f in zip(pc,feats)])
         targets.extend(np.split(target, len(target), axis=0))
-    return inputs, targets
+    return events, [inputs, targets]
 
 #======================================================================
 def split_dataset(data, split=0.5):

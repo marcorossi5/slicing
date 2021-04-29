@@ -478,8 +478,6 @@ class UpSample(Layer):
         feats = tf.concat([res,feats], axis=-1, name=f'res_cat')
         return self.MLP(feats)
 
-
-
     #----------------------------------------------------------------------
     def get_config(self):
         config = super(UpSample, self).get_config()
@@ -490,6 +488,45 @@ class UpSample(Layer):
             "activation"  : self.activation
         })
         return config
+
+#======================================================================
+class Predictions:
+    """ Utility class to return RandLA-Net predictions. """
+    def __init__(self, predictions):
+        """
+        Parameters
+        ----------
+            - predictions : list, each element is a tf.Tensor with
+                            shape=(N,nb_classes)
+        """
+        self.predictions = [onehot_to_indices(pred.numpy()) for pred in predictions]
+        self.probs = [tf.nn.softmax(pred, axis=-1).numpy() for pred in predictions]
+    
+    #----------------------------------------------------------------------
+    def get_pred(self, index):
+        """
+        Parameters
+        ----------
+            - index : int, index in prediction list
+        
+        Returns
+        -------
+            - np.array: prediction at index i of shape=(N,)
+        """
+        return self.predictions[index]
+
+    #----------------------------------------------------------------------
+    def get_probs(self, index):
+        """
+        Parameters
+        ----------
+            - index : int, index in probs list
+        
+        Returns
+        -------
+            - np.array: prediction at index i of shape=(N,nb_classes)
+        """
+        return self.probs[index]
 
 #======================================================================
 class RandLANet(Model):
@@ -525,7 +562,7 @@ class RandLANet(Model):
         self.fc_acts  = [self.activation]*3 + ['linear']
         self.latent_f_dim = 32
         self.enc_units  = [
-            self.latent_f_dim*self.scale_factor**i \
+            self.latent_f_dim*2**i \
                 for i in range(self.nb_layers)
                           ]
         self.enc_iunits = [8] + self.enc_units[:-1]
@@ -644,14 +681,10 @@ class RandLANet(Model):
         Returns
         -------
             - pred  : list, output list containing np.array of predictions,
-                      each of shape=[(B,N)]
+                      each of shape=[(1,N)]
             - probs : list, output list containing np.array of class probabilities,
-                      each of shape=[(B,N,nb_classes)]
+                      each of shape=[(1,N,nb_classes)]
         """
-        pred   = []
-        probs = []
-        for inp in inputs:
-            out = self.predict_on_batch(inp)
-            pred.append(onehot_to_indices(out))
-            probs.append( tf.nn.softmax(out, axis=-1).numpy() )
-        return pred, probs
+        predictions = [ tf.squeeze(self.predict_on_batch(inp), 0) \
+                            for inp in inputs]
+        return Predictions(predictions)

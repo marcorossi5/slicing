@@ -5,7 +5,11 @@ from time import time as tm
 import tensorflow as tf
 from slicerl.build_model import build_and_train_model
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # "idx" for single, "-1" for all gpus
+def config_tf(setup):
+    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get('gpu')
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
 #----------------------------------------------------------------------
 def makedir(folder):
@@ -53,9 +57,6 @@ def main():
         '--force', '-f', help='Overwrite existing files if present', action='store_true', dest='force',                        
     )
     parser.add_argument(
-        "-e", "--epochs", help="Number of events to be run", type=int, default=2
-    )
-    parser.add_argument(
         "--debug", help="Run TensorFlow eagerly", action="store_true", default=False
     )
     args = parser.parse_args()
@@ -78,6 +79,7 @@ def main():
     if args.runcard:
         # load yaml
         setup.update( load_runcard(args.runcard) )
+        config_tf(setup)
 
         # create output folder
         base = os.path.basename(args.runcard)

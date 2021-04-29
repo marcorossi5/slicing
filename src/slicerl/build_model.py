@@ -21,21 +21,24 @@ from slicerl.losses import get_loss
 def build_and_train_model(setup):
     start = tm()
     # load train data
-    fn       = setup['train']['fn']
-    nev      = setup['train']['nev']
-    min_hits = setup['train']['min_hits']
-    train = build_dataset(fn, nev=nev, min_hits=min_hits, augment=True)
+    fn         = setup['train']['fn']
+    nev        = setup['train']['nev']
+    min_hits   = setup['train']['min_hits']
+    nb_classes = setup['model']['nb_classes']
+    _, train = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes, augment=True)
     train_generator = EventDataset(train, shuffle=True)
 
     # load val, test data
     fn       = setup['test']['fn']
     nev      = setup['test']['nev']
     min_hits = setup['test']['min_hits']
-    data = build_dataset(fn, nev=nev, min_hits=min_hits)
-    (x_test, y_test), val = split_dataset(data)
+    events, data = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes)
+    val, test = split_dataset(data)
+    l = len(events)//2
+    events = events[l:]
 
     val_generator  = EventDataset(val, shuffle=False)
-    test_generator = EventDataset((x_test, y_test), shuffle=False)
+    test_generator = EventDataset(test, shuffle=False)
 
     net = RandLANet(**setup['model'], name='RandLA-Net')
 
@@ -84,25 +87,28 @@ def build_and_train_model(setup):
         )
     ]
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
-    net.fit(train_generator, epochs=setup['train']['epochs'],
-              validation_data=val_generator,
-              callbacks=callbacks,
-              verbose=2)
+    # net.fit(train_generator, epochs=setup['train']['epochs'],
+    #           validation_data=val_generator,
+    #           callbacks=callbacks,
+    #           verbose=2)
 
     print("[+] done with training, load best weights")
-    net.load_weights(checkpoint_filepath)
+    # net.load_weights(checkpoint_filepath)
     
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
-    y_pred, y_probs = net.get_prediction(x_test)
+    y_pred = net.get_prediction(test_generator.inputs)
     # print(f"Feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
+    for i,event in enumerate(events):
+        event.store_preds(y_pred.get_pred(i))
 
     from slicerl.diagnostics import norm, cmap
 
-    pc      = x_test[0][0][0]                    # shape=(N,2)
-    pc_pred = y_pred[0][0]                       # shape=(N,)
-    pc_test = onehot_to_indices(y_test[0][0])    # shape=(N,)
+    pc      = test_generator.get_pc(4)      # shape=(N,2)
+    pc_pred = y_pred.get_pred(4)            # shape=(N,)
+    pc_test = test_generator.get_targets(4) # shape=(N,)
+
     # print(f"pc shape: {pc.shape} \t pc pred shape: {pc_pred.shape} \t pc test shape: {pc_test.shape}")
 
     fig = plt.figure(figsize=(18*2,14))

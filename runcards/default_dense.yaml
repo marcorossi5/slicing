@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+gpu: "0,1"
 model:
     fc_type: "dense"
     nb_classes: 128

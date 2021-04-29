@@ -25,7 +25,8 @@ def dice_loss(y_true,y_pred):
 
 #======================================================================
 def focal_crossentropy(y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False):
-    """Implemention of the focal loss function from
+    """
+    Implemention of the focal loss function from
     tfa.losses.SigmoidFocalCrossEntropy function.
     Focal loss was first introduced in the RetinaNet paper
     (https://arxiv.org/pdf/1708.02002.pdf). Focal loss is extremely useful for
@@ -35,12 +36,16 @@ def focal_crossentropy(y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False):
     to the loss value corresponding to a well-classified example. One of the
     best use-cases of focal loss is its usage in object detection where the
     imbalance between the background class and other classes is extremely high.
-    Args:
+    
+    Parameters
+    ----------
         y_true: true targets tensor.
         y_pred: predictions tensor.
         alpha: balancing factor.
         gamma: modulating factor.
-    Returns:
+    
+    Returns
+    -------
         Weighted loss float `Tensor`. If `reduction` is `NONE`,this has the
         same shape as `y_true`; otherwise, it is scalar.
     """
