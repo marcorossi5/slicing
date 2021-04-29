@@ -61,9 +61,9 @@ def get_window_width(masses, lower_frac=20, upper_frac=80):
 def confusion_matrix_per_event(scores):
     """
     Computes confusion matrix values for each jet in list
-      - scores  list of event numpy array scores per event: first level events, 
+      - scores  list of event numpy array scores per event: first level events,
                 second level arrays of shape [num particles, 2]
-    Returns 
+    Returns
       - tp      true positives ratio in jet distribution
       - fp      false positives ratio in jet distribution
       - fn      false negatives ratio in jet distribution
@@ -83,7 +83,7 @@ def confusion_matrix_per_event(scores):
         fp.append(len(np.where(preds[~truths] == 1)[0])/tot)
         fn.append(len(np.where(preds[truths]  == 0)[0])/tot)
         tn.append(len(np.where(preds[~truths] == 0)[0])/tot)
-    
+
     return np.array(tp), np.array(fp), np.array(fn), np.array(tn)
 
 #----------------------------------------------------------------------
@@ -140,7 +140,7 @@ def onehot(ind, depth):
     ----------
         - ind   : np.array, array of indices of int dtype
         - depth : int, length of the one-hot encoding axis
-    
+
     Returns
     -------
         np.array, one-hot encoded array of shape=(ind.shape + (depth,))
@@ -155,7 +155,7 @@ def onehot_to_indices(onehot):
     Parameters
     ----------
         - one_hot : np.array, array of one-hot encoded
-    
+
     Returns
     -------
         np.array, indices array of shape=(one_hot.shape[:-1])

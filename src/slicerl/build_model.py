@@ -52,13 +52,14 @@ def build_and_train_model(setup):
     elif setup['train']['optimizer'] == 'Adagrad':
         opt = Adagrad(lr=lr)
 
+    loss = get_loss(setup['train'], setup['model']['nb_classes'])
     net.compile(
-            loss= get_loss(setup['train']),
+            loss= loss,
             optimizer= opt,
             metrics=[tf.keras.metrics.CategoricalAccuracy(name='acc')],
             run_eagerly=setup.get('debug')
             )
-    
+
     net.model().summary()
     # tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
@@ -94,7 +95,7 @@ def build_and_train_model(setup):
 
     print("[+] done with training, load best weights")
     net.load_weights(checkpoint_filepath)
-    
+
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
@@ -103,21 +104,14 @@ def build_and_train_model(setup):
     for i,event in enumerate(events):
         event.store_preds(y_pred.get_pred(i))
 
-    from slicerl.diagnostics import norm, cmap
 
-    pc      = test_generator.get_pc(4)      # shape=(N,2)
-    pc_pred = y_pred.get_pred(4)            # shape=(N,)
-    pc_test = test_generator.get_targets(4) # shape=(N,)
+    pc      = test_generator.get_pc(0)      # shape=(N,2)
+    pc_pred = y_pred.get_pred(0)            # shape=(N,)
+    pc_test = test_generator.get_targets(0) # shape=(N,)
 
     # print(f"pc shape: {pc.shape} \t pc pred shape: {pc_pred.shape} \t pc test shape: {pc_test.shape}")
 
-    fig = plt.figure(figsize=(18*2,14))
-    ax = fig.add_subplot(121)
-    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_pred, cmap=cmap, norm=norm)
-    ax.set_title("pc_pred")
-
-    ax = fig.add_subplot(122)
-    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=cmap, norm=norm)
-    ax.set_title("pc_true")
-    fname = f"{setup['output']}/test.png"
-    plt.savefig(fname, bbox_inches='tight', dpi=300)
+    from slicerl.diagnostics import plot_plane_view, plot_slice_size, plot_multiplicity
+    plot_plane_view(pc, pc_pred, pc_test, setup['output'])
+    plot_slice_size(events, setup['output'])
+    plot_multiplicity(events, setup['output'])

@@ -22,8 +22,9 @@ train:
     nev: -1
     min_hits: 1
     hist_freq: 2
-    loss: "focal_l1" # "xent" | "focal" | "xent_l1" | "focal_l1"
+    loss: "xent_l1" # "xent" | "focal" | "xent_l1" | "focal_l1"
     from_logits: True
+    wgt: 50
     gamma: 2
     epochs: 20
     lr: 0.01

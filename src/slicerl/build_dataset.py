@@ -22,7 +22,7 @@ class EventDataset(tf.keras.utils.Sequence):
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(self.targets), \
             f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
-    
+
     #----------------------------------------------------------------------
     def on_epoch_end(self):
         if self.shuffle:
@@ -36,23 +36,23 @@ class EventDataset(tf.keras.utils.Sequence):
     #----------------------------------------------------------------------
     def __len__(self):
         return len(self.inputs)
-    
+
     #----------------------------------------------------------------------
     def get_pc(self, index):
         """
         Get the point cloud at a certain index.
-        
+
         Returns
         -------
             - np.array, point cloud of shape=(N,2)
         """
         return self.inputs[index][0][0]
-    
+
     #----------------------------------------------------------------------
     def get_feats(self, index):
         """
         Get the point cloud features at a certain index.
-        
+
         Returns
         -------
             - np.array, point cloud of shape=(N,2)
@@ -63,18 +63,18 @@ class EventDataset(tf.keras.utils.Sequence):
     def get_onehot_targets(self, index):
         """
         Get the point cloud features at a certain index.
-        
+
         Returns
         -------
             - np.array, point cloud of shape=(N, nb_classes)
         """
         return self.targets[index][0]
-    
+
     #----------------------------------------------------------------------
     def get_targets(self, index):
         """
         Get the point cloud features at a certain index.
-        
+
         Returns
         -------
             - np.array, point cloud of shape=(N,)
@@ -90,7 +90,7 @@ def rotate_pc(pc, t):
     Parameters
     ----------
         - pc : tf.Tensor, point cloud of shape=(N,2)
-        - t  : list, list of angles in radiants of length=(B,) 
+        - t  : list, list of angles in radiants of length=(B,)
 
     Returns
     -------
@@ -108,13 +108,13 @@ def rotate_pc(pc, t):
 def transform(pc, feats, target):
     """
     Augment a inputs rotating points. Targets and feats remain the same
-    
+
     Parameters
     ----------
         - pc      : tf.Tensor, point cloud of shape=(N,2)
         - feats   : tf.Tensor, feature point cloud of shape=(N,2)
         - target : tf.Tensor, segmented point cloud of shape=(N,)
-    
+
     Returns
     -------
         - tf.Tensor, augmented point cloud of shape=(B,N,2)
@@ -175,12 +175,12 @@ def build_dataset(fn, nev=-1, min_hits=1, augment=False, nb_classes=128):
 
 #======================================================================
 def split_dataset(data, split=0.5):
-    """ 
+    """
     Parameters
     ----------
         - data  : list, [inputs, targets] for RandLA-Net to split
         - split : list, [validation, test] percentages
-    
+
     Returns
     -------
         - list, [inputs, targets] for validation
@@ -197,6 +197,6 @@ def split_dataset(data, split=0.5):
 
     val_targets   = targets[:split_idx]
     test_targets  = targets[split_idx:]
-    
+
     return [val_inputs, val_targets],     \
            [test_inputs, test_targets]

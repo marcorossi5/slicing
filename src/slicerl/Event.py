@@ -13,7 +13,7 @@ EventTuple = namedtuple("EventTuple", ["E", "x", "z", "cluster_idx", "pndr_idx",
 #======================================================================
 class Event:
     """Event class keeping track of calohits in a 2D plane view."""
-    
+
     #----------------------------------------------------------------------
     def __init__(self, calohits, min_hits=1, max_hits=15000):
         """
@@ -57,9 +57,9 @@ class Event:
         self.sorted_mc_idx = sorted(list(set(calohits[5])), key=sort_fn, reverse=True)
         for i, idx in enumerate(self.sorted_mc_idx):
             self.ordered_mc_idx[calohits[5] == idx] = i
-        
+
         # self.n_first_mc_slice = np.count_nonzero(self.ordered_mc_idx == 0)
-        
+
         # build the pndr_slice ordering (useful for testing)
         self.pndr_idx         = calohits[4]
         self.ordered_pndr_idx = deepcopy(calohits[4])
@@ -67,7 +67,7 @@ class Event:
         self.sorted_pndr_idx = sorted(list(set(calohits[4])), key=sort_fn, reverse=True)
         for i, idx in enumerate(self.sorted_pndr_idx):
             self.ordered_pndr_idx[calohits[4] == idx] = i
-        
+
         # build pfo cluster list ordering
         self.cluster_idx         = calohits[3]
         self.ordered_cluster_idx = deepcopy(calohits[3])
@@ -94,14 +94,14 @@ class Event:
     #----------------------------------------------------------------------
     def state(self, step=None, is_training=False):
         """
-        Return the observable state: padded point cloud, describing 
+        Return the observable state: padded point cloud, describing
         (E, x, z, pfo cluster idx, current status) for each calohit
 
         Parameter
         ---------
             - step        : int, episode_step (needed during training only)
             - is_training : bool, training mode or not
-        
+
         Returns
         -------
             - array of shape=(max_hits, 4)
@@ -109,7 +109,7 @@ class Event:
         # mc_idx[mc_idx>=index] and status[status==-1] may differ (if the algorithm is not perfect)
         # this means that we can remove wrong partlices and them won't be available in future steps
         # or we fail to remove particles that enter steps when they should not be in
-        
+
         # put here an is_training flag and while training draw with some percentage either perfect inputs
         # or inputs caused by actions taken before
 
@@ -118,7 +118,7 @@ class Event:
 
 
         # keep track of indices in self.current_status that are going to be involved in the next computation
-        
+
         # for multiclass prediction return just the point cloud
         return self.point_cloud.T
         self.drawn_from_mc = np.random.rand() <= self.rnd_draw
@@ -132,7 +132,7 @@ class Event:
             self.considered = np.argwhere(self.ordered_mc_idx >= step).flatten()
         else:
             self.considered = np.argwhere(self.status == -1).flatten()
-                
+
         # number of unlabelled calohits involved in the computation
         self.nconsidered = len(self.considered)
 
@@ -149,7 +149,7 @@ class Event:
     def store_preds(self, pred):
         """
         Store predicted slicing info in self.status.
-        
+
         Parameters
         ----------
             - pred : np.array, predictions array of shape=(num calohits,)
@@ -165,7 +165,7 @@ class Event:
         -------
             - numpy array of shape (7, num calohits). Rows contain in order:
               energies, xs, zs, cluster_idx, pndr_idx, cheating_idx, slicerl_idx
-        
+
         Note
         ----
             - energy is measured in ADC

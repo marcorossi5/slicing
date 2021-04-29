@@ -64,283 +64,89 @@ def print_stats(name, data, mass_ref, output_folder='./'):
               file=f)
 
 #----------------------------------------------------------------------
-def plot_multiplicity(events, output_folder='./', loaddir=None):
+def plot_multiplicity(events, output_folder='./'):
     """Plot the slice multiplicity distribution and output some statistics."""
-    if loaddir is not None:
-        fname = '%s/nmc.npy' % loaddir
-        nmc = np.load(fname)
-        fname = '%s/nddpg.npy' % loaddir
-        nddpg = np.load(fname)
-    else:
-        nmc = np.array( [len(set(event.mc_idx)) for event in events] )
-        nddpg = np.array( [len(set(event.slicerl_idx)) for event in events] )
-    
-    bins = np.linspace(0, 200, 201)
+    nmc = np.array( [len(set(event.mc_idx)) for event in events] )
+    npred = np.array( [len(set(event.status)) for event in events] )
+
+    bins = np.linspace(0, 127, 128)
     hnmc, _   = np.histogram(nmc, bins=bins)
-    hnddpg, _ = np.histogram(nddpg, bins=bins)
+    hnpred, _ = np.histogram(npred, bins=bins)
 
     plt.rcParams.update({'font.size': 20})
-    plt.figure(figsize=(18,14))
-    
+    plt.figure(figsize=(9,7))
+
     plt.hist(bins[:-1], bins, weights=hnmc, histtype='step', color='blue', label='mc')
-    plt.hist(bins[:-1], bins, weights=hnddpg, histtype='step', color='red', label='ddpg')
+    plt.hist(bins[:-1], bins, weights=hnpred, histtype='step', color='red', label='net')
 
     plt.xlabel("multiplicity", loc='right')
     plt.xlim((bins[0], bins[-1]))
     plt.legend()
     fname = f"{output_folder}/multiplicity.pdf"
+    print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches='tight')
-        
-    print_stats('Slice multiplicity', nddpg  , nmc, output_folder=output_folder)
-    resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/nmc.npy", nmc)
-    np.save(f"{resultsdir}/nddpg.npy", nddpg)
+    plt.close()
 
 #----------------------------------------------------------------------
-def plot_slice_size(events, output_folder='./', loaddir=None):
+def plot_slice_size(events, output_folder='./'):
     """Plot the slice size distribution and output some statistics."""
-    bins = np.linspace(0, 100, 101)
+    bins = np.linspace(50, 1500, 101)
+    use_bins = [np.array([0]), bins, np.array([np.inf])]
+    use_bins = np.concatenate(use_bins)
 
-    if loaddir is not None:
-        fname = '%s/smc.npy' % loaddir
-        smc = np.load(fname)
-        fname = '%s/sddpg.npy' % loaddir
-        sddpg = np.load(fname)
-    else:
-        binc_mc = [np.bincount(event.mc_idx.astype(np.int32)[event.mc_idx >= 0]) for event in events]
-        binc_ddpg = [np.bincount(event.slicerl_idx.astype(np.int32)) for event in events]
-        smc = sum( [np.histogram(bc, bins=bins)[0] for bc in binc_mc] )
-        sddpg = sum( [np.histogram(bc, bins=bins)[0] for bc in binc_ddpg] )
-    
+
+    binc_mc = [np.bincount(event.ordered_mc_idx.astype(np.int32)) for event in events]
+    binc_pred = [np.bincount(event.status.astype(np.int32)) for event in events]
+    smc = sum( [np.histogram(bc, bins=use_bins)[0] for bc in binc_mc] )
+    spred = sum( [np.histogram(bc, bins=use_bins)[0] for bc in binc_pred] )
+
+    uflow_mc = smc[0]
+    oflow_mc = smc[1]
+
+    uflow_pred = spred[0]
+    oflow_pred = spred[1]
+
+    smc = smc[1:-1]
+    spred = spred[1:-1]
+
     plt.rcParams.update({'font.size': 20})
-    plt.figure(figsize=(18,14))
+    fig = plt.figure(figsize=(9,7))
 
-    plt.hist(bins[:-1], bins, weights=smc, histtype='step', color='blue', label='mc')
-    plt.hist(bins[:-1], bins, weights=sddpg, histtype='step', color='red', label='ddpg')
+    ax = fig.add_subplot()
+    ax.hist(bins[:-1], bins, weights=smc, histtype='step', color='blue', label='mc')
+    ax.hist(bins[:-1], bins, weights=spred, histtype='step', color='red', label='net')
 
-    plt.xlabel("size", loc='right')
-    plt.xlim((bins[0], bins[-1]))
+    ax.set_xlabel("size", loc='right')
+    ax.set_xlim((bins[0], bins[-1]))
 
-    plt.legend()
+    textstr = f"Underflow   Overflow\nmc{uflow_mc:>7}  {oflow_mc:>9}\nnet{uflow_pred:>6}  {oflow_pred:>9}"
+
+    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+
+    ax.text(0.68, 0.78, textstr, transform=ax.transAxes, fontsize=14,
+        verticalalignment='top', bbox=props)
+
+    ax.legend()
     fname = f"{output_folder}/slice_size.pdf"
+    print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches='tight')
-        
-    print_stats('Slice multiplicity', sddpg  , smc, output_folder=output_folder)
-    resultsdir = '%s/results' % output_folder
-    np.save(f"{resultsdir}/smc.npy", smc)
-    np.save(f"{resultsdir}/sddpg.npy", sddpg)
+    plt.close()
+
 
 #----------------------------------------------------------------------
-def plot_plane_view(events, output_folder='./', loaddir=None):
-    event_arr = events[0]
-
+def plot_plane_view(pc, pc_pred, pc_test, output_folder='./'):
     fig = plt.figure(figsize=(18*2,14))
     ax = fig.add_subplot(121)
-    ax.set_title(f"Slicing Algorithm Output, 2D plane view")
-    ax.set_xlabel("x [cm]")
-    ax.set_ylabel("z [cm]")
-    num_rl_clusters = len(set(event_arr.slicerl_idx))
-    m = event_arr.slicerl_idx != -1
-    # print(f"Hits not labelled: {np.count_nonzero(~m)}")
-    # sort all the cluster with greater number of hits
-    print(f"Plotting event with {len(event_arr.x)} calohits")
-    print(f"Plotting {num_rl_clusters} slices in event")
-    ax.scatter(event_arr.x[m], event_arr.z[m], s=1, c=event_arr.slicerl_idx[m], marker='.', cmap=cmap, norm=norm)
-    ax.set_box_aspect(1)
+    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_pred, cmap=cmap, norm=norm)
+    ax.set_title("pc_pred")
 
     ax = fig.add_subplot(122)
-    ax.set_title(f"Cheating Algorithm Truths, 2D plane view")
-    ax.set_xlabel("x [cm]")
-    ax.set_ylabel("z [cm]")
-    num_mc_clusters = int(event_arr.mc_idx.max()) + 1
-    print(f"Plotting {num_mc_clusters} true slices in event")
-    ax.scatter(event_arr.x, event_arr.z, s=1, c=event_arr.mc_idx, marker='.', cmap=cmap, norm=norm)
-    ax.set_box_aspect(1)
-    fname = f"{output_folder}/pview.pdf"
-    plt.savefig(fname, bbox_inches='tight')
-
-#----------------------------------------------------------------------
-def produce_slicing_animation(nmd, fname):
-    """
-    Produce an output animation to visualize event processing.
-    
-    Parameters
-    ----------
-        - nmd   : EventTuple, namedtuple from event
-        - fname : str, output animation filename
-    """
-    plt.rcParams.update({'font.size': 10})
-    fig = plt.figure(figsize=(6.4*2, 4.8))
-    
-    # now plot the first frame with all black points
-    # every new frame shows a new slice with a new color
-    sort_fn    = lambda x: np.count_nonzero(nmd.slicerl_idx == x)
-    s_idx      = sorted(list(set(nmd.slicerl_idx)), key=sort_fn, reverse=True)
-    nslices    = len(s_idx)
-
-    sort_fn    = lambda x: np.count_nonzero(nmd.mc_idx == x)
-    mc_idx     = sorted(list(set(nmd.mc_idx)), key=sort_fn, reverse=True)
-    # nmcslices  = len(mc_idx)
-
-    ax0 = fig.add_subplot(121)
-    ax0.set_title(f"Slicing Algorithm Output, 2D plane view")
-    ax0.set_xlabel("x [cm]")
-    ax0.set_ylabel("z [cm]")
-    scatt0 = ax0.scatter(nmd.x, nmd.z, s=1, c=nmd.slicerl_idx, marker='.', cmap=cmap, norm=norm)
-    ax0.set_xlabel(f"Episode start")
-
-    ax1 = fig.add_subplot(122)
-    ax1.set_title(f"Cheating Algorithm Truths, 2D plane view")
-    ax1.set_xlabel("x [cm]")
-    ax1.set_ylabel("z [cm]")
-    scatt1 = ax1.scatter(nmd.x, nmd.z, s=1, c=nmd.mc_idx, marker='.', cmap=cmap, norm=norm)
-    ax1.set_box_aspect(1)
-
-    def animate(i, scatterplot0, scatterplot1):
-        # FuncAnimation repeats twice the first frame, but skip that since it's
-        # already built. First color in colors list is black.
-        if i == -1:
-            return (scatterplot0, scatterplot1)
-        # if i == 0:
-        #     scatterplot0.set_cmap(vcmap)
-        #     scatterplot0.set_norm(vnorm)
-        #     scatterplot1.set_cmap(vcmap)
-        #     scatterplot1.set_norm(vnorm)
-        idx = s_idx[i]
-        m = nmd.slicerl_idx == idx
-        # c[m] = idx
-        # scatterplot0.set_array(c)
-        scatterplot0.set_array(np.where(m, 1, 0))
-        ax0.xaxis.label.set_color(colors[int(idx)+1])
-        ax0.set_xlabel(f"z [cm]    Slice: {int(idx)}")
-
-        idx = mc_idx[i]
-        m = nmd.mc_idx == idx
-        # c[m] = idx
-        # scatterplot0.set_array(c)
-        scatterplot1.set_array(np.where(m, 1, 0))
-        ax1.xaxis.label.set_color(colors[int(idx)+1])
-        ax1.set_xlabel(f"z [cm]    Slice: {int(idx)}")
-
-        return (scatterplot0, scatterplot1) # must return an iterable
-
-    anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, nslices), interval=5000, fargs=(scatt0, scatt1), blit=True)
-
-    writergif = mpl.animation.PillowWriter(fps=0.5)
-    anim.save(fname, writer=writergif)    
-
-    # close figure
+    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=cmap, norm=norm)
+    ax.set_title("pc_true")
+    fname = f"{output_folder}/pview.png"
+    print(f"[+] Saving plot at {fname} ")
+    plt.savefig(fname, bbox_inches='tight', dpi=300)
     plt.close()
-
-#----------------------------------------------------------------------
-def render(event, action_scores, fname):
-    """
-    Produce an output animation to visualize event processing. On the left
-    subsequent actions. On the right the current mc slice. Start frame is just
-    scatterplot without colors.
-    
-    Parameters
-    ----------
-        - event         : Event
-        - action_scores : np.array, shape=(num_slices, num_calohits)
-        - fname         : str, output animation filename
-    """
-    x = event.calohits[1] * 1000 # restore original unit measures [cm]
-    z = event.calohits[2] * 1000 # restore original unit measures [cm]
-    mc_idx = event.ordered_mc_idx
-    null_score = np.zeros_like(action_scores[0])
-
-    plt.rcParams.update({'font.size': 10})
-    fig = plt.figure(figsize=(6.4*2, 4.8))
-
-    # num_slices = max(len(set(mc_idx)), action_scores.shape[0])
-    num_slices = len(set(mc_idx))
-    if num_slices > action_scores.shape[0]:
-        pad = np.zeros([num_slices - action_scores.shape[0], action_scores.shape[1]])
-        action_scores = np.concatenate([action_scores, pad])
-
-    # now plot the first frame with all black points
-    # every new frame shows a new slice with a new color
-    c = np.zeros_like(z)
-
-    ax0 = fig.add_subplot(121)
-    ax0.set_title("Slicing Algorithm Output, 2D plane view")
-    ax0.set_xlabel("x [cm]")
-    ax0.set_ylabel("z [cm]")
-    scatt0 = ax0.scatter(x, z, s=1, c=c, marker='.', norm=vnorm)
-    ax0.set_xlabel("Episode start")
-    ax0.set_box_aspect(1)
-
-    # at this point the mc_idx must already be sorted in increasing order
-    # just plot all the colors stored in mc_idx
-    ax1 = fig.add_subplot(122)
-    ax1.set_title("Cheating Algorithm Truths, 2D plane view")
-    ax1.set_xlabel("x [cm]")
-    ax1.set_ylabel("z [cm]")
-    scatt1 = ax1.scatter(x, z, s=1, c=mc_idx, marker='.', cmap=cmap, norm=norm)
-    ax1.set_xlabel("MC slices")
-    ax1.set_box_aspect(1)
-
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.82, 0.15, 0.01, 0.7])
-    fig.colorbar(mpl.cm.ScalarMappable(norm=vnorm, cmap=vcmap), cax=cbar_ax)
-    # fig.colorbar(z, cax=cbar_ax)
-
-    def animate(i, scatterplot0, scatterplot1):
-        # FuncAnimation repeats twice the first frame, but skip that since it's
-        # already built. First color in colors list is black.
-        if i == -1:
-            return (scatterplot0, scatterplot1)
-        scatterplot0.set_array(action_scores[i])
-        ax0.set_xlabel(f"Slice: {i}")
-
-        # plot the mask of the current mc slice
-        
-        scatterplot1.set_array((mc_idx == i).astype(np.int16))
-        ax1.set_xlabel(f"Slice: {i}")
-        if i == 0:
-            scatterplot0.set_cmap(vcmap)
-            scatterplot1.set_cmap(vcmap)
-            scatterplot1.set_norm(vnorm)
-        return (scatterplot0, scatterplot1) # must return an iterable
-
-    anim = mpl.animation.FuncAnimation(fig, animate, frames=range(-1, num_slices), interval=2000, fargs=(scatt0, scatt1), blit=True)
-
-    writergif = mpl.animation.PillowWriter(fps=1)
-    anim.save(fname, writer=writergif)    
-
-    # close figure
-    plt.close()
-
-#----------------------------------------------------------------------
-def inference(slicer, events, visualize=False, gifname=None):
-    """
-    Slice calohits from a list of Events objects. Returns the list of
-    processed Events. Visualize just the first event
-
-    Parameters
-    ----------
-        slicer: Slicer object
-    
-    Returns
-    -------
-        The list of subtracted Events.
-    """
-    progbar = Progbar(len(events))
-    for i, event in enumerate(events):
-        if i == 0 and visualize:
-            _, actor_scores = slicer(event, visualize)
-            progbar.update(i+1)
-            continue
-        slicer(event)        
-        progbar.update(i+1)
-    if visualize:
-        print("[+] Rendering inference event")
-        start = tm()
-        render(events[0], actor_scores, gifname)
-        print(f"[+] Saving gif to {gifname}")
-        print(f"done, took {tm()-start} s")
-    return events
 
 #----------------------------------------------------------------------
 def make_plots(events_obj, plotdir):

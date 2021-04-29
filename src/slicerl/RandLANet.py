@@ -92,7 +92,7 @@ class LocSE(Layer):
 
         self.ch_dims  = self.dims*3 + 1 # point + neighbor point + relative space dims + 1 (the norm)
         self.MLP = Conv1D(self.units//2, 1, input_shape=(self.K, self.ch_dims),
-                          activation=self.activation, 
+                          activation=self.activation,
                           kernel_regularizer='l2',
                           bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
@@ -113,7 +113,7 @@ class LocSE(Layer):
         Returns
         -------
             tf.Tensor of shape=(B,N,K,2*f_dims)
-        
+
         Note: dims (spatial dimensions) equal to 2
         """
         pc, feats = inputs
@@ -130,7 +130,7 @@ class LocSE(Layer):
             shape    = [None,None,self.K]
             n_idx    = tf.ensure_shape(n_idx, shape)
             n_points = self.gather_neighbours(pc, n_idx)
-            
+
             # point cloud with K expanded axis
             Kpc   = tf.repeat(tf.expand_dims(pc,-2), self.K, -2)
             relp  = Kpc - n_points
@@ -168,7 +168,7 @@ class LocSE(Layer):
         ----------
             - pc    : tf.Tensor, point cloud tensor of shape=(B,N,dims)
             - n_idx : tf.Tensor, neighbourhood index tensor of shape=(B,N,K)
-        
+
         Returns
         -------
             tf.Tensor of shape=(B,N,K,dims)
@@ -208,13 +208,13 @@ class AttentivePooling(Layer):
         """
         shape = (self.input_units, self.K)
         self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=shape,
-                          activation='softmax', 
+                          activation='softmax',
                           kernel_regularizer='l2',
                           bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='attention_score_MLP')
         self.MLP_final = Conv1D(self.units, 1, input_shape=shape,
-                          activation=self.activation, 
+                          activation=self.activation,
                           kernel_regularizer='l2',
                           bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
@@ -229,7 +229,7 @@ class AttentivePooling(Layer):
         Parameters
         ----------
             - n_feats : tf.Tensor, point cloud tensor of shape=(B,N,dims)
-        
+
         Returns
         -------
             tf.Tensor of shape=(B,N,units)
@@ -282,19 +282,19 @@ class DilatedResBlock(Layer):
         # tf.debugging.assert_equal(N, N_, message=f"Points number mismatch in input point cloud, got {N} and {N_}")
 
         self.MLP_0   = Conv1D(self.units//4, 1, input_shape=(None, self.input_units),
-                              activation=self.activation, 
+                              activation=self.activation,
                               kernel_regularizer='l2',
                               bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_0')
         self.MLP_1   = Conv1D(self.units, 1, input_shape=(None, self.units//2),
-                              activation=self.activation, 
+                              activation=self.activation,
                               kernel_regularizer='l2',
                               bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_2')
         self.MLP_res = Conv1D(self.units, 1, input_shape=(None, self.input_units),
-                              activation=self.activation, 
+                              activation=self.activation,
                               kernel_regularizer='l2',
                               bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
@@ -317,7 +317,7 @@ class DilatedResBlock(Layer):
         ----------
             - inputs : list of tf.Tensors, tensors describing spatial and
                        feature point cloud of shapes=[(B,N,dims), (B,N,f_dims)]
-        
+
         Returns
         -------
             tf.Tensor of shape=(B,N,units)
@@ -330,7 +330,7 @@ class DilatedResBlock(Layer):
         # dilation block
         x = self.MLP_0(feats)
         x = self.att_0( self.locse_0([pc, x]) )
-        
+
         # store cash in locse_1 to skip knn building
         self.locse_1.cache = self.locse_0.cache
 
@@ -371,7 +371,7 @@ class RandomSample(Layer):
         ----------
             - inputs : list of tf.Tensors, tensors describing spatial and
                        feature point cloud of shapes=[(B,N,dims), (B,N,f_dims)]
-        
+
         Returns
         -------
             - tf.Tensor, point cloud of shape=(B,N//scale,dims)
@@ -390,7 +390,7 @@ class RandomSample(Layer):
         # B_     = shape[0]
         # N_     = shape[1]
         # f_dims = shape[2]
-        
+
         # tf.debugging.assert_equal(B, B_, message=f"Batches number mismatch in input point cloud, got {B} and {B_}")
         # tf.debugging.assert_equal(N, N_, message=f"Points number mismatch in input point cloud, got {N} and {N_}")
 
@@ -439,7 +439,7 @@ class UpSample(Layer):
         self.units       = units
         self.scale       = scale
         self.activation  = activation
-    
+
     #----------------------------------------------------------------------
     def build(self, input_shape):
         self.MLP  = Conv1D(self.units, 1, input_shape=(None,None,self.input_units),
@@ -456,7 +456,7 @@ class UpSample(Layer):
                        feature point cloud of shape=(B,N//scale,f_dims),
                        interpolating indices of shape=(B,N//scale),
                        upsampling indices of shape=(B,N),
-                       residual feature point cloud of shape=(B,N,f_dims)        
+                       residual feature point cloud of shape=(B,N,f_dims)
         Returns
         -------
             - tf.Tensor, features of shape=(B,N,f_dims)
@@ -469,7 +469,7 @@ class UpSample(Layer):
         interpolated_feats = tf.concat([feats, copy_feats], axis=1)
 
         shape = tf.shape(interpolated_feats)
-        
+
         first = tf.repeat(tf.expand_dims(tf.range(shape[0]), 1), shape[1], axis=1)
         indices = tf.stack([first, upsample_idx], axis=-1)
 
@@ -501,14 +501,14 @@ class Predictions:
         """
         self.predictions = [onehot_to_indices(pred.numpy()) for pred in predictions]
         self.probs = [tf.nn.softmax(pred, axis=-1).numpy() for pred in predictions]
-    
+
     #----------------------------------------------------------------------
     def get_pred(self, index):
         """
         Parameters
         ----------
             - index : int, index in prediction list
-        
+
         Returns
         -------
             - np.array: prediction at index i of shape=(N,)
@@ -521,7 +521,7 @@ class Predictions:
         Parameters
         ----------
             - index : int, index in probs list
-        
+
         Returns
         -------
             - np.array: prediction at index i of shape=(N,nb_classes)
@@ -589,7 +589,7 @@ class RandLANet(Model):
             ]
         else:
             raise NotImplementedError(f"First and final layers must be of type 'conv'|'dense', not {self.fc_type}")
-        
+
         if self.dropout_perc:
             self.dropout = [Dropout(self.dropout_perc, name=f'dropout{i+1}') \
                         for i in range(len(self.fc_units[1:-1]))]
@@ -603,7 +603,7 @@ class RandLANet(Model):
                               bias_regularizer='l2',
                               name='MLP')
         self.decoding   = self.build_decoder()
-        
+
     #----------------------------------------------------------------------
     def build_encoder(self):
         self.encoder = [
@@ -618,7 +618,7 @@ class RandLANet(Model):
     #----------------------------------------------------------------------
     def build_decoder(self):
         self.dec_iunits = self.enc_units[::-1]
-        
+
         self.USs = [
             UpSample(iunits, units, self.scale_factor, activation=self.activation, name=f'US{i}') \
                 for i, (iunits, units) in enumerate(zip(self.dec_iunits, self.dec_units))
@@ -677,7 +677,7 @@ class RandLANet(Model):
         Parameters
         ----------
             - inputs : list, elements of shape [(1,N,dims), (N,f_dims)]
-        
+
         Returns
         -------
             - pred  : list, output list containing np.array of predictions,

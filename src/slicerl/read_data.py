@@ -28,11 +28,11 @@ class Reader(object):
         """
         self.stream = csv.reader( gzip.open(self.infile,'rt') )
         self.n = 0
-        self.header = []        
-        
+        self.header = []
+
     #----------------------------------------------------------------------
     def __iter__(self):
-        # needed for iteration to work 
+        # needed for iteration to work
         return self
 
     #----------------------------------------------------------------------
@@ -50,7 +50,7 @@ class Reader(object):
         if (self.n == self.nmax):
             print (f"# Exiting after having read {self.nmax} events")
             return None
-        
+
         try:
             c = []
             c.append( self.readline_fn(self.stream) / 100 ) # energies [ADC]/100
@@ -143,8 +143,8 @@ def load_Events_from_file(filename, nev=-1, min_hits=1, max_hits=15000, num_line
         - max_hits  : int, max hits to be processed by network
         - num_lines : int, number of lines stored in the file. Lines stand for:
                       energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
-                      slicerl_idx (optional). 
-    
+                      slicerl_idx (optional).
+
     Returns
     -------
         - list
@@ -168,8 +168,8 @@ def load_Events_from_files(filelist, nev=-1, min_hits=1, max_hits=15000, num_lin
         - max_hits  : int, max hits to be processed by network
         - num_lines : int, number of lines stored in the file. Lines stand for:
                       energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
-                      slicerl_idx (optional). 
-    
+                      slicerl_idx (optional).
+
     Returns
     -------
         - list

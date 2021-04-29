@@ -1,4 +1,4 @@
-# This file is part of SliceRL by M. Rossiimport os, argparse, shutil, yaml
+# This file is part of SliceRL by M. Rossi
 import os, argparse, shutil, yaml
 from shutil import copyfile
 from time import time as tm
@@ -53,7 +53,7 @@ def main():
         "--output", "-o", help="Output folder", type=str, default=None
     )
     parser.add_argument(
-        '--force', '-f', help='Overwrite existing files if present', action='store_true', dest='force',                        
+        '--force', '-f', help='Overwrite existing files if present', action='store_true', dest='force',
     )
     parser.add_argument(
         "--debug", help="Run TensorFlow eagerly", action="store_true", default=False
