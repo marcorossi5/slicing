@@ -14,6 +14,7 @@ from tensorflow.keras.layers import (
     Dropout,
     Conv1D
 )
+from tensorflow.keras.constraints import MaxNorm
 import knn
 
 TF_DTYPE_INT = tf.int32
@@ -90,8 +91,9 @@ class LocSE(Layer):
         self.ch_dims  = self.dims*3 + 1 # point + neighbor point + relative space dims + 1 (the norm)
         self.MLP = Conv1D(self.units//2, 1, input_shape=(self.K, self.ch_dims),
                           activation=self.activation, 
-                          kernel_initializer='glorot_uniform',
-                          bias_initializer='zeros',
+                          kernel_regularizer='l2',
+                          bias_regularizer='l2',
+                          kernel_constraint=MaxNorm(axis=[0,1]),
                           name='MLP')
         self.cat = Concatenate(axis=-1 , name='cat')
 
@@ -205,13 +207,15 @@ class AttentivePooling(Layer):
         shape = (self.input_units, self.K)
         self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=shape,
                           activation='softmax', 
-                          kernel_initializer='glorot_uniform',
-                          bias_initializer='zeros',
+                          kernel_regularizer='l2',
+                          bias_regularizer='l2',
+                          kernel_constraint=MaxNorm(axis=[0,1]),
                           name='attention_score_MLP')
         self.MLP_final = Conv1D(self.units, 1, input_shape=shape,
                           activation=self.activation, 
-                          kernel_initializer='glorot_uniform',
-                          bias_initializer='zeros',
+                          kernel_regularizer='l2',
+                          bias_regularizer='l2',
+                          kernel_constraint=MaxNorm(axis=[0,1]),
                           name='final_MLP')
         self.reshape   = Reshape((-1, self.units), name='reshape')
 
@@ -277,18 +281,21 @@ class DilatedResBlock(Layer):
 
         self.MLP_0   = Conv1D(self.units//4, 1, input_shape=(None, self.input_units),
                               activation=self.activation, 
-                              kernel_initializer='glorot_uniform',
-                              bias_initializer='zeros',
+                              kernel_regularizer='l2',
+                              bias_regularizer='l2',
+                              kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_0')
         self.MLP_1   = Conv1D(self.units, 1, input_shape=(None, self.units//2),
                               activation=self.activation, 
-                              kernel_initializer='glorot_uniform',
-                              bias_initializer='zeros',
+                              kernel_regularizer='l2',
+                              bias_regularizer='l2',
+                              kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_2')
         self.MLP_res = Conv1D(self.units, 1, input_shape=(None, self.input_units),
                               activation=self.activation, 
-                              kernel_initializer='glorot_uniform',
-                              bias_initializer='zeros',
+                              kernel_regularizer='l2',
+                              bias_regularizer='l2',
+                              kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_res')
 
         self.locse_0 = LocSE(self.units//2, K=self.K, name='locse_0')
@@ -434,8 +441,9 @@ class UpSample(Layer):
     #----------------------------------------------------------------------
     def build(self, input_shape):
         self.MLP  = Conv1D(self.units, 1, input_shape=(None,None,self.input_units),
-                          activation=self.activation, kernel_initializer='glorot_uniform',
-                          bias_initializer='zeros', name='MLP')
+                          activation=self.activation, kernel_regularizer='l2',
+                          bias_regularizer='l2', kernel_constraint=MaxNorm(axis=[0,1]),
+                          name='MLP')
 
     #----------------------------------------------------------------------
     def call(self, inputs):
@@ -485,7 +493,7 @@ class UpSample(Layer):
 class RandLANet(Model):
     """ Class deifining RandLA-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
-                 nb_layers=4, activation='relu', fc_type='conv', name='RandLA-Net', **kwargs):
+                 nb_layers=4, activation='relu', fc_type='conv', dropout=True, name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -494,7 +502,9 @@ class RandLANet(Model):
             - scale_factor : int, scale factor for down/up-sampling
             - nb_layers    : int, number of inner enocding/decoding layers
             - fc_type      : str, either 'conv' or 'dense' for the final FC
-                             semantic predicting layers
+                             layers
+            - dropout      : bool, wether to include dropout layers in final FC
+                             layers
         """
         super(RandLANet, self).__init__(name=name, **kwargs)
 
@@ -523,23 +533,32 @@ class RandLANet(Model):
         # build layers
         if self.fc_type == 'conv':
             self.fcs = [
-                Conv1D(units, 16, padding='same', input_shape=(None,None,None,iunits), activation=act, name=f'fc{i+1}') \
+                Conv1D(units, 16, padding='same', input_shape=(None,None,None,iunits),
+                              kernel_regularizer='l2', bias_regularizer='l2',
+                              kernel_constraint=MaxNorm(axis=[0,1]),
+                              activation=act, name=f'fc{i+1}') \
                     for i, (iunits, units, act) in enumerate(zip(self.fc_iunits[1:], self.fc_units[1:], self.fc_acts[1:]))
             ]
-            self.fcs.insert(0, Dense(self.fc_units[0], activation=self.fc_acts[0], name=f'fc0') )
+            self.fcs.insert(0, Dense(self.fc_units[0],
+                                     kernel_regularizer='l2', bias_regularizer='l2',
+                                     activation=self.fc_acts[0], name=f'fc0') )
         elif self.fc_type == 'dense':
             self.fcs = [
-                Dense(units, activation=act, name=f'fc{i}') \
+                Dense(units, kernel_regularizer='l2', bias_regularizer='l2',
+                      kernel_constraint=MaxNorm(), activation=act, name=f'fc{i}') \
                     for i, (units, act) in enumerate(zip(self.fc_units, self.fc_acts))
             ]
         else:
             raise NotImplementedError(f"First and final layers must be of type 'conv'|'dense', not {self.fc_type}")
+        
+        if dropout:
+            self.dropout = [Dropout(0.2, name=f'dropout{i+1}') for i in range(len(self.fc_units[1:-1]))]
 
         self.encoding   = self.build_encoder()
         self.middle_MLP = Conv1D(self.enc_units[-1], 1,
                               activation=self.activation,
-                              kernel_initializer='glorot_uniform',
-                              bias_initializer='zeros',
+                              kernel_regularizer='l2',
+                              bias_regularizer='l2',
                               name='MLP')
         self.decoding   = self.build_decoder()
         
@@ -596,11 +615,11 @@ class RandLANet(Model):
         for i, (us, interp, ups, res) in enumerate(zip(self.USs, n_idxs[::-1], rndss[::-1], residuals[-2::-1])):
             feats = us([feats, interp, ups, res])
 
-        for fc in self.fcs[1:]:
-            feats = fc(feats)
+        for fc, do in zip(self.fcs[1:-1], self.dropout):
+            feats = do(fc(feats))
 
-        return feats # logits
-        return tf.nn.softmax(feats, axis=-1, name='softmax')
+        return self.fcs[-1](feats) # logits
+
     #----------------------------------------------------------------------
     def model(self):
         pc = Input(shape=(None, self.dims), name='pc')

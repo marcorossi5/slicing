@@ -59,12 +59,15 @@ class F1score(tf.keras.metrics.Metric):
     def __init__(self, name='F1-score', **kwargs):
         super(F1score, self).__init__(name=name, **kwargs)
 
+    #----------------------------------------------------------------------
     def update_state(self, y_true, y_pred, sample_weight=None):
         pass
 
+    #----------------------------------------------------------------------
     def result(self):
         pass
 
+    #----------------------------------------------------------------------
     def reset_states(self):
         pass
 
@@ -270,7 +273,7 @@ def main():
 
     t      = 0.5
     actor.compile(
-            loss= tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1),
+            loss= tf.keras.losses.CategoricalCrossentropy(from_logits=True),
             optimizer=tf.keras.optimizers.Adam(args.lr),
             metrics=[tf.keras.metrics.CategoricalAccuracy(name='acc')],
             run_eagerly=args.debug
@@ -335,3 +338,6 @@ if __name__=='__main__':
     start = tm()
     main()
     print(f"Program done in {tm()-start} s")
+
+# TODO: add the possibility to weight the cross entropy to give more importance
+# bigger slices than smaller ones
