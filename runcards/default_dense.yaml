@@ -4,7 +4,7 @@ model:
     fc_type: "dense"
     nb_classes: 128
     K: 32
-    scale_factor: 4
+    scale_factor: 2
     nb_layers: 4
     dropout: 0.1
 test:
@@ -27,7 +27,7 @@ train:
     wgt: 50
     gamma: 2
     epochs: 20
-    lr: 0.01
+    lr: 0.001
     min_lr: 0.00001
     patience: 5
     optimizer: "Adam"
