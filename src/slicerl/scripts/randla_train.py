@@ -3,7 +3,6 @@ import os, argparse, shutil, yaml
 from shutil import copyfile
 from time import time as tm
 import tensorflow as tf
-from slicerl.build_model import build_and_train_model
 
 def config_tf(setup):
     os.environ["CUDA_VISIBLE_DEVICES"] = setup.get('gpu')
@@ -103,11 +102,11 @@ def main():
         copyfile(args.runcard, f'{out}/input-runcard.yaml')
 
         # here it goes the training !
-        print('[+] Training best model:')
         start = tm()
+        print('[+] Training best model:')
+        from slicerl.build_model import build_and_train_model
         model = build_and_train_model(setup)
         print(f"[+] done in {tm()-start} s")
-
 
         # save the final runcard
         with open(f'{out}/runcard.yaml','w') as f:

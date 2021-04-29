@@ -87,13 +87,13 @@ def build_and_train_model(setup):
         )
     ]
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
-    # net.fit(train_generator, epochs=setup['train']['epochs'],
-    #           validation_data=val_generator,
-    #           callbacks=callbacks,
-    #           verbose=2)
+    net.fit(train_generator, epochs=setup['train']['epochs'],
+              validation_data=val_generator,
+              callbacks=callbacks,
+              verbose=2)
 
     print("[+] done with training, load best weights")
-    # net.load_weights(checkpoint_filepath)
+    net.load_weights(checkpoint_filepath)
     
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
