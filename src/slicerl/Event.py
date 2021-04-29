@@ -1,5 +1,4 @@
 # This file is part of SliceRL by M. Rossi
-
 import sys
 import numpy as np
 import math

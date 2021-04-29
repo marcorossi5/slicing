@@ -35,5 +35,6 @@ setup(name= "slicerl",
       install_requires=[
           "numpy >= 1.19.2",
           "matplotlib >= 3.3.0",
+          # "yaml"
       ]
      )

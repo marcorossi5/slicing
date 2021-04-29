@@ -1,3 +1,4 @@
+# This file is part of SliceRL by M. Rossi
 import numpy as np
 import tensorflow as tf
 from slicerl.tools import onehot, onehot_to_indices
@@ -12,7 +13,8 @@ from tensorflow.keras.layers import (
     Reshape,
     Concatenate,
     Dropout,
-    Conv1D
+    Conv1D,
+    Lambda
 )
 from tensorflow.keras.constraints import MaxNorm
 import knn
@@ -493,7 +495,7 @@ class UpSample(Layer):
 class RandLANet(Model):
     """ Class deifining RandLA-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
-                 nb_layers=4, activation='relu', fc_type='conv', dropout=True, name='RandLA-Net', **kwargs):
+                 nb_layers=4, activation='relu', fc_type='conv', dropout=0.1, name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -503,8 +505,7 @@ class RandLANet(Model):
             - nb_layers    : int, number of inner enocding/decoding layers
             - fc_type      : str, either 'conv' or 'dense' for the final FC
                              layers
-            - dropout      : bool, wether to include dropout layers in final FC
-                             layers
+            - dropout      : float, dropout percentage in final FC layers
         """
         super(RandLANet, self).__init__(name=name, **kwargs)
 
@@ -517,6 +518,7 @@ class RandLANet(Model):
         self.nb_layers    = nb_layers
         self.activation   = activation
         self.fc_type      = fc_type
+        self.dropout_perc = dropout
 
         # store some useful parameters
         self.fc_units = [32, 64, 128, self.nb_classes]
@@ -551,8 +553,11 @@ class RandLANet(Model):
         else:
             raise NotImplementedError(f"First and final layers must be of type 'conv'|'dense', not {self.fc_type}")
         
-        if dropout:
-            self.dropout = [Dropout(0.2, name=f'dropout{i+1}') for i in range(len(self.fc_units[1:-1]))]
+        if self.dropout_perc:
+            self.dropout = [Dropout(self.dropout_perc, name=f'dropout{i+1}') \
+                        for i in range(len(self.fc_units[1:-1]))]
+        else:
+            self.dropout = [[] for i in range(len(self.fc_units[1:-1]))]
 
         self.encoding   = self.build_encoder()
         self.middle_MLP = Conv1D(self.enc_units[-1], 1,
@@ -600,7 +605,6 @@ class RandLANet(Model):
         n_idxs    = []
         rndss     = []
 
-
         feats = self.fcs[0](feats)
         residuals.append(feats)
 
@@ -616,7 +620,9 @@ class RandLANet(Model):
             feats = us([feats, interp, ups, res])
 
         for fc, do in zip(self.fcs[1:-1], self.dropout):
-            feats = do(fc(feats))
+            feats = fc(feats)
+            if self.dropout_perc:
+                feats = do(feats)
 
         return self.fcs[-1](feats) # logits
 

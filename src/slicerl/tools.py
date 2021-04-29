@@ -1,9 +1,30 @@
 # This file is part of SliceRL by M. Rossi
-
+import json
 import numpy as np
 import math
+import tensorflow as tf
 
-eps = np.finfo(np.float64).eps
+EPS = np.finfo(np.float64).eps
+
+TF_DTYPE_INT = tf.int32
+TF_DTYPE     = tf.float32
+
+NP_DTYPE_INT = np.int32
+NP_DTYPE     = np.float32
+
+def float_me(x):
+    return tf.constant(x, dtype=TF_DTYPE)
+
+def int_me(x):
+    return tf.constant(x, dtype=TF_DTYPE_INT)
+
+#----------------------------------------------------------------------
+def load_runcard(runcard):
+    """Read in a runcard json file and set up dimensions correctly."""
+    with open(runcard,'r') as f:
+        res = json.load(f)
+    # env_setup = res.get("slicerl_env")
+    return res
 
 #----------------------------------------------------------------------
 def mass(events, noPU=False):
@@ -72,7 +93,7 @@ def m_lin_fit(x,y):
     n = x.shape[0]
     num = n * (x*y).sum() - x.sum()*y.sum()
     den = n * (x*x).sum() - (x.sum())**2
-    return num / (den + eps)
+    return num / (den + EPS)
 
 #----------------------------------------------------------------------
 def pearson_distance(x,y):
@@ -81,7 +102,7 @@ def pearson_distance(x,y):
     yc = y - y.mean()
     num = (xc * yc).sum()
     den = (xc**2).sum() * (yc**2).sum()
-    return 1 - num**2 / (den + eps)
+    return 1 - num**2 / (den + EPS)
 
 #----------------------------------------------------------------------
 def mse(x,y):
@@ -91,23 +112,23 @@ def mse(x,y):
 def bce_loss(x,y):
     # Warning: computing log is expensive
     ratio = 0.1 # percentage of ones over zeros
-    loss = - y*np.log(x + eps)/ratio - (1-y)*np.log(1-x + eps)/(1-ratio)
+    loss = - y*np.log(x + EPS)/ratio - (1-y)*np.log(1-x + EPS)/(1-ratio)
     return loss.mean()
 
 #----------------------------------------------------------------------
 def dice_loss(x,y):
     ix = 1-x
     iy = 1-y
-    num1 = (x*y).sum(-1) + eps
-    den1 = (x*x + y*y).sum(-1) + eps
-    num2 = (ix*iy).sum(-1) + eps
-    den2 = (ix*ix + iy*iy).sum(-1) + eps
+    num1 = (x*y).sum(-1) + EPS
+    den1 = (x*x + y*y).sum(-1) + EPS
+    num2 = (ix*iy).sum(-1) + EPS
+    den2 = (ix*ix + iy*iy).sum(-1) + EPS
     return 1 - (num1/den1 + num2/den2).mean()
 
 #----------------------------------------------------------------------
 def efficiency_rejection_rate_loss(x,y):
-    efficiency     = np.count_nonzero(x[y]) / (np.count_nonzero(y) + eps )
-    rejection_rate = np.count_nonzero(x[~y]) / (np.count_nonzero(~y) + eps)
+    efficiency     = np.count_nonzero(x[y]) / (np.count_nonzero(y) + EPS )
+    rejection_rate = np.count_nonzero(x[~y]) / (np.count_nonzero(~y) + EPS)
     return 1 - efficiency + rejection_rate
 
 #----------------------------------------------------------------------

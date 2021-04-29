@@ -1,5 +1,4 @@
 # This file is part of SliceRL by M. Rossi
-
 import json, gzip, sys, csv
 from abc import ABC, abstractmethod
 import numpy as np

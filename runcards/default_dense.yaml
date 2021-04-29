@@ -1,0 +1,31 @@
+# This file is part of SliceRL by M. Rossi
+model:
+    fc_type: "dense"
+    nb_classes: 128
+    K: 32
+    scale_factor: 4
+    nb_layers: 4
+    dropout: 0.1
+test:
+    fn: "data/test_data_03GeV.csv.gz"
+    nev: -1
+    min_hits: 1
+train:
+    fn:
+    - "data/test_data_05GeV.csv.gz"
+    - "data/test_data_1GeV.csv.gz"
+    - "data/test_data_2GeV.csv.gz"
+    - "data/test_data_3GeV.csv.gz"
+    - "data/test_data_6GeV.csv.gz"
+    - "data/test_data_7GeV.csv.gz"
+    nev: -1
+    min_hits: 1
+    hist_freq: 2
+    loss: "focal_l1" # "xent" | "focal" | "xent_l1" | "focal_l1"
+    from_logits: True
+    gamma: 2
+    epochs: 20
+    lr: 0.01
+    min_lr: 0.00001
+    patience: 5
+    optimizer: "Adam"
