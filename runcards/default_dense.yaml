@@ -1,11 +1,11 @@
 # This file is part of SliceRL by M. Rossi
 gpu: "0,1"
 model:
-    fc_type: "dense"
+    fc_type: "conv"
     nb_classes: 128
     K: 32
-    scale_factor: 2
-    nb_layers: 4
+    scale_factor: 3
+    nb_layers: 2
     dropout: 0.1
 test:
     fn: "data/test_data_03GeV.csv.gz"
@@ -21,13 +21,14 @@ train:
     - "data/test_data_7GeV.csv.gz"
     nev: -1
     min_hits: 1
-    hist_freq: 2
-    loss: "xent_l1" # "xent" | "focal" | "xent_l1" | "focal_l1"
+    hist_freq: 1
+    loss: "xent" # "xent" | "focal" | "xent_l1" | "focal_l1"
     from_logits: True
     wgt: 50
     gamma: 2
-    epochs: 20
-    lr: 0.001
+    epochs: 30
+    lr: 0.005
     min_lr: 0.00001
     patience: 5
     optimizer: "Adam"
+    initial_weights: "initial_net.h5"

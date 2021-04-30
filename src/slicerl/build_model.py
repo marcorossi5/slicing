@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from time import time as tm
@@ -13,7 +14,7 @@ from tensorflow.keras.optimizers import (
     Adagrad
 )
 
-from slicerl.tools import onehot_to_indices
+from slicerl.tools import onehot_to_indices, float_me
 from slicerl.build_dataset import EventDataset, build_dataset, split_dataset
 from slicerl.losses import get_loss
 
@@ -81,12 +82,22 @@ def build_and_train_model(setup):
             verbose=1
         ),
         ReduceLROnPlateau(
-            monitor='val_acc', fnet=0.5, mode='max',
+            monitor='val_acc', factor=0.5, mode='max',
             verbose=1,
             patience=setup['train']['patience'],
             min_lr=setup['train']['min_lr']
         )
     ]
+    
+    initial_weights = setup['train']['initial_weights']
+    if initial_weights and os.path.isfile(initial_weights):
+        # dummy forward pass
+        net.get_prediction(test_generator.inputs)
+        net.load_weights(setup['train']['initial_weights'])
+        print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
+    else:
+        print("[+] No initial weights file supplied, train net from scratch")
+
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     net.fit(train_generator, epochs=setup['train']['epochs'],
               validation_data=val_generator,

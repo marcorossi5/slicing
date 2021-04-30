@@ -676,7 +676,7 @@ class RandLANet(Model):
 
         Parameters
         ----------
-            - inputs : list, elements of shape [(1,N,dims), (N,f_dims)]
+            - inputs : list, elements of shape [(1,N,dims), (1,N,f_dims)]
 
         Returns
         -------
