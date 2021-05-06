@@ -93,8 +93,8 @@ class LocSE(Layer):
         self.ch_dims  = self.dims*3 + 1 # point + neighbor point + relative space dims + 1 (the norm)
         self.MLP = Conv1D(self.units//2, 1, input_shape=(self.K, self.ch_dims),
                           activation=self.activation,
-                          kernel_regularizer='l2',
-                          bias_regularizer='l2',
+                          # kernel_regularizer='l2',
+                          # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='MLP')
         self.cat = Concatenate(axis=-1 , name='cat')
@@ -209,14 +209,14 @@ class AttentivePooling(Layer):
         shape = (self.input_units, self.K)
         self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=shape,
                           activation='softmax',
-                          kernel_regularizer='l2',
-                          bias_regularizer='l2',
+                          # kernel_regularizer='l2',
+                          # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='attention_score_MLP')
         self.MLP_final = Conv1D(self.units, 1, input_shape=shape,
                           activation=self.activation,
-                          kernel_regularizer='l2',
-                          bias_regularizer='l2',
+                          # kernel_regularizer='l2',
+                          # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='final_MLP')
         self.reshape   = Reshape((-1, self.units), name='reshape')
@@ -283,20 +283,20 @@ class DilatedResBlock(Layer):
 
         self.MLP_0   = Conv1D(self.units//4, 1, input_shape=(None, self.input_units),
                               activation=self.activation,
-                              kernel_regularizer='l2',
-                              bias_regularizer='l2',
+                              # kernel_regularizer='l2',
+                              # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_0')
         self.MLP_1   = Conv1D(self.units, 1, input_shape=(None, self.units//2),
                               activation=self.activation,
-                              kernel_regularizer='l2',
-                              bias_regularizer='l2',
+                              # kernel_regularizer='l2',
+                              # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_2')
         self.MLP_res = Conv1D(self.units, 1, input_shape=(None, self.input_units),
                               activation=self.activation,
-                              kernel_regularizer='l2',
-                              bias_regularizer='l2',
+                              # kernel_regularizer='l2',
+                              # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_res')
 
@@ -443,8 +443,10 @@ class UpSample(Layer):
     #----------------------------------------------------------------------
     def build(self, input_shape):
         self.MLP  = Conv1D(self.units, 1, input_shape=(None,None,self.input_units),
-                          activation=self.activation, kernel_regularizer='l2',
-                          bias_regularizer='l2', kernel_constraint=MaxNorm(axis=[0,1]),
+                          activation=self.activation,
+                          # kernel_regularizer='l2',
+                          # bias_regularizer='l2',
+                          kernel_constraint=MaxNorm(axis=[0,1]),
                           name='MLP')
 
     #----------------------------------------------------------------------
@@ -573,17 +575,21 @@ class RandLANet(Model):
         if self.fc_type == 'conv':
             self.fcs = [
                 Conv1D(units, 16, padding='same', input_shape=(None,None,None,iunits),
-                              kernel_regularizer='l2', bias_regularizer='l2',
+                              # kernel_regularizer='l2',
+                              # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               activation=act, name=f'fc{i+1}') \
                     for i, (iunits, units, act) in enumerate(zip(self.fc_iunits[1:], self.fc_units[1:], self.fc_acts[1:]))
             ]
             self.fcs.insert(0, Dense(self.fc_units[0],
-                                     kernel_regularizer='l2', bias_regularizer='l2',
+                                     # kernel_regularizer='l2',
+                                     # bias_regularizer='l2',
                                      activation=self.fc_acts[0], name=f'fc0') )
         elif self.fc_type == 'dense':
             self.fcs = [
-                Dense(units, kernel_regularizer='l2', bias_regularizer='l2',
+                Dense(units,
+                      # kernel_regularizer='l2',
+                      # bias_regularizer='l2',
                       kernel_constraint=MaxNorm(), activation=act, name=f'fc{i}') \
                     for i, (units, act) in enumerate(zip(self.fc_units, self.fc_acts))
             ]
@@ -599,8 +605,8 @@ class RandLANet(Model):
         self.encoding   = self.build_encoder()
         self.middle_MLP = Conv1D(self.enc_units[-1], 1,
                               activation=self.activation,
-                              kernel_regularizer='l2',
-                              bias_regularizer='l2',
+                              # kernel_regularizer='l2',
+                              # bias_regularizer='l2',
                               name='MLP')
         self.decoding   = self.build_decoder()
 

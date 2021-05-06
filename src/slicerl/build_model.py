@@ -5,8 +5,12 @@ import matplotlib.pyplot as plt
 from time import time as tm
 
 import tensorflow as tf
-from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau
-from slicerl.RandLANet import RandLANet
+from tensorflow.keras.callbacks import (
+    TensorBoard,
+    ModelCheckpoint,
+    ReduceLROnPlateau,
+    EarlyStopping
+)
 from tensorflow.keras.optimizers import (
     Adam,
     SGD,
@@ -14,6 +18,7 @@ from tensorflow.keras.optimizers import (
     Adagrad
 )
 
+from slicerl.RandLANet import RandLANet
 from slicerl.tools import onehot_to_indices, float_me
 from slicerl.build_dataset import EventDataset, build_dataset, split_dataset
 from slicerl.losses import get_loss
@@ -86,6 +91,13 @@ def build_and_train_model(setup):
             verbose=1,
             patience=setup['train']['patience'],
             min_lr=setup['train']['min_lr']
+        ),
+        EarlyStopping(
+            monitor='val_acc',
+            min_delta=0.001,
+            mode='max',
+            patience=15,
+            restore_best_weights=True
         )
     ]
     
