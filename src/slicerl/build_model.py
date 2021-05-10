@@ -1,4 +1,10 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.RandLANet import RandLANet
+from slicerl.tools import onehot_to_indices, float_me
+from slicerl.build_dataset import EventDataset, build_dataset, split_dataset, dummy_dataset
+from slicerl.losses import get_loss
+from slicerl.diagnostics import plot_plane_view, plot_slice_size, plot_multiplicity
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,35 +24,24 @@ from tensorflow.keras.optimizers import (
     Adagrad
 )
 
-from slicerl.RandLANet import RandLANet
-from slicerl.tools import onehot_to_indices, float_me
-from slicerl.build_dataset import EventDataset, build_dataset, split_dataset
-from slicerl.losses import get_loss
+from hyperopt import STATUS_OK
 
+def load_network(setup, name='RandLA-Net', checkpoint_filepath=None):
+    """
+    Load network from config dic, compile and, if necessary, load weights.
+    
+    Parameters
+    ----------
+        - setup               : dict, config dict
+        - checkpoint_filepath : str, model checkpoint path
 
-def build_and_train_model(setup):
-    start = tm()
-    # load train data
-    fn         = setup['train']['fn']
-    nev        = setup['train']['nev']
-    min_hits   = setup['train']['min_hits']
-    nb_classes = setup['model']['nb_classes']
-    _, train = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes, augment=True)
-    train_generator = EventDataset(train, shuffle=True)
-
-    # load val, test data
-    fn       = setup['test']['fn']
-    nev      = setup['test']['nev']
-    min_hits = setup['test']['min_hits']
-    events, data = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes)
-    val, test = split_dataset(data)
-    l = len(events)//2
-    events = events[l:]
-
-    val_generator  = EventDataset(val, shuffle=False)
-    test_generator = EventDataset(test, shuffle=False)
-
+    Returns
+    -------
+        - RandLANet
+    """
     net = RandLANet(**setup['model'], name='RandLA-Net')
+
+    loss = get_loss(setup['train'], setup['model']['nb_classes'])
 
     lr = setup['train']['lr']
     if setup['train']['optimizer'] == 'Adam':
@@ -58,27 +53,45 @@ def build_and_train_model(setup):
     elif setup['train']['optimizer'] == 'Adagrad':
         opt = Adagrad(lr=lr)
 
-    loss = get_loss(setup['train'], setup['model']['nb_classes'])
     net.compile(
             loss= loss,
             optimizer= opt,
             metrics=[tf.keras.metrics.CategoricalAccuracy(name='acc')],
             run_eagerly=setup.get('debug')
             )
-
-    net.model().summary()
+    
+    # net.model().summary()
     # tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
-    logdir = f"{setup['output']}/logs"
+    if checkpoint_filepath:
+        print(f"[+] Loading weights at {checkpoint_filepath}")
+        dummy_generator = dummy_dataset(setup['model']['nb_classes'])
+        net.evaluate(dummy_generator)
+        net.load_weights(checkpoint_filepath)
+
+    return net
+
+#======================================================================
+def build_and_train_model(setup, generators):
+    """
+    Train a model. If setup['scan'] is True, then perform hyperparameter search.
+
+    Parameters
+    ----------
+        - setup      : dict
+        - generators : list, of EventDataset with train and val generators
+    
+    Retruns
+    -------
+        RandLANet model if scan is False, else dict with loss and status keys.    
+    """
+    train_generator, val_generator = generators
+
+    net = load_network(setup, name='RandLA-Net')   
+
+    logdir = f"{setup['output']}/logs/{tm()}"
     checkpoint_filepath = f"{setup['output']}"+"/randla.h5"
     callbacks = [
-        TensorBoard(
-            log_dir=logdir,
-            write_graph=False,
-            write_images=True,
-            histogram_freq=setup['train']['hist_freq'],
-            profile_batch=5
-        ),
         ModelCheckpoint(
             filepath=checkpoint_filepath,
             save_best_only=True,
@@ -100,33 +113,54 @@ def build_and_train_model(setup):
             restore_best_weights=True
         )
     ]
+    if setup['scan']:
+        tboard = TensorBoard(log_dir=logdir, profile_batch=0)
+    else:
+        tboard = TensorBoard(
+                    log_dir=logdir,
+                    write_graph=False,
+                    write_images=True,
+                    histogram_freq=setup['train']['hist_freq'],
+                    profile_batch=5
+                 )
     
+    callbacks.append(tboard)
+
     initial_weights = setup['train']['initial_weights']
     if initial_weights and os.path.isfile(initial_weights):
         # dummy forward pass
         net.get_prediction(test_generator.inputs)
         net.load_weights(setup['train']['initial_weights'])
         print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
-    else:
-        print("[+] No initial weights file supplied, train net from scratch")
-
+    
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
-    net.fit(train_generator, epochs=setup['train']['epochs'],
-              validation_data=val_generator,
-              callbacks=callbacks,
-              verbose=2)
+    r = net.fit(train_generator, epochs=setup['train']['epochs'],
+                validation_data=val_generator,
+                callbacks=callbacks,
+                verbose=2)
+    
+    if setup['scan']:
+        net.load_weights(checkpoint_filepath)
+        loss, acc = net.evaluate(val_generator, verbose=0)
+        print(f"Evaluate model instance: [loss: {loss:.5f}], [acc: {acc:.5f}]")
+        res = {'loss': loss, 'acc': acc, 'status': STATUS_OK}
+    else:
+        res = net
+    return res
 
+#----------------------------------------------------------------------
+
+def inference(setup, test_generator):
     print("[+] done with training, load best weights")
-    net.load_weights(checkpoint_filepath)
+    checkpoint_filepath = f"{setup['output']}"+"/randla.h5"
+    net = load_network(setup, 'RandLA-Net', checkpoint_filepath)
 
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
     y_pred = net.get_prediction(test_generator.inputs)
     # print(f"Feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
-    for i,event in enumerate(events):
-        event.store_preds(y_pred.get_pred(i))
-
+    test_generator.events = y_pred
 
     pc      = test_generator.get_pc(0)      # shape=(N,2)
     pc_pred = y_pred.get_pred(0)            # shape=(N,)
@@ -134,7 +168,6 @@ def build_and_train_model(setup):
 
     # print(f"pc shape: {pc.shape} \t pc pred shape: {pc_pred.shape} \t pc test shape: {pc_test.shape}")
 
-    from slicerl.diagnostics import plot_plane_view, plot_slice_size, plot_multiplicity
     plot_plane_view(pc, pc_pred, pc_test, setup['output'])
-    plot_slice_size(events, setup['output'])
-    plot_multiplicity(events, setup['output'])
+    plot_slice_size(test_generator.events, setup['output'])
+    plot_multiplicity(test_generator.events, setup['output'])

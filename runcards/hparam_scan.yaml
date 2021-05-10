@@ -5,10 +5,10 @@ dataset:
 model:
     fc_type: "conv"
     nb_classes: 128
-    K: 16
-    scale_factor: 3
-    nb_layers: 2
-    dropout: 0.1
+    K: hp.quniform("K", 16, 32, 2)
+    scale_factor: hp.choice("scale_factor", [2,3,4])
+    nb_layers: hp.choice("nb_layers", [2,3,4])
+    dropout: hp.uniform("dropout", 0.1, 0.5)
 test:
     fn: "data/test_data_03GeV.csv.gz"
     nev: 2
@@ -23,20 +23,21 @@ train:
     # - "data/test_data_7GeV.csv.gz"
     nev: 2
     min_hits: 1
+    split: 0.9
     hist_freq: 1
-    loss: "xent" # "xent" | "focal" | "xent_l1" | "focal_l1"
+    loss: "xent"
     from_logits: True
     wgt: 50
     gamma: 2
-    epochs: 50
-    lr: 0.005
+    epochs: 2
+    lr: hp.loguniform("lr", -10, -2)
     min_lr: 0.00001
     patience: 5
-    optimizer: "Adam"
-    initial_weights: "" # "initial_net.h5"
-scan: false
+    optimizer: hp.choice("optimizer", ["Adam", "SGD", "RMSprop", "Adagrad"])
+    initial_weights: ""
+scan: true
 cluster:
-    max_evals: 10
+    max_evals: 2
     enable: false
     url: null
     exp_key: null

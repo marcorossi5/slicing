@@ -1,9 +1,9 @@
 # This file is part of SliceRL by M. Rossi
-import tensorflow as tf
-import numpy as np
-
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 from slicerl.tools import onehot, onehot_to_indices
+
+import tensorflow as tf
+import numpy as np
 
 #======================================================================
 class EventDataset(tf.keras.utils.Sequence):
@@ -17,7 +17,8 @@ class EventDataset(tf.keras.utils.Sequence):
             - shuffle : bool, wether to shuffle dataset on epoch end
         """
         # needed to generate the dataset
-        self.inputs, self.targets = data
+        self.__events = data[0]
+        self.inputs, self.targets = data[1]
         self.shuffle = shuffle
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(self.targets), \
@@ -80,7 +81,24 @@ class EventDataset(tf.keras.utils.Sequence):
             - np.array, point cloud of shape=(N,)
         """
         return onehot_to_indices( self.targets[index][0] )
-
+    
+    #----------------------------------------------------------------------
+    @property
+    def events(self):
+        """ Event attribute. """
+        return self.__events
+    
+    #----------------------------------------------------------------------
+    @events.setter
+    def events(self, y_pred):
+        """
+        Parameters
+        ----------
+            - y_pred: Predictions, object storing network predictions
+        """
+        print("[+] setting events")
+        for i,event in enumerate(self.__events):
+            event.store_preds(y_pred.get_pred(i))
 
 #======================================================================
 def rotate_pc(pc, t):
@@ -139,41 +157,6 @@ def transform(pc, feats, target):
     return pc, feats, target
 
 #======================================================================
-def build_dataset(fn, nev=-1, min_hits=1, augment=False, nb_classes=128):
-    """
-    Returns
-    -------
-        - list, of Event instances
-        - list, of inputs and targets couples:
-            inputs is a list of couples [pc, features], pc of shape=(B,N,2) and
-            features of shape=(B,N);
-            targets is a list on np.arrays of shape=(B,N, nb_classes)
-    """
-    if isinstance(fn, str):
-        events  = load_Events_from_file(fn, nev, min_hits)
-    elif isinstance(fn, list):
-        events  = load_Events_from_files(fn, nev, min_hits)
-    else:
-        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
-    inputs  = []
-    targets = []
-    for event in events:
-        state = event.state()
-        pc = state[:, 1:3]
-        feats = state[:, ::3]
-        m = event.ordered_mc_idx
-        if augment:
-            pc, feats, target = transform(pc, feats, m)
-        else:
-            pc = pc[None]
-            feats = feats[None]
-            target = m[None]
-        target = onehot(target, nb_classes)
-        inputs.extend([[p[None], f[None]] for p,f in zip(pc,feats)])
-        targets.extend(np.split(target, len(target), axis=0))
-    return events, [inputs, targets]
-
-#======================================================================
 def split_dataset(data, split=0.5):
     """
     Parameters
@@ -200,3 +183,119 @@ def split_dataset(data, split=0.5):
 
     return [val_inputs, val_targets],     \
            [test_inputs, test_targets]
+
+#======================================================================
+def build_dataset(fn, nev=-1, min_hits=1, split=None, augment=False, nb_classes=128):
+    """
+    Parameters
+    ----------
+        - fn         : list, of str events filenames
+        - nev        : int, number of events to take from each file
+        - min_hits   : int, minimum hits per slice for dataset inclusion
+        - split      : float, split percentage between train and val in events
+        - augment    : bool, wether to augment training set with rotations
+        - nb_classes : int, number of classes to segment events in
+
+    Returns
+    -------
+        - list, of Event instances
+        - list, of inputs and targets couples:
+            inputs is a list of couples [pc, features], pc of shape=(B,N,2) and
+            features of shape=(B,N);
+            targets is a list on np.arrays of shape=(B,N, nb_classes)
+    """
+    if isinstance(fn, str):
+        events  = load_Events_from_file(fn, nev, min_hits)
+    elif isinstance(fn, list) or isinstance(fn, tuple):
+        events  = load_Events_from_files(fn, nev, min_hits)
+    else:
+        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
+    inputs  = []
+    targets = []
+    for event in events:
+        state = event.state()
+        pc = state[:, 1:3]
+        feats = state[:, ::3]
+        m = event.ordered_mc_idx
+        if augment:
+            pc, feats, target = transform(pc, feats, m)
+        else:
+            pc = pc[None]
+            feats = feats[None]
+            target = m[None]
+        target = onehot(target, nb_classes)
+        inputs.extend([[p[None], f[None]] for p,f in zip(pc,feats)])
+        targets.extend(np.split(target, len(target), axis=0))
+    
+    if split:
+        nb_events = len(events)
+        perm = np.random.permutation(nb_events)
+        nb_split = int(split*nb_events)
+        
+        train_evt = [ events[i] for i in perm[:nb_split] ]
+        val_evt   = [ events[i] for i in perm[nb_split:] ]
+
+        train_inp = [ inputs[i] for i in perm[:nb_split] ]
+        val_inp   = [ inputs[i] for i in perm[nb_split:] ]
+
+        train_trg = [ targets[i] for i in perm[:nb_split] ]
+        val_trg   = [ targets[i] for i in perm[nb_split:] ]
+
+        return [[train_evt, [train_inp, train_trg]],
+                [val_evt, [val_inp, val_trg]]
+               ]
+    return events, [inputs, targets]
+
+#======================================================================
+def build_dataset_train(setup):
+    """
+    Wrapper function to build dataset for training. Implements validation
+    splitting according to config file.
+
+    Returns
+    -------
+        - EventDataset, object for training
+        - EventDataset, object for validation (None if split percentage is None)
+    """
+    fn         = setup['train']['fn']
+    nev        = setup['train']['nev']
+    min_hits   = setup['train']['min_hits']
+    nb_classes = setup['model']['nb_classes']
+    split      = setup['dataset']['split']
+
+    train, val = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes, split=split, augment=True)
+    train_generator = EventDataset(train, shuffle=True)
+    val_generator   = EventDataset(val) if split else None
+    return train_generator, val_generator
+
+#======================================================================
+def build_dataset_test(setup):
+    """
+    Wrapper function to build dataset for testing.
+    
+    Returns
+    -------
+        - EventDataset, object for testing
+    """
+    fn         = setup['test']['fn']
+    nev        = setup['test']['nev']
+    min_hits   = setup['test']['min_hits']
+    nb_classes = setup['model']['nb_classes']
+
+    data = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes)
+    return EventDataset(data)
+
+#======================================================================
+def dummy_dataset(nb_classes):
+    """ Return a dummy dataset to build the model first when loading. """
+    B = 1
+    N = 256
+    inputs  = [np.random.rand(B,N,2), np.random.rand(B,N,2)]
+    targets = np.random.rand(B,N, nb_classes)
+    data = (None, [ [inputs], [targets] ] )
+    return EventDataset(data)
+    
+
+# TODO: implement wrapper for build dataset with inputs events and setup:
+#    - train: outputs, EventDataset train val test
+#    - test: output, EventDataset test

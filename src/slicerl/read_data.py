@@ -1,9 +1,10 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.Event import Event
+
 import json, gzip, sys, csv
 from abc import ABC, abstractmethod
 import numpy as np
 from math import log, ceil, floor, pi
-from slicerl.Event import Event
 
 #======================================================================
 class Reader(object):

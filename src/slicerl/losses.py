@@ -1,4 +1,6 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.tools import EPS, float_me
+
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -8,7 +10,6 @@ from tensorflow.keras.losses import (
     MAE,
     Reduction
 )
-from slicerl.tools import EPS, float_me
 
 eps = float_me(EPS)
 

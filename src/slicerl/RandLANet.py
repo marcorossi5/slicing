@@ -1,7 +1,8 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.tools import onehot, onehot_to_indices
+
 import numpy as np
 import tensorflow as tf
-from slicerl.tools import onehot, onehot_to_indices
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
@@ -552,7 +553,7 @@ class RandLANet(Model):
         self.dims         = dims
         self.f_dims       = f_dims
         self.nb_classes   = nb_classes
-        self.K            = K
+        self.K            = int(K)
         self.scale_factor = scale_factor
         self.nb_layers    = nb_layers
         self.activation   = activation
@@ -686,10 +687,7 @@ class RandLANet(Model):
 
         Returns
         -------
-            - pred  : list, output list containing np.array of predictions,
-                      each of shape=[(1,N)]
-            - probs : list, output list containing np.array of class probabilities,
-                      each of shape=[(1,N,nb_classes)]
+            Predictions object
         """
         predictions = [ tf.squeeze(self.predict_on_batch(inp), 0) \
                             for inp in inputs]
