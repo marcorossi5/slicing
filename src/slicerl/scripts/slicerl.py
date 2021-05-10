@@ -1,6 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.build_model import build_and_train_model, inference
-from slicerl.build_dataset import build_dataset_train, build_dataset_test
+
 
 import os, argparse, shutil, yaml
 from shutil import copyfile
@@ -26,7 +25,7 @@ def makedir(folder):
         raise Exception('Output folder %s already exists.' % folder)
 
 #----------------------------------------------------------------------
-def run_hyperparameter_scan(search_space):
+def run_hyperparameter_scan(search_space, load_data_fn, function):
     """Running a hyperparameter scan using hyperopt.
     """
 
@@ -41,9 +40,9 @@ def run_hyperparameter_scan(search_space):
         env_setup = search_space.get('expurl_env')
         trials = Trials()
     
-    generators = build_dataset_train(search_space)
+    generators = load_data_fn(search_space)
 
-    best = fmin(lambda p: build_and_train_model(p, generators), search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)
+    best = fmin(lambda p: function(p, generators), search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)
 
     best_setup = space_eval(search_space, best)
     print('\n[+] Best scan setup:')
@@ -139,12 +138,14 @@ def main():
                 print('Delete or run with "--force" to overwrite.')
                 exit(-1)
         setup['output'] = out
+        from slicerl.build_model import build_and_train_model, inference
+        from slicerl.build_dataset import build_dataset_train, build_dataset_test
 
         # copy runcard to output folder
         copyfile(args.runcard, f'{out}/input-runcard.yaml')
 
         if setup.get('scan'):
-            setup = run_hyperparameter_scan(setup)
+            setup = run_hyperparameter_scan(setup, build_dataset_train, build_and_train_model)
 
         start = tm()
         print('[+] Training best model:')

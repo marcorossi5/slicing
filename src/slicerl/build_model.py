@@ -142,7 +142,7 @@ def build_and_train_model(setup, generators):
     if setup['scan']:
         net.load_weights(checkpoint_filepath)
         loss, acc = net.evaluate(val_generator, verbose=0)
-        print(f"Evaluate model instance: [loss: {loss:.5f}], [acc: {acc:.5f}]")
+        print(f"Evaluate model instance: [loss: {loss:.5f}, acc: {acc:.5f}]")
         res = {'loss': loss, 'acc': acc, 'status': STATUS_OK}
     else:
         res = net
