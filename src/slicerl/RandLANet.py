@@ -40,7 +40,7 @@ def py_knn(points, queries, K):
 class LocSE(Layer):
     """ Class defining Local Spatial Encoding Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, units, K=8, dims=2, activation='relu', **kwargs):
+    def __init__(self, units, K=8, dims=2, activation='relu', use_bias=True, **kwargs):
         """
         Parameters
         ----------
@@ -56,6 +56,7 @@ class LocSE(Layer):
         self.activation = activation
         self._cache     = None
         self._is_cached = False
+        self.use_bias   = use_bias
 
     #----------------------------------------------------------------------
     @property
@@ -94,6 +95,7 @@ class LocSE(Layer):
         self.ch_dims  = self.dims*3 + 1 # point + neighbor point + relative space dims + 1 (the norm)
         self.MLP = Conv1D(self.units//2, 1, input_shape=(self.K, self.ch_dims),
                           activation=self.activation,
+                          use_bias=self.use_bias,
                           # kernel_regularizer='l2',
                           # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
@@ -157,7 +159,8 @@ class LocSE(Layer):
         config.update({
             "units"      : self.units,
             "K"          : self.K,
-            "activation" : self.activation
+            "activation" : self.activation,
+            "use_bias"   : self.use_bias
         })
         return config
 
@@ -187,7 +190,7 @@ class LocSE(Layer):
 class AttentivePooling(Layer):
     """ Class defining Attentive Pooling Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units=1, K=8, activation='relu', **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, **kwargs):
         """
         Parameters
         ----------
@@ -200,6 +203,7 @@ class AttentivePooling(Layer):
         self.units       = units
         self.K           = K
         self.activation  = activation
+        self.use_bias    = use_bias
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
@@ -210,12 +214,14 @@ class AttentivePooling(Layer):
         shape = (self.input_units, self.K)
         self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=shape,
                           activation='softmax',
+                          use_bias=self.use_bias,
                           # kernel_regularizer='l2',
                           # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='attention_score_MLP')
         self.MLP_final = Conv1D(self.units, 1, input_shape=shape,
                           activation=self.activation,
+                          use_bias=self.use_bias,
                           # kernel_regularizer='l2',
                           # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
@@ -247,7 +253,8 @@ class AttentivePooling(Layer):
             "input_units" : self.input_units,
             "units"       : self.units,
             "K"           : self.K,
-            "activation"  : self.activation
+            "activation"  : self.activation,
+            "use_bias"   : self.use_bias
         })
         return config
 
@@ -255,7 +262,7 @@ class AttentivePooling(Layer):
 class DilatedResBlock(Layer):
     """ Class defining Dilated Residual Block. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units=1, K=8, activation='relu', **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, **kwargs):
         """
         Parameters
         ----------
@@ -269,6 +276,7 @@ class DilatedResBlock(Layer):
         self.units          = units
         self.K              = K
         self.activation     = activation
+        self.use_bias       = use_bias
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
@@ -284,28 +292,37 @@ class DilatedResBlock(Layer):
 
         self.MLP_0   = Conv1D(self.units//4, 1, input_shape=(None, self.input_units),
                               activation=self.activation,
+                              use_bias=self.use_bias,
                               # kernel_regularizer='l2',
                               # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_0')
         self.MLP_1   = Conv1D(self.units, 1, input_shape=(None, self.units//2),
                               activation=self.activation,
+                              use_bias=self.use_bias,
                               # kernel_regularizer='l2',
                               # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_2')
         self.MLP_res = Conv1D(self.units, 1, input_shape=(None, self.input_units),
                               activation=self.activation,
+                              use_bias=self.use_bias,
                               # kernel_regularizer='l2',
                               # bias_regularizer='l2',
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_res')
 
-        self.locse_0 = LocSE(self.units//2, K=self.K, name='locse_0')
-        self.locse_1 = LocSE(self.units, K=self.K, name='locse_1')
+        self.locse_0 = LocSE(self.units//2, K=self.K, use_bias=self.use_bias, name='locse_0')
+        self.locse_1 = LocSE(self.units, K=self.K, use_bias=self.use_bias, name='locse_1')
 
-        self.att_0 = AttentivePooling(self.units//2, self.units//2, K=self.K, activation=self.activation, name='attention_0')
-        self.att_1 = AttentivePooling(self.units, self.units, K=self.K, activation=self.activation, name='attention_1')
+        self.att_0 = AttentivePooling(
+                self.units//2, self.units//2, K=self.K, activation=self.activation,
+                use_bias=self.use_bias, name='attention_0'
+                                     )
+        self.att_1 = AttentivePooling(
+                self.units, self.units, K=self.K, activation=self.activation,
+                use_bias=self.use_bias, name='attention_1'
+                                     )
 
         self.act = Activation(tf.nn.leaky_relu, name='lrelu')
 
@@ -347,7 +364,8 @@ class DilatedResBlock(Layer):
             "input_units" : self.input_units,
             "units"       : self.units,
             "K"           : self.K,
-            "activation"  : self.activation
+            "activation"  : self.activation,
+            "use_bias"   : self.use_bias
         })
         return config
 
@@ -429,7 +447,7 @@ class RandomSample(Layer):
 class UpSample(Layer):
     """ Class defining Upsampling Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units, scale=2, activation='relu', **kwargs):
+    def __init__(self, input_units, units, scale=2, activation='relu', use_bias=True, **kwargs):
         """
         Parameters
         ----------
@@ -440,11 +458,13 @@ class UpSample(Layer):
         self.units       = units
         self.scale       = scale
         self.activation  = activation
+        self.use_bias    = use_bias
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
         self.MLP  = Conv1D(self.units, 1, input_shape=(None,None,self.input_units),
                           activation=self.activation,
+                          use_bias=self.use_bias,
                           # kernel_regularizer='l2',
                           # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
@@ -488,7 +508,8 @@ class UpSample(Layer):
             "input_units" : self.input_units,
             "units"       : self.units,
             "scale"       : self.scale,
-            "activation"  : self.activation
+            "activation"  : self.activation,
+            "use_bias"    : self.use_bias
         })
         return config
 
@@ -535,7 +556,8 @@ class Predictions:
 class RandLANet(Model):
     """ Class deifining RandLA-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
-                 nb_layers=4, activation='relu', fc_type='conv', dropout=0.1, name='RandLA-Net', **kwargs):
+                 nb_layers=4, activation='relu', use_bias=True, fc_type='conv',
+                 dropout=0.1, name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -557,6 +579,7 @@ class RandLANet(Model):
         self.scale_factor = scale_factor
         self.nb_layers    = nb_layers
         self.activation   = activation
+        self.use_bias     = use_bias
         self.fc_type      = fc_type
         self.dropout_perc = dropout
 
@@ -606,6 +629,7 @@ class RandLANet(Model):
         self.encoding   = self.build_encoder()
         self.middle_MLP = Conv1D(self.enc_units[-1], 1,
                               activation=self.activation,
+                              use_bias=self.use_bias,
                               # kernel_regularizer='l2',
                               # bias_regularizer='l2',
                               name='MLP')
@@ -614,7 +638,11 @@ class RandLANet(Model):
     #----------------------------------------------------------------------
     def build_encoder(self):
         self.encoder = [
-            DilatedResBlock(input_units=iunits, units=units, K=self.K, activation=self.activation, name=f'DRB{i}') \
+            DilatedResBlock(
+                input_units=iunits, units=units, K=self.K,
+                activation=self.activation, use_bias=self.use_bias,
+                name=f'DRB{i}'
+                           ) \
                                 for i, (iunits, units) in enumerate(zip(self.enc_iunits, self.enc_units))
                        ]
         self.RSs = [
@@ -627,7 +655,10 @@ class RandLANet(Model):
         self.dec_iunits = self.enc_units[::-1]
 
         self.USs = [
-            UpSample(iunits, units, self.scale_factor, activation=self.activation, name=f'US{i}') \
+            UpSample(
+                iunits, units, self.scale_factor, activation=self.activation,
+                use_bias=self.use_bias, name=f'US{i}'
+                    ) \
                 for i, (iunits, units) in enumerate(zip(self.dec_iunits, self.dec_units))
                    ]
 
