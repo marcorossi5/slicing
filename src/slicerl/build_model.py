@@ -89,8 +89,8 @@ def build_and_train_model(setup, generators):
 
     net = load_network(setup, name='RandLA-Net')   
 
-    logdir = f"{setup['output']}/logs/{tm()}"
-    checkpoint_filepath = f"{setup['output']}"+"/randla.h5"
+    logdir = setup['output'].joinpath(f'logs/{tm()}').as_posix()
+    checkpoint_filepath = setup['output'].joinpath(f'randla.h5').as_posix()
     callbacks = [
         ModelCheckpoint(
             filepath=checkpoint_filepath,
@@ -152,8 +152,8 @@ def build_and_train_model(setup, generators):
 
 def inference(setup, test_generator):
     print("[+] done with training, load best weights")
-    checkpoint_filepath = f"{setup['output']}"+"/randla.h5"
-    net = load_network(setup, 'RandLA-Net', checkpoint_filepath)
+    checkpoint_filepath = setup['output'].joinpath('randla.h5')
+    net = load_network(setup, 'RandLA-Net', checkpoint_filepath.as_posix())
 
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
@@ -168,6 +168,6 @@ def inference(setup, test_generator):
 
     # print(f"pc shape: {pc.shape} \t pc pred shape: {pc_pred.shape} \t pc test shape: {pc_test.shape}")
 
-    plot_plane_view(pc, pc_pred, pc_test, setup['output'])
-    plot_slice_size(test_generator.events, setup['output'])
-    plot_multiplicity(test_generator.events, setup['output'])
+    plot_plane_view(pc, pc_pred, pc_test, setup['output'].joinpath('plots'))
+    plot_slice_size(test_generator.events, setup['output'].joinpath('plots'))
+    plot_multiplicity(test_generator.events, setup['output'].joinpath('plots'))

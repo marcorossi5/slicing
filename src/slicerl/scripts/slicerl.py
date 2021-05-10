@@ -1,7 +1,6 @@
 # This file is part of SliceRL by M. Rossi
-
-
 import os, argparse, shutil, yaml
+from pathlib import Path
 from shutil import copyfile
 from time import time as tm
 import tensorflow as tf
@@ -10,24 +9,9 @@ from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
 import pickle, pprint
 
-def config_tf(setup):
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get('gpu')
-    gpus = tf.config.list_physical_devices('GPU')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-
-#----------------------------------------------------------------------
-def makedir(folder):
-    """Create directory."""
-    if not os.path.exists(folder):
-        os.mkdir(folder)
-    else:
-        raise Exception('Output folder %s already exists.' % folder)
-
 #----------------------------------------------------------------------
 def run_hyperparameter_scan(search_space, load_data_fn, function):
-    """Running a hyperparameter scan using hyperopt.
-    """
+    """ Running a hyperparameter scan using hyperopt. """
 
     print('[+] Performing hyperparameter scan...')
     max_evals = search_space['cluster']['max_evals']
@@ -48,13 +32,15 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
     print('\n[+] Best scan setup:')
     pprint.pprint(best_setup)
 
-    log = f"{search_space['output']}/hyperopt_log_{tm()}.pickle"
+    log = search_space['output'].joinpath(f'hopt/hyperopt_log_{tm()}.pickle')
     with open(log,'wb') as wfp:
         print(f'[+] Saving trials in {log}')
         pickle.dump(trials.trials, wfp)
 
     # disable scan for final fit
     best_setup['scan'] = False
+    from slicerl.plot_hyperopt import plot_hyperopt
+    plot_hyperopt(log)
     return best_setup
 
 #----------------------------------------------------------------------
@@ -67,7 +53,6 @@ def load_runcard(runcard_file):
         if isinstance(value, dict):
             for k, v in value.items():
                 if 'hp.' in str(v):
-                    print(k, v, type(v))
                     runcard[key][k] = eval(v)
                     runcard['scan'] = True
         else:
@@ -76,7 +61,7 @@ def load_runcard(runcard_file):
                runcard['scan'] = True
     return runcard
 
-#======================================================================
+#----------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
         """
@@ -84,7 +69,7 @@ def main():
     """
     )
     parser.add_argument(
-        'runcard', action='store', nargs='?', default=None, help='A yaml file with the setup.'
+        'runcard', action='store', nargs='?', type=Path, default=None, help='A yaml file with the setup.'
     )
     parser.add_argument(
         '--model', '-m', type=str, default=None, help='The input model.'
@@ -93,7 +78,7 @@ def main():
         '--data',type=str, default=None, dest='data', help='The test set path model.'
     )
     parser.add_argument(
-        "--output", "-o", help="Output folder", type=str, default=None
+        "--output", "-o", help="Output folder", type=Path, default=None
     )
     parser.add_argument(
         '--force', '-f', help='Overwrite existing files if present', action='store_true', dest='force',
@@ -105,7 +90,7 @@ def main():
     # check that input is coherent
     if (not args.model and not args.runcard) or (args.model and args.runcard):
         raise ValueError('Invalid options: requires either input runcard or model.')
-    elif args.runcard and not os.path.isfile(args.runcard):
+    elif args.runcard and not args.runcard.is_file():
         raise ValueError('Invalid runcard: not a file.')
     if args.force:
         print('WARNING: Running with --force option will overwrite existing model')
@@ -119,30 +104,38 @@ def main():
     if args.runcard:
         # load yaml
         setup.update( load_runcard(args.runcard) )
+        from slicerl.tools import config_tf
         config_tf(setup)
 
+        from slicerl.build_model import build_and_train_model
+        from slicerl.build_dataset import build_dataset_train
         # create output folder
-        base = os.path.basename(args.runcard)
-        out = os.path.splitext(base)[0]
+        base = args.runcard.name
+        out = args.runcard.suffix[0]
         if args.output is not None:
             out = args.output
+        from slicerl.tools import makedir
         try:
             makedir(out)
+            makedir(out.joinpath('plots'))
+            if setup.get('scan'):
+                makedir(out.joinpath('hopt'))
         except Exception as error:
             if args.force:
                 print(f'WARNING: Overwriting {out} with new model')
                 shutil.rmtree(out)
                 makedir(out)
+                makedir(out.joinpath('plots'))
+                if setup.get('scan'):
+                    makedir(out.joinpath('hopt'))
             else:
                 print(error)
                 print('Delete or run with "--force" to overwrite.')
                 exit(-1)
         setup['output'] = out
-        from slicerl.build_model import build_and_train_model, inference
-        from slicerl.build_dataset import build_dataset_train, build_dataset_test
 
         # copy runcard to output folder
-        copyfile(args.runcard, f'{out}/input-runcard.yaml')
+        copyfile(args.runcard, out.joinpath('input-runcard.yaml'))
 
         if setup.get('scan'):
             setup = run_hyperparameter_scan(setup, build_dataset_train, build_and_train_model)
@@ -155,16 +148,24 @@ def main():
         print(f"[+] done in {tm()-start} s")
 
         # save the final runcard
-        with open(f'{out}/runcard.yaml','w') as f:
+        with open(out.joinpath('runcard.yaml'),'w') as f:
             yaml.dump(setup, f, indent=4)
     
     elif args.model:
         folder = args.model.strip('/')
         # loading json card
-        setup = load_runcard(f"{folder}/runcard.yaml")
+        setup = load_runcard(folder.joinpath('runcard.yaml'))
+
+        from slicerl.tools import config_tf
+        config_tf(setup)
+
         # loading model
         if args.data:
             setup['test']['fn'] = args.data
+    
+    from slicerl.build_dataset import build_dataset_test
+    from slicerl.build_model import inference
+
     test_generator = build_dataset_test(setup)
     model = inference(setup, test_generator)
         

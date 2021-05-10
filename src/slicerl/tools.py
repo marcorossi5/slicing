@@ -1,5 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-import json
+import os, json
 import numpy as np
 import math
 import tensorflow as tf
@@ -25,6 +25,21 @@ def load_runcard(runcard):
         res = json.load(f)
     # env_setup = res.get("slicerl_env")
     return res
+
+#----------------------------------------------------------------------
+def config_tf(setup):
+    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get('gpu')
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+#----------------------------------------------------------------------
+def makedir(folder):
+    """Create directory."""
+    if not folder.exists():
+        folder.mkdir()
+    else:
+        raise Exception(f'Output folder {folder} already exists.')
 
 #----------------------------------------------------------------------
 def mass(events, noPU=False):
