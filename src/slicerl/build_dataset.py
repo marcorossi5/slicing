@@ -37,7 +37,7 @@ class EventDataset(tf.keras.utils.Sequence):
     #----------------------------------------------------------------------
     def __len__(self):
         return len(self.inputs)
-
+    
     #----------------------------------------------------------------------
     def get_pc(self, index):
         """
@@ -97,8 +97,13 @@ class EventDataset(tf.keras.utils.Sequence):
             - y_pred: Predictions, object storing network predictions
         """
         print("[+] setting events")
-        for i,event in enumerate(self.__events):
-            event.store_preds(y_pred.get_pred(i))
+        if self.__events:
+            for i,event in enumerate(self.__events):
+                event.store_preds(y_pred.get_pred(i))
+        else:
+            raise ValueError("Cannot set events attribute, found None"
+                             " (is the EventDataset generator in training mode?)")
+
 
 #======================================================================
 def rotate_pc(pc, t):
@@ -228,22 +233,21 @@ def build_dataset(fn, nev=-1, min_hits=1, split=None, augment=False, nb_classes=
         targets.extend(np.split(target, len(target), axis=0))
     
     if split:
-        nb_events = len(events)
+        nb_events = len(inputs)
         perm = np.random.permutation(nb_events)
         nb_split = int(split*nb_events)
-        
-        train_evt = [ events[i] for i in perm[:nb_split] ]
-        val_evt   = [ events[i] for i in perm[nb_split:] ]
 
+        train_evt = None
         train_inp = [ inputs[i] for i in perm[:nb_split] ]
-        val_inp   = [ inputs[i] for i in perm[nb_split:] ]
-
         train_trg = [ targets[i] for i in perm[:nb_split] ]
+
+        val_evt   = None
+        val_inp   = [ inputs[i] for i in perm[nb_split:] ]
         val_trg   = [ targets[i] for i in perm[nb_split:] ]
 
-        return [[train_evt, [train_inp, train_trg]],
+        return ([train_evt, [train_inp, train_trg]],
                 [val_evt, [val_inp, val_trg]]
-               ]
+               )
     return events, [inputs, targets]
 
 #======================================================================
@@ -262,8 +266,12 @@ def build_dataset_train(setup):
     min_hits   = setup['train']['min_hits']
     nb_classes = setup['model']['nb_classes']
     split      = setup['dataset']['split']
+    augment    = True if setup['scan'] else False
 
-    train, val = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes, split=split, augment=True)
+    train, val = build_dataset(
+                    fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes,
+                    split=split, augment=augment
+                              )
     train_generator = EventDataset(train, shuffle=True)
     val_generator   = EventDataset(val) if split else None
     return train_generator, val_generator
