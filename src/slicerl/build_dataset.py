@@ -266,7 +266,7 @@ def build_dataset_train(setup):
     min_hits   = setup['train']['min_hits']
     nb_classes = setup['model']['nb_classes']
     split      = setup['dataset']['split']
-    augment    = True if setup['scan'] else False
+    augment    = False if setup['scan'] else True
 
     train, val = build_dataset(
                     fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes,
