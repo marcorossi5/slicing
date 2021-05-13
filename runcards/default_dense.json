@@ -1,0 +1,29 @@
+{
+    "slicerl_env": {
+    "fn": "test_data.csv.gz",
+    "nev": 5,
+    "width": 1.0,
+    "min_hits": 200,
+    "reward": "cauchy"
+    },
+    "rl_agent": {
+    "learning_rate": 1e-4,
+    "nstep": 100000,
+    "actor": {
+        "architecture": "Dense",
+        "dropout": 0.05,
+        "nb_layers": 3,
+        "nb_units": 100
+    },
+    "critic":{
+        "architecture": "Dense",
+        "dropout": 0.05,
+        "nb_layers": 3,
+        "nb_units": 100
+    },    
+    "optimizer": "Adam"
+    },
+    "test": {
+    "fn": "test_data.csv.gz"
+    }
+}
