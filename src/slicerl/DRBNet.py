@@ -13,7 +13,7 @@ class DRBNet(AbstractNet):
     """ Class deifining DRB-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
                  nb_layers=4, activation='relu', use_bias=True, fc_type='conv',
-                 dropout=0.1, ggf=False, net_type='DRB', name='DRB-Net', **kwargs):
+                 dropout=0.1, use_ggf=False, net_type='DRB', name='DRB-Net', **kwargs):
         """
         Parameters
         ----------
@@ -39,7 +39,7 @@ class DRBNet(AbstractNet):
         self.activation   = activation
         self.use_bias     = use_bias
         self.fc_type      = fc_type
-        self.ggf          = ggf
+        self.use_ggf      = use_ggf
         self.net_type     = net_type
         self.dropout_perc = dropout
 
@@ -75,7 +75,7 @@ class DRBNet(AbstractNet):
                 K=self.K,
                 activation=self.activation,
                 use_bias=self.use_bias,
-                ggf=self.ggf,
+                use_ggf=self.use_ggf,
                 all_cached=caches,
                 name=f'DRB{i}'
                            ) \
