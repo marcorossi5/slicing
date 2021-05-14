@@ -12,7 +12,7 @@ model:
     dropout: hp.uniform("dropout", 0.1, 0.5)
     use_bias: hp.choice("use_bias", [True, False])
 test:
-    fn: "data/test_data_03GeV.csv.gz"
+    fn: data/test_data_03GeV.csv.gz
     nev: -1
     min_hits: 1
 train:
@@ -31,7 +31,7 @@ train:
     from_logits: True
     wgt: 50
     gamma: 2
-    epochs: 2
+    epochs: 30
     lr: hp.loguniform("lr", -10, -2)
     min_lr: 0.00001
     patience: 5
