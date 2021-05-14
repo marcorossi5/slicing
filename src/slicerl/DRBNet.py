@@ -1,17 +1,15 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.RandLANet import DilatedResBlock, Predictions
+from slicerl.layers import AbstractNet, DilatedResBlock
+
 import tensorflow as tf
-from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
-    Input,
     Dense,
     Conv1D,
 )
 from tensorflow.keras.constraints import MaxNorm
 
-
 #======================================================================
-class DRBNet(Model):
+class DRBNet(AbstractNet):
     """ Class deifining DRB-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
                  nb_layers=4, activation='relu', use_bias=True, fc_type='conv',
@@ -107,26 +105,3 @@ class DRBNet(Model):
             feats = drb( [pc, feats] )
 
         return feats # logits
-
-    #----------------------------------------------------------------------
-    def model(self):
-        pc = Input(shape=(None, self.dims), name='pc')
-        feats = Input(shape=(None, self.f_dims), name='feats')
-        return Model(inputs=[pc, feats], outputs=self.call([pc,feats]), name=self.name)
-
-    #----------------------------------------------------------------------
-    def get_prediction(self, inputs):
-        """
-        Predict over a iterable of inputs
-
-        Parameters
-        ----------
-            - inputs : list, elements of shape [(1,N,dims), (1,N,f_dims)]
-
-        Returns
-        -------
-            Predictions object
-        """
-        predictions = [ tf.squeeze(self.predict_on_batch(inp), 0) \
-                            for inp in inputs]
-        return Predictions(predictions)

@@ -5,7 +5,7 @@ from shutil import copyfile
 from time import time as tm
 import tensorflow as tf
 
-from hyperopt import fmin, tpe, hp, Trials, space_eval
+from hyperopt import fmin, tpe, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
 import pickle, pprint
 

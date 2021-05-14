@@ -1,10 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.tools import m_lin_fit, pearson_distance
-
-import sys
 import numpy as np
-import math
-import json, gzip
 from collections import namedtuple
 from copy import deepcopy
 

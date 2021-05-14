@@ -1,24 +1,14 @@
 # This file is part of SliceRL by M. Rossi
+""" Module containing utility functions. """
+from slicerl.config import EPS
+
 import os, json
 import numpy as np
 import math
 import tensorflow as tf
 
-EPS = np.finfo(np.float64).eps
 
-TF_DTYPE_INT = tf.int32
-TF_DTYPE     = tf.float32
-
-NP_DTYPE_INT = np.int32
-NP_DTYPE     = np.float32
-
-def float_me(x):
-    return tf.constant(x, dtype=TF_DTYPE)
-
-def int_me(x):
-    return tf.constant(x, dtype=TF_DTYPE_INT)
-
-#----------------------------------------------------------------------
+#======================================================================
 def load_runcard(runcard):
     """Read in a runcard json file and set up dimensions correctly."""
     with open(runcard,'r') as f:
