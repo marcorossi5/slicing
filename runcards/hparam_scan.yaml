@@ -3,7 +3,7 @@ gpu: "0"
 dataset:
     split: 0.9
 model:
-    type: DRB
+    net_type: DRB
     fc_type: conv
     nb_classes: 128
     K: hp.quniform("K", 16, 32, 2)
