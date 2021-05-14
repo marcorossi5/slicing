@@ -16,7 +16,7 @@ class RandLANet(AbstractNet):
     """ Class deifining RandLA-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
                  nb_layers=4, activation='relu', use_bias=True, fc_type='conv',
-                 dropout=0.1, net_type='RandLA', name='RandLA-Net', **kwargs):
+                 dropout=0.1, use_ggf=True, net_type='RandLA', name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -40,6 +40,8 @@ class RandLANet(AbstractNet):
         self.activation   = activation
         self.use_bias     = use_bias
         self.fc_type      = fc_type
+        self.use_ggf      = use_ggf
+        self.net_type     = net_type
         self.dropout_perc = dropout
 
         # store some useful parameters
@@ -99,7 +101,8 @@ class RandLANet(AbstractNet):
         self.encoder = [
             DilatedResBlock(
                 input_units=iunits, units=units, K=self.K,
-                activation=self.activation, use_bias=self.use_bias,
+                activation=self.activation, use_ggf=self.use_ggf,
+                use_bias=self.use_bias,
                 name=f'DRB{i}'
                            ) \
                                 for i, (iunits, units) in enumerate(zip(self.enc_iunits, self.enc_units))

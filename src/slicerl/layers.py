@@ -185,7 +185,7 @@ class LocSE(Layer):
 class AttentivePooling(Layer):
     """ Class defining Attentive Pooling Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', use_ggf=True, use_bias=True, **kwargs):
         """
         Parameters
         ----------
@@ -198,6 +198,7 @@ class AttentivePooling(Layer):
         self.units       = units
         self.K           = K
         self.activation  = activation
+        self.use_ggf     = use_ggf
         self.use_bias    = use_bias
 
     #----------------------------------------------------------------------
@@ -243,7 +244,10 @@ class AttentivePooling(Layer):
         attention = tf.math.reduce_sum(n_feats*scores, axis=-2, keepdims=True)
         
         # add some geometric inspired quantities about the neighborhood
-        cat = self.cat([attention,ggf])
+        if self.use_ggf:
+            cat = self.cat([attention,ggf])
+        else:
+            cat = attention
 
         return self.reshape( self.MLP_final(cat) )
 
@@ -255,6 +259,7 @@ class AttentivePooling(Layer):
             "units"       : self.units,
             "K"           : self.K,
             "activation"  : self.activation,
+            "use_ggf"     : self.use_ggf,
             "use_bias"   : self.use_bias
         })
         return config
@@ -263,7 +268,7 @@ class AttentivePooling(Layer):
 class DilatedResBlock(Layer):
     """ Class defining Dilated Residual Block. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, all_cached=False, **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, use_ggf=True, all_cached=False, **kwargs):
         """
         Parameters
         ----------
@@ -271,6 +276,7 @@ class DilatedResBlock(Layer):
             - units       : int, number of output units, divisible by 4
             - K           : int, number of nearest neighbors
             - activation  : str, MLP layer activation
+            - use_ggf     : wether to concatenate global KNN graph features
             - all_cached  : bool, wether to run KNN or use cached
         """
         super(DilatedResBlock, self).__init__(**kwargs)
@@ -279,6 +285,7 @@ class DilatedResBlock(Layer):
         self.K              = K
         self.activation     = activation
         self.use_bias       = use_bias
+        self.use_ggf        = use_ggf
         self.all_cached     = all_cached
 
         self.locse_0 = LocSE(self.units//2, K=self.K, use_bias=self.use_bias, name='locse_0')
@@ -320,11 +327,11 @@ class DilatedResBlock(Layer):
 
         self.att_0 = AttentivePooling(
                 self.units//2, self.units//2, K=self.K, activation=self.activation,
-                use_bias=self.use_bias, name='attention_0'
+                use_bias=self.use_bias, use_ggf=self.use_ggf, name='attention_0'
                                      )
         self.att_1 = AttentivePooling(
                 self.units, self.units, K=self.K, activation=self.activation,
-                use_bias=self.use_bias, name='attention_1'
+                use_bias=self.use_bias, use_ggf=self.use_ggf,  name='attention_1'
                                      )
 
         self.act = Activation(tf.nn.leaky_relu, name='lrelu')
@@ -369,6 +376,7 @@ class DilatedResBlock(Layer):
             "K"           : self.K,
             "activation"  : self.activation,
             "use_bias"    : self.use_bias,
+            "use_ggf"     : self.use_ggf,
             "all_cached"  : self.all_cached
         })
         return config

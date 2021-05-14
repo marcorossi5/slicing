@@ -4,6 +4,7 @@ dataset:
     split: 0.9
 model:
     net_type: DRB # DRB | RandLA
+    use_ggf: true
     fc_type: conv
     nb_classes: 128
     K: 16

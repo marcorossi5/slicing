@@ -4,6 +4,7 @@ dataset:
     split: 0.9
 model:
     net_type: DRB
+    use_ggf: hp.choice("ggf", [True, False])
     fc_type: conv
     nb_classes: 128
     K: hp.quniform("K", 16, 32, 2)
