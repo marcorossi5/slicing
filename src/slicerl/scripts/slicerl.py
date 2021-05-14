@@ -10,6 +10,31 @@ from hyperopt.mongoexp import MongoTrials
 import pickle, pprint
 
 #----------------------------------------------------------------------
+def config_tf(setup):
+    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get('gpu')
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+#----------------------------------------------------------------------
+def load_runcard(runcard_file):
+    """ Load runcard from yaml file. """
+    with open(runcard_file, 'r') as stream:
+        runcard = yaml.load(stream, Loader=yaml.FullLoader)
+    runcard['scan'] = False
+    for key, value in runcard.items():
+        if isinstance(value, dict):
+            for k, v in value.items():
+                if 'hp.' in str(v):
+                    runcard[key][k] = eval(v)
+                    runcard['scan'] = True
+        else:
+            if 'hp.' in str(value):
+               runcard[key][k] = eval(value)
+               runcard['scan'] = True
+    return runcard
+
+#----------------------------------------------------------------------
 def run_hyperparameter_scan(search_space, load_data_fn, function):
     """ Running a hyperparameter scan using hyperopt. """
 
@@ -42,24 +67,6 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
     from slicerl.plot_hyperopt import plot_hyperopt
     plot_hyperopt(log)
     return best_setup
-
-#----------------------------------------------------------------------
-def load_runcard(runcard_file):
-    """ Load runcard from yaml file. """
-    with open(runcard_file, 'r') as stream:
-        runcard = yaml.load(stream, Loader=yaml.FullLoader)
-    runcard['scan'] = False
-    for key, value in runcard.items():
-        if isinstance(value, dict):
-            for k, v in value.items():
-                if 'hp.' in str(v):
-                    runcard[key][k] = eval(v)
-                    runcard['scan'] = True
-        else:
-            if 'hp.' in str(value):
-               runcard[key][k] = eval(value)
-               runcard['scan'] = True
-    return runcard
 
 #----------------------------------------------------------------------
 def main():
@@ -104,7 +111,6 @@ def main():
     if args.runcard:
         # load yaml
         setup.update( load_runcard(args.runcard) )
-        from slicerl.tools import config_tf
         config_tf(setup)
 
         from slicerl.build_model import build_and_train_model

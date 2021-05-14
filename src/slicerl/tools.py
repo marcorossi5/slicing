@@ -4,7 +4,6 @@ from slicerl.config import EPS, EPS_TF, float_me
 
 import os, json
 import numpy as np
-import math
 import tensorflow as tf
 
 
@@ -13,15 +12,7 @@ def load_runcard(runcard):
     """Read in a runcard json file and set up dimensions correctly."""
     with open(runcard,'r') as f:
         res = json.load(f)
-    # env_setup = res.get("slicerl_env")
     return res
-
-#----------------------------------------------------------------------
-def config_tf(setup):
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get('gpu')
-    gpus = tf.config.list_physical_devices('GPU')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
 
 #----------------------------------------------------------------------
 def makedir(folder):
