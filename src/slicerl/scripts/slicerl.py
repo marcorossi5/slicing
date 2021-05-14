@@ -162,7 +162,6 @@ def main():
         # loading json card
         setup = load_runcard(folder.joinpath('runcard.yaml'))
 
-        from slicerl.tools import config_tf
         config_tf(setup)
 
         # loading model
