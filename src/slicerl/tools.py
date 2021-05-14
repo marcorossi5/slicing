@@ -1,6 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 """ Module containing utility functions. """
-from slicerl.config import EPS
+from slicerl.config import EPS, EPS_TF, float_me
 
 import os, json
 import numpy as np
@@ -30,29 +30,6 @@ def makedir(folder):
         folder.mkdir()
     else:
         raise Exception(f'Output folder {folder} already exists.')
-
-#----------------------------------------------------------------------
-def mass(events, noPU=False):
-    """Given a list of events, determine the masses for each jet inside."""
-
-    masses = []
-
-    for event in events:
-        for jet_noPU, jet in event.jet_pairs:
-            # masses_per_event = []
-            p = jet_noPU if noPU else jet
-            msq = p.E**2 - p.px**2 - p.py**2 - p.pz**2
-            # masses_per_event.append(math.sqrt(msq) if msq > 0.0 else -math.sqrt(-msq))
-            masses.append(math.sqrt(msq) if msq > 0.0 else -math.sqrt(-msq))
-        # masses.append(masses_per_event)
-
-    return masses
-
-#----------------------------------------------------------------------
-def pT(events, noPU=False):
-    """Given a list of events, determine the pT for each jet inside."""
-
-    return  [math.sqrt(p.px()**2 + p.py()**2) for event in events for jet in event]
 
 #----------------------------------------------------------------------
 def get_window_width(masses, lower_frac=20, upper_frac=80):
@@ -101,12 +78,60 @@ def m_lin_fit(x,y):
     return num / (den + EPS)
 
 #----------------------------------------------------------------------
-def pearson_distance(x,y):
+def pearson_distance(x,y, axis):
     """ Computes modified pearson distance. """
     xc = x - x.mean()
     yc = y - y.mean()
     num = (xc * yc).sum()
     den = (xc**2).sum() * (yc**2).sum()
+
+#----------------------------------------------------------------------
+def rsum(x, axis=None, keepdims=False):
+    return tf.reduce_sum(x, axis=axis, keepdims=keepdims)
+
+#----------------------------------------------------------------------
+def rmean(x, axis=None, keepdims=False):
+    return tf.reduce_mean(x, axis=axis, keepdims=keepdims)
+
+#----------------------------------------------------------------------
+def m_lin_fit_tf(pc):
+    """
+    Compute the angular coefficient of a linear fit.
+    
+    Parameters
+    ----------
+        - pc: tf.Tensor, spatial point cloud of shape=(B,N,K,dims)
+    
+    Returns
+    -------
+        - tf.Tensor, squared pearson coefficient of shape=(B,N,1)
+    """
+    x = pc[:,:,:,:1]
+    y = pc[:,:,:,1:]
+    n = float_me(tf.shape(x)[-2])
+    num = n * rsum(x*y,-2,True) - rsum(x,-2,True) * rsum(y,-2,True)
+    den = n * rsum(x*x,-2,True) - rsum(x,-2,True)**2
+    return num / (den + EPS_TF)
+
+#----------------------------------------------------------------------
+def pearson_distance_tf(pc):
+    """
+    Computes modified pearson distance.
+    
+    Parameters
+    ----------
+        - pc: tf.Tensor, spatial point cloud of shape=(B,N,K,dims)
+    
+    Returns
+    -------
+        - tf.Tensor, squared pearson coefficient of shape=(B,N,1)
+    """
+    x = pc[:,:,:,:1]
+    y = pc[:,:,:,1:]
+    xc = x - rmean(x, -2, True)
+    yc = y - rmean(y, -2, True)
+    num = rsum(xc * yc, -2, True)
+    den = rsum(xc**2, -2, True) * rsum(yc**2, -2, True)
     return 1 - num**2 / (den + EPS)
 
 #----------------------------------------------------------------------

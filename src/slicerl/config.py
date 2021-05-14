@@ -10,7 +10,9 @@ NP_DTYPE_INT = np.int32
 NP_DTYPE     = np.float32
 
 def float_me(x):
-    return tf.constant(x, dtype=TF_DTYPE)
+    return tf.cast(x, dtype=TF_DTYPE)
 
 def int_me(x):
-    return tf.constant(x, dtype=TF_DTYPE_INT)
+    return tf.cast(x, dtype=TF_DTYPE_INT)
+
+EPS_TF = float_me(EPS)

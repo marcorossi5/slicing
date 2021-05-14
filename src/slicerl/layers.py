@@ -1,4 +1,4 @@
-from slicerl.tools import onehot_to_indices
+from slicerl.tools import onehot_to_indices, m_lin_fit_tf, pearson_distance_tf
 from slicerl.config import TF_DTYPE_INT
 
 import numpy as np
@@ -99,15 +99,14 @@ class LocSE(Layer):
         Returns
         -------
             tf.Tensor of shape=(B,N,K,2*f_dims)
-
-        Note: dims (spatial dimensions) equal to 2
+            tf.Tensor of shape=(B,N,2)
         """
         pc, feats = inputs
         shape = tf.shape(pc)
         B = shape[0]
         N = shape[1]
         if cached and self._is_cached:
-            rppe, n_idx = self._cache
+            rppe, n_idx, ggf = self._cache
             shape    = [None,None,self.K+1]
             n_idx    = tf.ensure_shape(n_idx, shape)
         else:
@@ -129,8 +128,11 @@ class LocSE(Layer):
             # relative point position encoding
             rppe = self.cat([n_points] + rpbns)
 
+            # global graph feat
+            ggf = tf.concat([m_lin_fit_tf(n_points), pearson_distance_tf(n_points)], axis=-1)
+
             # save cache
-            self._cache     = [rppe, n_idx]
+            self._cache     = [rppe, n_idx, ggf]
             self._is_cached = True
 
         # force shapes: n_feats, rppe
@@ -141,8 +143,10 @@ class LocSE(Layer):
         r = self.MLP(rppe)
 
         n_feats  = self.gather_neighbours(feats, n_idx)
-        n_feats = tf.ensure_shape(n_feats,[None,None,self.K+1,self.units//2] )
-        return self.cat([n_feats, r])
+        n_feats = tf.ensure_shape( n_feats, [None,None,self.K+1,self.units//2] )
+
+        ggf = tf.ensure_shape( ggf, [None,None,1,2] )
+        return self.cat([n_feats, r]), ggf
 
     #----------------------------------------------------------------------
     def get_config(self):
@@ -202,6 +206,7 @@ class AttentivePooling(Layer):
         Note: the MLP kernel has size 1. This means that point features are
               not mixed across neighbours.
         """
+        input_shape, _ = input_shape # the second item is gg_shape
         shape = (self.input_units, self.K+1)
         self.MLP_score = Conv1D(input_shape[-1], 1, input_shape=shape,
                           activation='softmax',
@@ -209,33 +214,38 @@ class AttentivePooling(Layer):
                           # kernel_regularizer='l2',
                           # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
-                          name='attention_score_MLP')
+                          name='attention_score')
         self.MLP_final = Conv1D(self.units, 1, input_shape=shape,
                           activation=self.activation,
                           use_bias=self.use_bias,
                           # kernel_regularizer='l2',
                           # bias_regularizer='l2',
                           kernel_constraint=MaxNorm(axis=[0,1]),
-                          name='final_MLP')
+                          name='shared_MLP')
         self.reshape   = Reshape((-1, self.units), name='reshape')
+        self.cat       = Concatenate(axis=-1, name='cat')
 
     #----------------------------------------------------------------------
-    def call(self, n_feats):
+    def call(self, inputs):
         """
         Layer forward pass.
 
         Parameters
         ----------
-            - n_feats : tf.Tensor, point cloud tensor of shape=(B,N,dims)
+            - inputs: list, containing output of LocSE layer of shapes=[(B,N,dims),(B,N,2)]
 
         Returns
         -------
             tf.Tensor of shape=(B,N,units)
         """
+        n_feats, ggf = inputs
         scores = self.MLP_score(n_feats)
         attention = tf.math.reduce_sum(n_feats*scores, axis=-2, keepdims=True)
+        
+        # add some geometric inspired quantities about the neighborhood
+        cat = self.cat([attention,ggf])
 
-        return self.reshape( self.MLP_final(attention) )
+        return self.reshape( self.MLP_final(cat) )
 
     #----------------------------------------------------------------------
     def get_config(self):
