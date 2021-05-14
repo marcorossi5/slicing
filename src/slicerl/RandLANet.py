@@ -7,15 +7,12 @@ from tensorflow.keras.layers import Layer
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     Input,
-    InputLayer,
     Dense,
     Activation,
-    Flatten,
     Reshape,
     Concatenate,
     Dropout,
     Conv1D,
-    Lambda
 )
 from tensorflow.keras.constraints import MaxNorm
 import knn
@@ -401,9 +398,9 @@ class RandomSample(Layer):
         pc, feats = inputs
 
         shape = tf.shape(feats)
-        B    = shape[0]
+        # B    = shape[0]
         N    = shape[1]
-        dims = shape[2]
+        # dims = shape[2]
 
         # shape  = tf.shape(feats)
         # B_     = shape[0]
@@ -557,7 +554,7 @@ class RandLANet(Model):
     """ Class deifining RandLA-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16, scale_factor=2,
                  nb_layers=4, activation='relu', use_bias=True, fc_type='conv',
-                 dropout=0.1, name='RandLA-Net', **kwargs):
+                 dropout=0.1, net_type='RandLA', name='RandLA-Net', **kwargs):
         """
         Parameters
         ----------
@@ -569,6 +566,8 @@ class RandLANet(Model):
                              layers
             - dropout      : float, dropout percentage in final FC layers
         """
+        print(**kwargs)
+        exit()
         super(RandLANet, self).__init__(name=name, **kwargs)
 
         # store args

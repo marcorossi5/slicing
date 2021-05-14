@@ -1,13 +1,11 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.RandLANet import RandLANet
-from slicerl.tools import onehot_to_indices, float_me
-from slicerl.build_dataset import EventDataset, build_dataset, split_dataset, dummy_dataset
+from slicerl.DRBNet import DRBNet
+from slicerl.build_dataset import dummy_dataset
 from slicerl.losses import get_loss
 from slicerl.diagnostics import plot_plane_view, plot_slice_size, plot_multiplicity
 
 import os
-import numpy as np
-import matplotlib.pyplot as plt
 from time import time as tm
 
 import tensorflow as tf
@@ -26,10 +24,10 @@ from tensorflow.keras.optimizers import (
 
 from hyperopt import STATUS_OK
 
-def load_network(setup, name='RandLA-Net', checkpoint_filepath=None):
+def load_network(setup, checkpoint_filepath=None):
     """
     Load network from config dic, compile and, if necessary, load weights.
-    
+
     Parameters
     ----------
         - setup               : dict, config dict
@@ -37,9 +35,12 @@ def load_network(setup, name='RandLA-Net', checkpoint_filepath=None):
 
     Returns
     -------
-        - RandLANet
+        - RandLANet or DRBNet
     """
-    net = RandLANet(**setup['model'], name='RandLA-Net')
+    if setup['model']['net_type'] == 'RandLA':
+        net = RandLANet(**setup['model'], name='RandLA-Net')
+    elif setup['model']['net_type'] == 'DRB':
+        net = DRBNet(**setup['model'], name='DRB-Net')
 
     loss = get_loss(setup['train'], setup['model']['nb_classes'])
 
@@ -59,7 +60,7 @@ def load_network(setup, name='RandLA-Net', checkpoint_filepath=None):
             metrics=[tf.keras.metrics.CategoricalAccuracy(name='acc')],
             run_eagerly=setup.get('debug')
             )
-    
+
     # net.model().summary()
     # tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
@@ -80,14 +81,14 @@ def build_and_train_model(setup, generators):
     ----------
         - setup      : dict
         - generators : list, of EventDataset with train and val generators
-    
+
     Retruns
     -------
-        RandLANet model if scan is False, else dict with loss and status keys.    
+        RandLANet model if scan is False, else dict with loss and status keys.
     """
     train_generator, val_generator = generators
 
-    net = load_network(setup, name='RandLA-Net')   
+    net = load_network(setup)
 
     logdir = setup['output'].joinpath(f'logs/{tm()}').as_posix()
     checkpoint_filepath = setup['output'].joinpath(f'randla.h5').as_posix()
@@ -123,7 +124,7 @@ def build_and_train_model(setup, generators):
                     histogram_freq=setup['train']['hist_freq'],
                     profile_batch=5
                  )
-    
+
     callbacks.append(tboard)
 
     initial_weights = setup['train']['initial_weights']
@@ -132,13 +133,13 @@ def build_and_train_model(setup, generators):
         net.get_prediction(test_generator.inputs)
         net.load_weights(setup['train']['initial_weights'])
         print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
-    
+
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(train_generator, epochs=setup['train']['epochs'],
                 validation_data=val_generator,
                 callbacks=callbacks,
                 verbose=2)
-    
+
     if setup['scan']:
         net.load_weights(checkpoint_filepath)
         loss, acc = net.evaluate(val_generator, verbose=0)
@@ -153,7 +154,7 @@ def build_and_train_model(setup, generators):
 def inference(setup, test_generator):
     print("[+] done with training, load best weights")
     checkpoint_filepath = setup['output'].joinpath('randla.h5')
-    net = load_network(setup, 'RandLA-Net', checkpoint_filepath.as_posix())
+    net = load_network(setup, checkpoint_filepath.as_posix())
 
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
