@@ -69,8 +69,12 @@ class DRBNet(Model):
 
         self.drbs = [
             DilatedResBlock(
-                input_units=iunits, units=units, K=self.K,
-                activation=self.activation, use_bias=self.use_bias,
+                input_units=iunits,
+                units=units,
+                K=self.K,
+                activation=self.activation,
+                use_bias=self.use_bias,
+                all_cached=True,
                 name=f'DRB{i}'
                            ) \
                                 for i, (iunits, units) in enumerate(zip(self.drbs_iunits, self.drbs_units))
@@ -94,7 +98,11 @@ class DRBNet(Model):
         feats = self.fc(feats)
         residuals.append(feats)
 
+        feats = self.drbs[0]( [pc, feats] )
+        cache = self.drbs[0].locse_0.cache
+
         for drb in self.drbs:
+            drb.locse_0.cache = cache
             feats = drb( [pc, feats] )
 
         return feats # logits

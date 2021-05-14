@@ -259,7 +259,7 @@ class AttentivePooling(Layer):
 class DilatedResBlock(Layer):
     """ Class defining Dilated Residual Block. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, all_cached=False, **kwargs):
         """
         Parameters
         ----------
@@ -267,6 +267,7 @@ class DilatedResBlock(Layer):
             - units       : int, number of output units, divisible by 4
             - K           : int, number of nearest neighbors
             - activation  : str, MLP layer activation
+            - all_cached  : bool, wether to run KNN or use cached
         """
         super(DilatedResBlock, self).__init__(**kwargs)
         self.input_units    = input_units
@@ -274,6 +275,7 @@ class DilatedResBlock(Layer):
         self.K              = K
         self.activation     = activation
         self.use_bias       = use_bias
+        self.all_cached     = all_cached
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
@@ -344,7 +346,7 @@ class DilatedResBlock(Layer):
 
         # dilation block
         x = self.MLP_0(feats)
-        x = self.att_0( self.locse_0([pc, x]) )
+        x = self.att_0( self.locse_0([pc, x]), cached=self.all_cached )
 
         # store cash in locse_1 to skip knn building
         self.locse_1.cache = self.locse_0.cache
@@ -362,7 +364,8 @@ class DilatedResBlock(Layer):
             "units"       : self.units,
             "K"           : self.K,
             "activation"  : self.activation,
-            "use_bias"   : self.use_bias
+            "use_bias"    : self.use_bias,
+            "all_cached"  : self.all_cached
         })
         return config
 
