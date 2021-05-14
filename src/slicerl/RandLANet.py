@@ -277,6 +277,9 @@ class DilatedResBlock(Layer):
         self.use_bias       = use_bias
         self.all_cached     = all_cached
 
+        self.locse_0 = LocSE(self.units//2, K=self.K, use_bias=self.use_bias, name='locse_0')
+        self.locse_1 = LocSE(self.units, K=self.K, use_bias=self.use_bias, name='locse_1')
+
     #----------------------------------------------------------------------
     def build(self, input_shape):
         """
@@ -311,9 +314,6 @@ class DilatedResBlock(Layer):
                               kernel_constraint=MaxNorm(axis=[0,1]),
                               name='MLP_res')
 
-        self.locse_0 = LocSE(self.units//2, K=self.K, use_bias=self.use_bias, name='locse_0')
-        self.locse_1 = LocSE(self.units, K=self.K, use_bias=self.use_bias, name='locse_1')
-
         self.att_0 = AttentivePooling(
                 self.units//2, self.units//2, K=self.K, activation=self.activation,
                 use_bias=self.use_bias, name='attention_0'
@@ -346,7 +346,7 @@ class DilatedResBlock(Layer):
 
         # dilation block
         x = self.MLP_0(feats)
-        x = self.att_0( self.locse_0([pc, x]), cached=self.all_cached )
+        x = self.att_0( self.locse_0([pc, x], cached=self.all_cached) )
 
         # store cash in locse_1 to skip knn building
         self.locse_1.cache = self.locse_0.cache

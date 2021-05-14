@@ -67,7 +67,7 @@ def load_network(setup, checkpoint_filepath=None):
     if checkpoint_filepath:
         print(f"[+] Loading weights at {checkpoint_filepath}")
         dummy_generator = dummy_dataset(setup['model']['nb_classes'])
-        net.evaluate(dummy_generator)
+        net.evaluate(dummy_generator, verbose=0)
         net.load_weights(checkpoint_filepath)
 
     return net

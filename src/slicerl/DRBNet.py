@@ -44,8 +44,9 @@ class DRBNet(Model):
         self.dropout_perc = dropout
 
         # store some useful parameters
-        self.fc_units = 16
-        self.drbs_units = [32, 48, 64, 96, 128]
+        self.fc_units    = 16
+        self.drbs_units  = [32, 48, 64, 96, 128]
+        self.caches      = [False] + [True] * len(self.drbs_units[1:])
         self.drbs_iunits = [self.fc_units] + self.drbs_units[:-1]
 
         # build layers
@@ -74,10 +75,10 @@ class DRBNet(Model):
                 K=self.K,
                 activation=self.activation,
                 use_bias=self.use_bias,
-                all_cached=True,
+                all_cached=caches,
                 name=f'DRB{i}'
                            ) \
-                                for i, (iunits, units) in enumerate(zip(self.drbs_iunits, self.drbs_units))
+                                for i, (iunits, units, caches) in enumerate(zip(self.drbs_iunits, self.drbs_units, self.caches))
                        ]
     #----------------------------------------------------------------------
     def call(self, inputs):
@@ -101,7 +102,7 @@ class DRBNet(Model):
         feats = self.drbs[0]( [pc, feats] )
         cache = self.drbs[0].locse_0.cache
 
-        for drb in self.drbs:
+        for drb in self.drbs[1:]:
             drb.locse_0.cache = cache
             feats = drb( [pc, feats] )
 

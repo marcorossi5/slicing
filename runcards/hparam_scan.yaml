@@ -1,9 +1,10 @@
 # This file is part of SliceRL by M. Rossi
-gpu: "0,1"
+gpu: "0"
 dataset:
     split: 0.9
 model:
-    fc_type: "conv"
+    type: DRB
+    fc_type: conv
     nb_classes: 128
     K: hp.quniform("K", 16, 32, 2)
     scale_factor: hp.choice("scale_factor", [2,3,4])
@@ -12,21 +13,21 @@ model:
     use_bias: hp.choice("use_bias", [True, False])
 test:
     fn: "data/test_data_03GeV.csv.gz"
-    nev: 2
+    nev: -1
     min_hits: 1
 train:
     fn:
-    - "data/test_data_05GeV.csv.gz"
-    # - "data/test_data_1GeV.csv.gz"
-    # - "data/test_data_2GeV.csv.gz"
-    # - "data/test_data_3GeV.csv.gz"
-    # - "data/test_data_6GeV.csv.gz"
-    # - "data/test_data_7GeV.csv.gz"
-    nev: 2
+    - data/test_data_05GeV.csv.gz
+    - data/test_data_1GeV.csv.gz
+    - data/test_data_2GeV.csv.gz
+    - data/test_data_3GeV.csv.gz
+    - data/test_data_6GeV.csv.gz
+    - data/test_data_7GeV.csv.gz
+    nev: -1
     min_hits: 1
     split: 0.9
     hist_freq: 1
-    loss: "xent"
+    loss: xent
     from_logits: True
     wgt: 50
     gamma: 2
@@ -35,10 +36,10 @@ train:
     min_lr: 0.00001
     patience: 5
     optimizer: hp.choice("optimizer", ["Adam", "SGD", "RMSprop", "Adagrad"])
-    initial_weights: ""
+    initial_weights: null
 scan: true
 cluster:
-    max_evals: 2
+    max_evals: 100
     enable: false
     url: null
     exp_key: null
