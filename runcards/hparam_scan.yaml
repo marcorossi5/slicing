@@ -10,6 +10,7 @@ model:
     K: hp.quniform("K", 16, 32, 2)
     scale_factor: hp.choice("scale_factor", [2,3,4])
     nb_layers: hp.choice("nb_layers", [2,3,4])
+    nb_final_convs: hp.chioce("nb_final_convs", [1,2,3,4])
     dropout: hp.uniform("dropout", 0.1, 0.5)
     use_bias: hp.choice("use_bias", [True, False])
 test:

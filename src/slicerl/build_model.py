@@ -37,10 +37,21 @@ def load_network(setup, checkpoint_filepath=None):
     -------
         - RandLANet or DRBNet
     """
+    net_dict = {}
+    # update common keys
+    net_keys = ['nb_classes', 'K', 'use_bias', 'fc_type', 'dropout', 'use_ggf']
+    for key in net_keys:
+        net_dict[key] = setup['model'][key]
+
     if setup['model']['net_type'] == 'RandLA':
-        net = RandLANet(**setup['model'], name='RandLA-Net')
+        # update local keys
+        net_dict['scale_factor'] = setup['model']['scale_factor']
+        net_dict['nb_layers'] = setup['model']['nb_layers']
+        net = RandLANet(name='RandLA-Net', **net_dict)
     elif setup['model']['net_type'] == 'DRB':
-        net = DRBNet(**setup['model'], name='DRB-Net')
+        # update local keys
+        net_dict['nb_final_convs'] = setup['model']['nb_final_convs']
+        net = DRBNet(name='DRB-Net', **net_dict)
 
     loss = get_loss(setup['train'], setup['model']['nb_classes'])
 
