@@ -131,6 +131,8 @@ class DRBNet(AbstractNet):
             drb.locse_0.cache = cache
             feats = drb( [pc, feats] )
         
+        return feats
+        
         for fc, do in zip(self.final_convs, self.dropout):
             # compute slice size
             mean = tf.reduce_mean(feats, axis=1, keepdims=True)
