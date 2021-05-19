@@ -29,7 +29,7 @@ train:
     nev: -1
     min_hits: 1
     hist_freq: 1
-    loss: xent # xent | focal | xent_l1 | focal_l1
+    loss: w_xent # xent | focal | xent_l1 | focal_l1 | w_xent
     from_logits: True
     wgt: 50
     gamma: 2

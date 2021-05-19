@@ -103,6 +103,33 @@ def focal_crossentropy(y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False):
     return tf.reduce_sum(alpha_factor * modulating_factor * ce, axis=-1)
 
 #======================================================================
+class WeightedCategoricalCrossEntropy(CategoricalCrossentropy):
+    """ Implementation of Focal crossentropy.  """
+    def __init__(self, nb_classes, scale, name='weight-xent', **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.nb_classes = nb_classes
+        self.scale      = scale
+        x = np.linspace(0, self.nb_classes-1, self.nb_classes)
+        wgt = np.exp(- x/self.scale).reshape([1,1,-1])
+        self.wgt = float_me(wgt)
+
+    #----------------------------------------------------------------------
+    def call(self, y_true, y_pred):
+        """
+        Parameters
+        ----------
+            - y_true : tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
+            - y_pred : tf.Tensor, output tensor of shape=(B,N,nb_classes)
+
+        Returns
+        -------
+            tf.Tensor, loss tensor of shape=(B,N) if `reduction` is `NONE`,
+            shape=() otherwise.
+        """
+        weighted_true = y_true * self.wgt
+        return super().call(weighted_true, y_pred)
+
+#======================================================================
 class FocalCrossentropy(Loss):
     """ Implementation of Focal crossentropy.  """
     def __init__(self, from_logits=False, alpha=1.0, gamma=2.0,
@@ -221,7 +248,7 @@ def get_loss(setup, nb_classes):
         return FocalCrossentropy(from_logits=from_logits, gamma=gamma, name=name)
     elif setup.get('loss') == 'xent_l1':
         from_logits = setup.get("from_logits")
-        scale       =  setup.get('wgt')
+        scale       = setup.get('wgt')
         name        = "xent-l1"
         return CombinedLoss(
                     from_logits=from_logits, scale=scale,
@@ -230,11 +257,19 @@ def get_loss(setup, nb_classes):
     elif setup.get('loss') == 'focal_l1':
         from_logits = setup.get("from_logits")
         gamma       = setup.get("gamma")
-        scale       =  setup.get('wgt')
+        scale       = setup.get('wgt')
         name        = "focal_xent-l1"
         return CombinedFocalLoss(
                     from_logits=from_logits, scale=scale,
                     nb_classes=nb_classes, gamma=gamma, name=name
                     )
+    elif setup.get('loss') == 'w_xent':
+        from_logits = setup.get("from_logits")
+        scale       = setup.get('wgt')
+        name        = "w_xent"
+        return WeightedCategoricalCrossEntropy(
+                    nb_classes=nb_classes, scale=scale,
+                    from_logits=from_logits, name=name
+                                              )
     else:
-        raise NotImplementedError(f"loss named {loss} not implemented")
+        raise NotImplementedError(f"loss named {setup.get('loss')} not implemented")
