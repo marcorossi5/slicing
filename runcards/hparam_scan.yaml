@@ -2,6 +2,7 @@
 gpu: "0"
 dataset:
     split: 0.9
+    augment: false
 model:
     net_type: DRB
     use_ggf: hp.choice("ggf", [True, False])

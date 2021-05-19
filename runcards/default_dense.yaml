@@ -2,6 +2,7 @@
 gpu: "0,1"
 dataset:
     split: 0.9
+    augment: false
 model:
     net_type: DRB # DRB | RandLA
     use_ggf: true
