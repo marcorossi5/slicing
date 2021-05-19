@@ -177,7 +177,7 @@ def inference(setup, test_generator):
     plot_slice_size(test_generator.events, setup['output'].joinpath('plots'))
     plot_multiplicity(test_generator.events, setup['output'].joinpath('plots'))
 
-    n = max(10, len(test_generator))
+    n = min(10, len(test_generator))
     for i in range(n):
         pc      = test_generator.get_pc(i)      # shape=(N,2)
         pc_pred = y_pred.get_pred(i)            # shape=(N,)
