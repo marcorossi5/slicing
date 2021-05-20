@@ -111,7 +111,7 @@ class WeightedCategoricalCrossEntropy(CategoricalCrossentropy):
         self.scale      = scale
         x = np.linspace(0, self.nb_classes-1, self.nb_classes)
         wgt = np.exp(- x/self.scale).reshape([1,1,-1])
-        self.wgt = float_me(wgt)
+        self.wgt = float_me(wgt/wgt.sum())
 
     #----------------------------------------------------------------------
     def call(self, y_true, y_pred):
