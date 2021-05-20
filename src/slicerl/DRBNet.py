@@ -99,7 +99,7 @@ class DRBNet(AbstractNet):
         acts = ['relu']*(self.nb_final_convs-1) + ['linear']
         self.final_convs = [
             Conv1D(
-                1, 1,
+                128, 1,
                 input_shape=(None,None,self.nb_classes),
                 kernel_constraint=MaxNorm(axis=[0,1]),
                 activation=act,
