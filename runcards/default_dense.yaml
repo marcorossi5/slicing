@@ -1,5 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-gpu: "0,1"
+gpu: "0"
 dataset:
     split: 0.9
     augment: false

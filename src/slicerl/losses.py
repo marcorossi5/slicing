@@ -104,7 +104,7 @@ def focal_crossentropy(y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False):
 
 #======================================================================
 class WeightedCategoricalCrossEntropy(CategoricalCrossentropy):
-    """ Implementation of Focal crossentropy.  """
+    """ Implementation of weighted categorical crossentropy.  """
     def __init__(self, nb_classes, scale, name='weight-xent', **kwargs):
         super().__init__(name=name, **kwargs)
         self.nb_classes = nb_classes

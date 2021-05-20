@@ -3,7 +3,12 @@ from slicerl.RandLANet import RandLANet
 from slicerl.DRBNet import DRBNet
 from slicerl.build_dataset import dummy_dataset
 from slicerl.losses import get_loss
-from slicerl.diagnostics import plot_plane_view, plot_slice_size, plot_multiplicity
+from slicerl.metrics import WAccMetric
+from slicerl.diagnostics import (
+    plot_plane_view,
+    plot_slice_size,
+    plot_multiplicity
+)
 
 import os
 from time import time as tm
@@ -68,7 +73,12 @@ def load_network(setup, checkpoint_filepath=None):
     net.compile(
             loss= loss,
             optimizer= opt,
-            metrics=[tf.keras.metrics.CategoricalAccuracy(name='acc')],
+            metrics=[
+                tf.keras.metrics.CategoricalAccuracy(name='acc'),
+                WAccMetric(
+                    setup['model']['nb_classes'], setup['train']['wgt'], name='w_acc'
+                          )
+            ],
             run_eagerly=setup.get('debug')
             )
 
@@ -108,7 +118,7 @@ def build_and_train_model(setup, generators):
             filepath=checkpoint_filepath,
             save_best_only=True,
             mode='max',
-            monitor='val_acc',
+            monitor='val_w_acc',
             verbose=1
         ),
         ReduceLROnPlateau(
