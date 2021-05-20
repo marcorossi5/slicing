@@ -45,16 +45,16 @@ class DRBNet(AbstractNet):
         self.dropout_perc   = dropout
 
         # store some useful parameters
-        self.fc_units    = 16
-        self.drbs_units  = [32, 48, 64, 96, 128]
-        self.caches      = [False] + [True] * len(self.drbs_units[1:])
-        self.drbs_iunits = [self.fc_units] + self.drbs_units[:-1]
+        fc_units    = 16
+        drbs_units  = [32, 48, 64, 96, self.nb_classes]
+        caches      = [False] + [True] * len(drbs_units[1:])
+        drbs_iunits = [fc_units] + drbs_units[:-1]
 
         # build layers
         self.cat = Concatenate(axis=-1, name='cat')
 
         if self.fc_type == 'conv':
-            self.fc = Conv1D(self.fc_units, 16, padding='same',
+            self.fc = Conv1D(fc_units, 16, padding='same',
                              input_shape=(None,None,None,self.dims + self.f_dims),
                              # kernel_regularizer='l2',
                              # bias_regularizer='l2',
@@ -62,7 +62,7 @@ class DRBNet(AbstractNet):
                              activation=self.activation,
                              name=f'fc')
         elif self.fc_type == 'dense':
-            self.fc =  Dense(self.fc_units,
+            self.fc =  Dense(fc_units,
                              # kernel_regularizer='l2',
                              # bias_regularizer='l2',
                              kernel_constraint=MaxNorm(),
@@ -82,27 +82,32 @@ class DRBNet(AbstractNet):
                 all_cached=caches,
                 name=f'DRMB{i}'
                            ) \
-                                for i, (iunits, units, caches) in enumerate(zip(self.drbs_iunits, self.drbs_units, self.caches))
+                                for i, (iunits, units, caches) in enumerate(zip(drbs_iunits, drbs_units, caches))
                        ]
 
+        self.middle_convs = [
+            Conv1D(
+                units, 3, padding='same',
+                input_shape=(None,None,iunits),
+                kernel_constraint=MaxNorm(axis=[0,1]),
+                activation='relu',
+                use_bias=self.use_bias,
+                name=f'final_fc{i}') \
+                       for i, (iunits,units) in enumerate(zip(drbs_iunits, drbs_units))
+                           ]
+
+        acts = ['relu']*(self.nb_final_convs-1) + ['linear']
         self.final_convs = [
             Conv1D(
                 1, 1,
-                input_shape=(None,None,self.nb_classes,2),
-                # kernel_regularizer='l2',
-                # bias_regularizer='l2',
+                input_shape=(None,None,self.nb_classes),
                 kernel_constraint=MaxNorm(axis=[0,1]),
-                activation='linear',
+                activation=act,
                 use_bias=self.use_bias,
                 name=f'final_fc{i}') \
-                       for i in range(self.nb_final_convs)
+                       for act, i in zip(acts, range(self.nb_final_convs))
                            ]
 
-        if self.dropout_perc:
-            self.dropout = [Dropout(self.dropout_perc, name=f'dropout{i+1}') \
-                        for i in range(self.nb_final_convs)]
-        else:
-            self.dropout = [[] for i in range(self.nb_final_convs)]
     #----------------------------------------------------------------------
     def call(self, inputs):
         """
@@ -127,24 +132,13 @@ class DRBNet(AbstractNet):
 
         feats = self.drbs[0]( [pc, feats] )
         cache = self.drbs[0].locse_0.cache
+        feats = self.middle_convs[0](feats)
 
-        for drb in self.drbs[1:]:
+        for drb, conv in zip(self.drbs[1:], self.middle_convs[1:]):
             drb.locse_0.cache = cache
-            feats = drb( [pc, feats] )
+            feats = conv(drb( [pc, feats] ))
+        
+        for conv in self.final_convs:
+            feats = conv(feats)
         
         return feats
-        
-        for fc, do in zip(self.final_convs, self.dropout):
-            # compute slice size
-            mean = tf.reduce_mean(feats, axis=1, keepdims=True)
-            size = tf.repeat(
-                    mean,
-                    N,
-                    axis=1)
-            # concat size to feats
-            feats = tf.stack([feats, size], axis=-1)
-            feats = tf.squeeze( fc(feats), axis=-1 )
-            if self.dropout_perc:
-                feats = do(feats)
-
-        return feats # logits
