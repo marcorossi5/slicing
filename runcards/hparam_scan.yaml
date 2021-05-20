@@ -5,6 +5,7 @@ dataset:
     augment: false
 model:
     net_type: DRB
+    use_bnorm: true
     use_ggf: hp.choice("ggf", [True, False])
     fc_type: conv
     nb_classes: 128

@@ -6,7 +6,7 @@ from tensorflow.keras.layers import (
     Dense,
     Conv1D,
     Concatenate,
-    Dropout
+    Dropout,
 )
 from tensorflow.keras.constraints import MaxNorm
 
@@ -14,8 +14,9 @@ from tensorflow.keras.constraints import MaxNorm
 class DRBNet(AbstractNet):
     """ Class deifining DRB-Net. """
     def __init__(self, dims=2, f_dims=2, nb_classes=128, K=16,
-                 nb_final_convs=3, activation='relu', use_bias=True, fc_type='conv',
-                 dropout=0.1, use_ggf=False, name='DRB-Net', **kwargs):
+                 nb_final_convs=3, activation='relu', use_bnorm=True,
+                 use_bias=True, fc_type='conv', dropout=0.1, use_ggf=False,
+                 name='DRB-Net', **kwargs):
         """
         Parameters
         ----------

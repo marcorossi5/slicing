@@ -56,6 +56,7 @@ def load_network(setup, checkpoint_filepath=None):
     elif setup['model']['net_type'] == 'DRB':
         # update local keys
         net_dict['nb_final_convs'] = setup['model']['nb_final_convs']
+        net_dict['use_bnorm'] = setup['model']['use_bnorm']
         net = DRBNet(name='DRB-Net', **net_dict)
 
     loss = get_loss(setup['train'], setup['model']['nb_classes'])
@@ -109,7 +110,10 @@ def build_and_train_model(setup, generators):
     """
     train_generator, val_generator = generators
 
-    net = load_network(setup)
+    initial_weights = setup['train']['initial_weights']
+    if initial_weights and os.path.isfile(initial_weights):
+        print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
+    net = load_network(setup, initial_weights)
 
     logdir = setup['output'].joinpath(f'logs/{tm()}').as_posix()
     checkpoint_filepath = setup['output'].joinpath(f'randla.h5').as_posix()
@@ -147,13 +151,6 @@ def build_and_train_model(setup, generators):
                  )
 
     callbacks.append(tboard)
-
-    initial_weights = setup['train']['initial_weights']
-    if initial_weights and os.path.isfile(initial_weights):
-        # dummy forward pass
-        net.get_prediction(test_generator.inputs)
-        net.load_weights(setup['train']['initial_weights'])
-        print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(train_generator, epochs=setup['train']['epochs'],

@@ -5,6 +5,7 @@ dataset:
     augment: false
 model:
     net_type: DRB # DRB | RandLA
+    use_bnorm: true
     use_ggf: true
     fc_type: conv
     nb_classes: 128

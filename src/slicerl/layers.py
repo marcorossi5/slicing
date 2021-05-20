@@ -10,7 +10,8 @@ from tensorflow.keras.layers import (
     Activation,
     Reshape,
     Concatenate,
-    Conv1D
+    Conv1D,
+    BatchNormalization
 )
 from tensorflow.keras.constraints import MaxNorm
 
@@ -268,7 +269,8 @@ class AttentivePooling(Layer):
 class DilatedResBlock(Layer):
     """ Class defining Dilated Residual Block. """
     #----------------------------------------------------------------------
-    def __init__(self, input_units, units=1, K=8, activation='relu', use_bias=True, use_ggf=True, all_cached=False, **kwargs):
+    def __init__(self, input_units, units=1, K=8, activation='relu',
+                 use_bnorm=True, use_bias=True, use_ggf=True, all_cached=False, **kwargs):
         """
         Parameters
         ----------
@@ -276,6 +278,8 @@ class DilatedResBlock(Layer):
             - units       : int, number of output units, divisible by 4
             - K           : int, number of nearest neighbors
             - activation  : str, MLP layer activation
+            - use_bnorm   : wether to put BatchNormalization layer before
+                            layer activation
             - use_ggf     : wether to concatenate global KNN graph features
             - all_cached  : bool, wether to run KNN or use cached
         """
@@ -284,6 +288,7 @@ class DilatedResBlock(Layer):
         self.units          = units
         self.K              = K
         self.activation     = activation
+        self.use_bnorm      = use_bnorm
         self.use_bias       = use_bias
         self.use_ggf        = use_ggf
         self.all_cached     = all_cached
@@ -335,6 +340,7 @@ class DilatedResBlock(Layer):
                                      )
 
         self.act = Activation(tf.nn.leaky_relu, name='lrelu')
+        self.bnorm = BatchNormalization(name='bnorm') if self.use_bnorm else None
 
     #----------------------------------------------------------------------
     def call(self, inputs):
@@ -365,7 +371,9 @@ class DilatedResBlock(Layer):
         x = self.att_1( self.locse_1([pc, x], cached=True) )
         x = self.MLP_1(x)
 
-        return self.act(x + y)
+        res = self.bnorm(x+y) if self.use_bnorm else x+y
+
+        return self.act(res)
 
     #----------------------------------------------------------------------
     def get_config(self):
@@ -375,6 +383,7 @@ class DilatedResBlock(Layer):
             "units"       : self.units,
             "K"           : self.K,
             "activation"  : self.activation,
+            "use_bnorm"   : self.use_bnorm,
             "use_bias"    : self.use_bias,
             "use_ggf"     : self.use_ggf,
             "all_cached"  : self.all_cached
