@@ -32,7 +32,7 @@ train:
     split: 0.9
     hist_freq: 1
     loss: xent
-    from_logits: True
+    from_logits: true
     wgt: 50
     gamma: 2
     epochs: 30

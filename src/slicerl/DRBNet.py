@@ -60,14 +60,14 @@ class DRBNet(AbstractNet):
                              # bias_regularizer='l2',
                              kernel_constraint=MaxNorm(axis=[0,1]),
                              activation=self.activation,
-                             name=f'fc')
+                             name=f'initial_fc')
         elif self.fc_type == 'dense':
             self.fc =  Dense(fc_units,
                              # kernel_regularizer='l2',
                              # bias_regularizer='l2',
                              kernel_constraint=MaxNorm(),
                              activation=self.activation,
-                             name=f'fc')
+                             name=f'initial_fc')
         else:
             raise NotImplementedError(f"First and final layers must be of type 'conv'|'dense', not {self.fc_type}")
 
@@ -92,7 +92,7 @@ class DRBNet(AbstractNet):
                 kernel_constraint=MaxNorm(axis=[0,1]),
                 activation='relu',
                 use_bias=self.use_bias,
-                name=f'final_fc{i}') \
+                name=f'middle_fc{i}') \
                        for i, (iunits,units) in enumerate(zip(drbs_iunits, drbs_units))
                            ]
 
@@ -105,7 +105,7 @@ class DRBNet(AbstractNet):
                 activation=act,
                 use_bias=self.use_bias,
                 name=f'final_fc{i}') \
-                       for act, i in zip(acts, range(self.nb_final_convs))
+                       for i,act in enumerate(acts))
                            ]
 
     #----------------------------------------------------------------------
