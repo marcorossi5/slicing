@@ -105,7 +105,7 @@ class DRBNet(AbstractNet):
                 activation=act,
                 use_bias=self.use_bias,
                 name=f'final_fc{i}') \
-                       for i,act in enumerate(acts))
+                       for i,act in enumerate(acts)
                            ]
 
     #----------------------------------------------------------------------
