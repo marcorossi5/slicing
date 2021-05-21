@@ -1,6 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.RandLANet import RandLANet
-from slicerl.DRBNet import DRBNet
+from slicerl.SEACNet import SeacNet
 from slicerl.build_dataset import dummy_dataset
 from slicerl.losses import get_loss
 from slicerl.metrics import WAccMetric
@@ -40,24 +39,22 @@ def load_network(setup, checkpoint_filepath=None):
 
     Returns
     -------
-        - RandLANet or DRBNet
+        - SeacNet
     """
-    net_dict = {}
-    # update common keys
-    net_keys = ['nb_classes', 'K', 'use_bias', 'fc_type', 'dropout', 'use_ggf']
-    for key in net_keys:
-        net_dict[key] = setup['model'][key]
-
-    if setup['model']['net_type'] == 'RandLA':
-        # update local keys
-        net_dict['scale_factor'] = setup['model']['scale_factor']
-        net_dict['nb_layers'] = setup['model']['nb_layers']
-        net = RandLANet(name='RandLA-Net', **net_dict)
-    elif setup['model']['net_type'] == 'DRB':
-        # update local keys
-        net_dict['nb_final_convs'] = setup['model']['nb_final_convs']
-        net_dict['use_bnorm'] = setup['model']['use_bnorm']
-        net = DRBNet(name='DRB-Net', **net_dict)
+    
+    net_dict = {
+        'K' : setup['model']['K'],
+        'nb_final_convs' : setup['model']['nb_final_convs'],
+        'use_bias' : setup['model']['use_bias'],
+    }
+    net = SeacNet(name='SEAC-Net', **net_dict)
+    
+    import numpy as np
+    pc = np.random.rand(1,1000,2)
+    feats = np.random.rand(1,1000,2)
+    edges = net([pc,feats])
+    print(f'edges shape: {edges.shape}')
+    exit()
 
     loss = get_loss(setup['train'], setup['model']['nb_classes'])
 

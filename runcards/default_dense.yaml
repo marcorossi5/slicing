@@ -4,7 +4,7 @@ dataset:
     split: 0.9
     augment: false
 model:
-    net_type: DRB # DRB | RandLA
+    net_type: SEAC # DRB | RandLA | SEAC
     use_bnorm: true
     use_ggf: true
     fc_type: conv
