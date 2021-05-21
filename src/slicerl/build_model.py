@@ -2,7 +2,6 @@
 from slicerl.SEACNet import SeacNet
 from slicerl.build_dataset import dummy_dataset
 from slicerl.losses import get_loss
-from slicerl.metrics import WAccMetric
 from slicerl.diagnostics import (
     plot_plane_view,
     plot_slice_size,
@@ -41,22 +40,13 @@ def load_network(setup, checkpoint_filepath=None):
     -------
         - SeacNet
     """
-    
+
     net_dict = {
         'K' : setup['model']['K'],
         'nb_final_convs' : setup['model']['nb_final_convs'],
         'use_bias' : setup['model']['use_bias'],
     }
     net = SeacNet(name='SEAC-Net', **net_dict)
-    
-    import numpy as np
-    pc = np.random.rand(1,1000,2)
-    feats = np.random.rand(1,1000,2)
-    edges = net([pc,feats])
-    print(f'edges shape: {edges.shape}')
-    exit()
-
-    loss = get_loss(setup['train'], setup['model']['nb_classes'])
 
     lr = setup['train']['lr']
     if setup['train']['optimizer'] == 'Adam':
@@ -69,23 +59,22 @@ def load_network(setup, checkpoint_filepath=None):
         opt = Adagrad(lr=lr)
 
     net.compile(
-            loss= loss,
+            loss= tf.keras.losses.BinaryCrossentropy(name='xent'),
             optimizer= opt,
             metrics=[
-                tf.keras.metrics.CategoricalAccuracy(name='acc'),
-                WAccMetric(
-                    setup['model']['nb_classes'], setup['train']['wgt'], name='w_acc'
-                          )
-            ],
+                tf.keras.metrics.BinaryAccuracy(name='acc'),
+                tf.keras.metrics.Precision(name='prec'),
+                tf.keras.metrics.Recall(name='rec')
+                ],
             run_eagerly=setup.get('debug')
             )
-
+    
     net.model().summary()
     # tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
     if checkpoint_filepath:
         print(f"[+] Loading weights at {checkpoint_filepath}")
-        dummy_generator = dummy_dataset(setup['model']['nb_classes'])
+        dummy_generator = dummy_dataset(setup['model']['nb_classes'], setup['model']['K'])
         net.evaluate(dummy_generator, verbose=0)
         net.load_weights(checkpoint_filepath)
 
@@ -103,7 +92,7 @@ def build_and_train_model(setup, generators):
 
     Retruns
     -------
-        RandLANet model if scan is False, else dict with loss and status keys.
+        network model if scan is False, else dict with loss and status keys.
     """
     train_generator, val_generator = generators
 
@@ -113,13 +102,13 @@ def build_and_train_model(setup, generators):
     net = load_network(setup, initial_weights)
 
     logdir = setup['output'].joinpath(f'logs/{tm()}').as_posix()
-    checkpoint_filepath = setup['output'].joinpath(f'randla.h5').as_posix()
+    checkpoint_filepath = setup['output'].joinpath(f'network.h5').as_posix()
     callbacks = [
         ModelCheckpoint(
             filepath=checkpoint_filepath,
             save_best_only=True,
             mode='max',
-            monitor='val_w_acc',
+            monitor='val_acc',
             verbose=1
         ),
         ReduceLROnPlateau(
@@ -168,13 +157,13 @@ def build_and_train_model(setup, generators):
 
 def inference(setup, test_generator):
     print("[+] done with training, load best weights")
-    checkpoint_filepath = setup['output'].joinpath('randla.h5')
+    checkpoint_filepath = setup['output'].joinpath('network.h5')
     net = load_network(setup, checkpoint_filepath.as_posix())
 
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
-    y_pred = net.get_prediction(test_generator.inputs)
+    y_pred = net.get_prediction(test_generator.prep_inputs, test_generator.knn_idxs)
     # print(f"Feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
     test_generator.events = y_pred
 

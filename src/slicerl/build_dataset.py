@@ -1,28 +1,35 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 from slicerl.tools import onehot, onehot_to_indices
+from slicerl.layers import LocSE
 
 import tensorflow as tf
 import numpy as np
+import knn
 
 #======================================================================
 class EventDataset(tf.keras.utils.Sequence):
     """ Class defining dataset. """
     #----------------------------------------------------------------------
-    def __init__(self, data, shuffle=True, **kwargs):
+    def __init__(self, data, K, shuffle=True, **kwargs):
         """
         Parameters
         ----------
             - data    : list, [inputs, targets] for RandLA-Net
+            - K       : int, neighbours number in KNN graph
             - shuffle : bool, wether to shuffle dataset on epoch end
         """
         # needed to generate the dataset
         self.__events = data[0]
         self.inputs, self.targets = data[1]
+        self.K = K
         self.shuffle = shuffle
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(self.targets), \
             f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
+
+        self.preprocess()
 
     #----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -32,12 +39,43 @@ class EventDataset(tf.keras.utils.Sequence):
     #----------------------------------------------------------------------
     def __getitem__(self, idx):
         index = self.indexes[idx]
-        return self.inputs[index], self.targets[index]
+        return self.prep_inputs[index], self.prep_targets[index]
 
     #----------------------------------------------------------------------
     def __len__(self):
-        return len(self.inputs)
-    
+        return len(self.prep_inputs)
+
+    #----------------------------------------------------------------------
+    def preprocess(self):
+        """
+        Preprocess dataset for SEAC-Net.
+
+        Returns
+        -------
+            - np.array, KNN indices of shape=(B,N,K)
+        """
+        prep_inputs   = []
+        prep_targets  = []
+        self.knn_idxs = []
+        for (pc, feats), targets in zip(self.inputs, self.targets):
+            # select knn neighbours
+            knn_idx = knn.knn_batch(pc, pc, K=1+self.K,omp=True)
+            self.knn_idxs.append(knn_idx)
+            pc    = LocSE.gather_neighbours(pc, knn_idx).numpy()
+            feats = LocSE.gather_neighbours(feats, knn_idx).numpy()
+            prep_inputs.append([pc,feats])
+
+            # produce targets
+            tgt   = onehot_to_indices(targets)[...,None]
+            tgt   = LocSE.gather_neighbours(tgt, knn_idx).numpy().squeeze(-1)
+            mask  = (tgt[:,:,:1] == tgt).astype(NP_DTYPE)
+            prep_targets.append(mask)
+
+        self.prep_inputs  = prep_inputs
+        self.prep_targets = prep_targets
+        # print(self.prep_inputs[0][0].shape, self.prep_inputs[0][1].shape, self.prep_targets[0].shape)
+
+
     #----------------------------------------------------------------------
     def get_pc(self, index):
         """
@@ -48,6 +86,18 @@ class EventDataset(tf.keras.utils.Sequence):
             - np.array, point cloud of shape=(N,2)
         """
         return self.inputs[index][0][0]
+
+    #----------------------------------------------------------------------
+    def get_knn_idx(self, index, K):
+        """
+        Get the KNN graph indices for a pc at a certain index.
+
+        Returns
+        -------
+            - np.array, KNN indices of shape=(N,K)
+        """
+        pc = self.inputs[index][0][0]
+        return knn.knn_batch(pc, pc, K=K,omp=True)
 
     #----------------------------------------------------------------------
     def get_feats(self, index):
@@ -81,13 +131,13 @@ class EventDataset(tf.keras.utils.Sequence):
             - np.array, point cloud of shape=(N,)
         """
         return onehot_to_indices( self.targets[index][0] )
-    
+
     #----------------------------------------------------------------------
     @property
     def events(self):
         """ Event attribute. """
         return self.__events
-    
+
     #----------------------------------------------------------------------
     @events.setter
     def events(self, y_pred):
@@ -120,11 +170,11 @@ def rotate_pc(pc, t):
         tf.Tensor, batch of rotated point clouds of shape=(B,N,2)
     """
     # rotation matrices
-    sint = np.sin(t)
-    cost = np.cos(t)
+    sint  = np.sin(t)
+    cost  = np.cos(t)
     irots = np.array([[cost, sint],
                       [-sint, cost]])
-    rots = np.moveaxis(irots, [0,1,2], [2,1,0])
+    rots  = np.moveaxis(irots, [0,1,2], [2,1,0])
     return np.matmul(pc, rots)
 
 #======================================================================
@@ -231,7 +281,7 @@ def build_dataset(fn, nev=-1, min_hits=1, split=None, augment=False, nb_classes=
         target = onehot(target, nb_classes)
         inputs.extend([[p[None], f[None]] for p,f in zip(pc,feats)])
         targets.extend(np.split(target, len(target), axis=0))
-    
+
     if split:
         nb_events = len(inputs)
         perm = np.random.permutation(nb_events)
@@ -267,20 +317,21 @@ def build_dataset_train(setup):
     nb_classes = setup['model']['nb_classes']
     split      = setup['dataset']['split']
     augment    = False if setup['scan'] or (not setup['dataset']['augment']) else True
+    K = setup['model']['K']
 
     train, val = build_dataset(
                     fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes,
                     split=split, augment=augment
                               )
-    train_generator = EventDataset(train, shuffle=True)
-    val_generator   = EventDataset(val) if split else None
+    train_generator = EventDataset(train, K, shuffle=True)
+    val_generator   = EventDataset(val, K) if split else None
     return train_generator, val_generator
 
 #======================================================================
 def build_dataset_test(setup):
     """
     Wrapper function to build dataset for testing.
-    
+
     Returns
     -------
         - EventDataset, object for testing
@@ -289,21 +340,17 @@ def build_dataset_test(setup):
     nev        = setup['test']['nev']
     min_hits   = setup['test']['min_hits']
     nb_classes = setup['model']['nb_classes']
+    K = setup['model']['K']
 
     data = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes)
-    return EventDataset(data)
+    return EventDataset(data, K)
 
 #======================================================================
-def dummy_dataset(nb_classes):
+def dummy_dataset(nb_classes, K):
     """ Return a dummy dataset to build the model first when loading. """
     B = 1
     N = 256
     inputs  = [np.random.rand(B,N,2), np.random.rand(B,N,2)]
-    targets = np.random.rand(B,N, nb_classes)
+    targets = np.random.rand(B,N,nb_classes)
     data = (None, [ [inputs], [targets] ] )
-    return EventDataset(data)
-    
-
-# TODO: implement wrapper for build dataset with inputs events and setup:
-#    - train: outputs, EventDataset train val test
-#    - test: output, EventDataset test
+    return EventDataset(data, K)

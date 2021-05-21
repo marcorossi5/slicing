@@ -1,5 +1,4 @@
-from slicerl.tools import onehot_to_indices, m_lin_fit_tf, pearson_distance_tf
-from slicerl.config import TF_DTYPE_INT
+from slicerl.config import NP_DTYPE_INT
 
 import numpy as np
 import tensorflow as tf
@@ -7,18 +6,16 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import (
     Input,
-    Activation,
     Reshape,
     Concatenate,
     Conv1D,
-    BatchNormalization
 )
 from tensorflow.keras.constraints import MaxNorm
 
-import knn
-
-def py_knn(points, queries, K):
-    return knn.knn_batch(points, queries, K=K,omp=True)
+# import knn
+# 
+# def py_knn(points, queries, K):
+#     return knn.knn_batch(points, queries, K=K,omp=True)
 
 #======================================================================
 class LocSE(Layer):
@@ -70,9 +67,6 @@ class LocSE(Layer):
                           second is (B,N,feature number)
 
         """
-        spatial, _ = input_shape
-        B , N , _   = spatial
-
         self.ch_dims  = (self.dims + 1)*(1+self.K) + self.dims # point + neighbor point + relative space dims + 1 (the norm)
         self.MLP = Conv1D(self.units, 1, input_shape=(1+self.K, self.ch_dims),
                           activation=self.activation,
@@ -91,45 +85,30 @@ class LocSE(Layer):
         Parameters
         ----------
             - inputs     : list of tf.Tensors, tensors describing spatial and
-                           feature point cloud of shapes=[(B,N,dims), (B,N,1+K,f_dims)]
+                           feature point cloud of shapes=[(B,N,1+K,dims), (B,N,1+K,f_dims)]
 
         Returns
         -------
             tf.Tensor of shape=(B,N,1+K,2*f_dims)
         """
         pc, feats = inputs
-        shape = tf.shape(pc)
-        B = shape[0]
-        N = shape[1]
         if use_cache and self._is_cached:
-            rppe, n_idx = self._cache
-            shape    = [None,None,1+self.K]
-            n_idx    = tf.ensure_shape(n_idx, shape)
-            n_feats  = feats
+            rppe   = self._cache
         else:
-            inp      = [pc,pc,1+self.K]
-            n_idx    = tf.py_function(func=py_knn, inp=inp, Tout=TF_DTYPE_INT, name='knn_search')
-            shape    = [None,None,self.K+1]
-            n_idx    = tf.ensure_shape(n_idx, shape)
-            n_points = self.gather_neighbours(pc, n_idx)
-
-            n_feats  = self.gather_neighbours(feats, n_idx)
-            n_feats = tf.ensure_shape( n_feats, [None,None,1+self.K,self.units] )
-
             # relative positions between neighbours
             rpbns = []
             for i in range(1+self.K):
-                current = n_points[:,:,i:i+1]
-                diff = current - n_points
-                norms = tf.norm(n_points, ord='euclidean', axis=-1, keepdims=True, name='norm')
+                current = pc[:,:,i:i+1]
+                diff = current - pc
+                norms = tf.norm(pc, ord='euclidean', axis=-1, keepdims=True, name='norm')
                 rpbn = tf.concat([diff, norms], axis=-1)
                 rpbns.append(rpbn)
 
             # relative point position encoding
-            rppe = self.cat([n_points] + rpbns)
+            rppe = self.cat([pc] + rpbns)
 
             # save cache
-            self._cache     = [rppe, n_idx]
+            self._cache     = rppe
             self._is_cached = True
 
         # force shapes: n_feats, rppe
@@ -139,7 +118,7 @@ class LocSE(Layer):
         rppe = tf.ensure_shape(rppe, [None,None,1+self.K,self.ch_dims])
         r = self.MLP(rppe)
 
-        return self.cat([r, n_feats])
+        return self.cat([r, feats])
 
     #----------------------------------------------------------------------
     def get_config(self):
@@ -178,7 +157,7 @@ class LocSE(Layer):
 class SEAC(Layer):
     """ Class defining Spatial Encoding Attention Convolutional Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, dh, do, K, ds=None, dims=2, f_dims=2, skip_link=True,
+    def __init__(self, dh, do, K, ds=None, dims=2, f_dims=2,
                  activation='relu', use_bias=True, use_cache=True,
                  name='seac', **kwargs):
         """
@@ -190,7 +169,6 @@ class SEAC(Layer):
             - K          : int, number of nearest neighbors
             - dims       : int, point cloud spatial dimensions
             - f_dims     : int, point cloud feature dimensions
-            - skip_link  : bool, wether to convolute inputs with outpus
             - activation : str, MLP layer activation
             - use_bias   : wether to use bias in MLPs
         """
@@ -202,7 +180,6 @@ class SEAC(Layer):
         self.K          = K
         self.dims       = dims
         self.f_dims     = f_dims
-        self.skip_link  = skip_link
         self.activation = activation
         self.use_bias   = use_bias
         self.use_cache  = use_cache
@@ -236,7 +213,7 @@ class SEAC(Layer):
                            activation=self.activation,
                            use_bias=self.use_bias,
                            kernel_constraint=MaxNorm(axis=[0,1]),
-                           name='conv')
+                           name='skip_conv')
 
     #----------------------------------------------------------------------
     def call(self, inputs):
@@ -256,11 +233,10 @@ class SEAC(Layer):
         se = self.locse([pc, feats], use_cache=self.use_cache)
         attention_score = self.att(se) * se
         reshaped = self.reshape0(attention_score)
-        cat = self.cat([pc, reshaped])
+        cat = self.cat([pc[:,:,0], reshaped])
         res = self.reshape1( self.conv(cat) )
-        if self.skip_link:
-            res = self.skip_conv(self.cat([feats, res]))
-        return res
+        skip = self.skip_conv( self.cat([feats, res]) )
+        return skip
 
     #----------------------------------------------------------------------
     def get_config(self):
@@ -271,7 +247,6 @@ class SEAC(Layer):
             "dh"         : self.dh,
             "do"         : self.do,
             "K"          : self.K,
-            "skip_link"  : self.skip_link,
             "activation" : self.activation,
             "use_bias"   : self.use_bias,
             "use_cache"  : self.use_cache
@@ -281,15 +256,13 @@ class SEAC(Layer):
 #======================================================================
 class Predictions:
     """ Utility class to return RandLA-Net predictions. """
-    def __init__(self, predictions):
+    def __init__(self, states):
         """
         Parameters
         ----------
-            - predictions : list, each element is a tf.Tensor with
-                            shape=(N,nb_classes)
+            - states : list, each element is a np.array with shape=(N)
         """
-        self.predictions = [onehot_to_indices(pred.numpy()) for pred in predictions]
-        self.probs = [tf.nn.softmax(pred, axis=-1).numpy() for pred in predictions]
+        self.states = states
 
     #----------------------------------------------------------------------
     def get_pred(self, index):
@@ -302,20 +275,7 @@ class Predictions:
         -------
             - np.array: prediction at index i of shape=(N,)
         """
-        return self.predictions[index]
-
-    #----------------------------------------------------------------------
-    def get_probs(self, index):
-        """
-        Parameters
-        ----------
-            - index : int, index in probs list
-
-        Returns
-        -------
-            - np.array: prediction at index i of shape=(N,nb_classes)
-        """
-        return self.probs[index]
+        return self.states[index]
 
 #======================================================================
 class AbstractNet(Model):
@@ -324,23 +284,48 @@ class AbstractNet(Model):
 
     #----------------------------------------------------------------------
     def model(self):
-        pc = Input(shape=(None, self.dims), name='pc')
-        feats = Input(shape=(None, self.f_dims), name='feats')
+        pc = Input(shape=(None, 1+self.K, self.dims), name='pc')
+        feats = Input(shape=(None, 1+self.K, self.f_dims), name='feats')
         return Model(inputs=[pc, feats], outputs=self.call([pc,feats]), name=self.name)
 
     #----------------------------------------------------------------------
-    def get_prediction(self, inputs):
+    def get_prediction(self, inputs, knn_idxs, threshold=0.5):
         """
         Predict over a iterable of inputs
 
         Parameters
         ----------
-            - inputs : list, elements of shape [(1,N,dims), (1,N,f_dims)]
+            - inputs    : list, elements of shape [(1,N,1+K,dims), (1,N,1+K,f_dims)]
+            - knn_idxs  : list, elements of shape=(N,1+K)
+            - threshold : float, classification threshold
 
         Returns
         -------
             Predictions object
         """
-        predictions = [ tf.squeeze(self.predict_on_batch(inp), 0) \
-                            for inp in inputs]
-        return Predictions(predictions)
+        # TODO: think about converting this into some more clever implementation
+        states = []
+        for inp, knn_idx in zip(inputs, knn_idxs):
+            # predict hits connections
+            pred = self.predict_on_batch(inp)
+
+            # build slices
+            inslice = set()
+            slices = [set()]
+            for idx, p in zip(knn_idx[0], pred[0]):
+                current = set(idx[p>threshold])
+                if current.isdisjoint(inslice):
+                    slices.append(current)
+                else:
+                    for slice in slices:
+                        if not current.isdisjoint(slice):
+                            slice.update(current)                    
+                inslice.update(current)
+            
+            sorted_slices = sorted(slices, key=len, reverse=True)
+            state = np.zeros(inp[0].shape[1])
+            for i, slice in enumerate(sorted_slices):
+                state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
+            states.append(state)
+            
+        return Predictions(states)

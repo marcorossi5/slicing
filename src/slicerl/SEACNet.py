@@ -4,6 +4,7 @@ from slicerl.layers import AbstractNet, SEAC
 import tensorflow as tf
 from tensorflow.keras.layers import (
     Conv1D,
+    Reshape
 )
 from tensorflow.keras.constraints import MaxNorm
 
@@ -44,7 +45,7 @@ class SeacNet(AbstractNet):
                 for i,(dh,do) in enumerate(zip(ds[1:-1], ds[2:]))
                      ]
         self.seacs.insert(0,
-                          SEAC(dh=ds[0], do=ds[1], K=self.K, skip_link=False,
+                          SEAC(dh=ds[0], do=ds[1], K=self.K,
                                use_cache=False, activation=self.activation,
                                name='seac0')
                          )
@@ -56,7 +57,8 @@ class SeacNet(AbstractNet):
                use_bias=self.use_bias,
                name=f'final_conv'
                   )
-
+        self.reshape = Reshape((-1, 1+self.K), name='reshape')
+ 
     #----------------------------------------------------------------------
     def call(self, inputs):
         """
@@ -76,6 +78,5 @@ class SeacNet(AbstractNet):
         for seac in self.seacs[1:]:
             seac.locse.cache = cache
             edges = seac([pc,edges])
-
-        edges = tf.squeeze(edges,-1)
-        return self.final_conv(edges)
+        
+        return self.final_conv( self.reshape(edges) )

@@ -155,12 +155,17 @@ def main():
 
         # save the final runcard
         with open(out.joinpath('runcard.yaml'),'w') as f:
+            # yaml is not able to save the Path objects
+            # TODO: overload the yaml class
+            setup['output'] = str(setup['output'])
             yaml.dump(setup, f, indent=4)
+            setup['output'] = Path(setup['output'])
     
     elif args.model:
-        folder = args.model.strip('/')
+        folder = Path(args.model.strip('/'))
         # loading json card
         setup = load_runcard(folder.joinpath('runcard.yaml'))
+        setup['output'] = Path(setup['output'])
 
         config_tf(setup)
 
