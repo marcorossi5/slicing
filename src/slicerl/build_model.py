@@ -162,8 +162,7 @@ def inference(setup, test_generator):
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
-    y_pred = net.get_prediction(test_generator.prep_inputs, test_generator.prep_targets, test_generator.knn_idxs)
-    # print(f"Feats shape: {y_pred[0][0].shape} \t range: [{y_pred[0][0].min()}, {y_pred[0][0].max()}]")
+    y_pred = net.get_prediction(test_generator.prep_inputs, test_generator.knn_idxs)
     test_generator.events = y_pred
 
     plot_slice_size(test_generator.events, setup['output'].joinpath('plots'))
@@ -172,8 +171,6 @@ def inference(setup, test_generator):
     n = min(10, len(test_generator))
     for i in range(n):
         pc      = test_generator.get_pc(i)      # shape=(N,2)
-        pc_pred = y_pred.get_status(i)            # shape=(N,)
+        pc_pred = y_pred.get_status(i)          # shape=(N,)
         pc_test = test_generator.get_targets(i) # shape=(N,)
         plot_plane_view(pc, pc_pred, pc_test, i, setup['output'].joinpath('plots'))
-
-    # print(f"pc shape: {pc.shape} \t pc pred shape: {pc_pred.shape} \t pc test shape: {pc_test.shape}")

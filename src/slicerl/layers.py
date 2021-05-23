@@ -299,7 +299,7 @@ class AbstractNet(Model):
         return Model(inputs=[pc, feats], outputs=self.call([pc,feats]), name=self.name)
 
     #----------------------------------------------------------------------
-    def get_prediction(self, inputs, targets, knn_idxs, threshold=0.5):
+    def get_prediction(self, inputs, knn_idxs, threshold=0.5):
         """
         Predict over a iterable of inputs
 
@@ -316,12 +316,11 @@ class AbstractNet(Model):
         # TODO: think about converting this into some more clever implementation
         status = []
         graphs = []
-        for inp, trg, knn_idx in zip(inputs, targets, knn_idxs):
+        for inp, trg, knn_idx in zip(inputs, knn_idxs):
             # predict hits connections
-            # pred = self.predict_on_batch(inp).astype(bool)
-            pred = trg.astype(bool)
+            pred = self.predict_on_batch(inp).astype(bool)
 
-            graph = [set(node[p]) for node, p in zip(knn_idx[0], pred[0])]
+            graph = [set(node[p > threshold]) for node, p in zip(knn_idx[0], pred[0])]
             graphs.append( graph )
             
             # DFS (depth first search) implementation
