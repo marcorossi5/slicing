@@ -334,8 +334,6 @@ class AbstractNet(Model):
                 slices.append(slice)
                 visited.update(slice)
 
-            print(f"Slices found: {len(slices)}")
-
             N = inp[0].shape[1]
             sorted_slices = sorted(slices, key=len, reverse=True)
             state = np.zeros(N)
