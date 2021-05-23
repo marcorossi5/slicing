@@ -12,7 +12,7 @@ from tensorflow.keras.constraints import MaxNorm
 class SeacNet(AbstractNet):
     """ Class deifining SEAC-Net. """
     def __init__(self, dims=2, f_dims=2, K=16,
-                 nb_final_convs=1, activation='relu',
+                 activation='relu',
                  use_bias=True,
                  name='SEAC-Net', **kwargs):
         """
@@ -20,13 +20,8 @@ class SeacNet(AbstractNet):
         ----------
             - dims           : int, point cloud spatial dimensions
             - f_dims         : int, point cloud feature dimensions
-            - nb_classes     : int, number of output classes for each point in cloud
             - K              : int, number of nearest neighbours to find
-            - scale_factor   : int, scale factor for down/up-sampling
-            - nv final_convs : int, number of final convolutions
-            - fc_type        : str, either 'conv' or 'dense' for the final FC
-                               layers
-            - dropout        : float, dropout percentage in final FC layers
+            - use_bias       : bool, wether to use bias or not
         """
         super(SeacNet, self).__init__(name=name, **kwargs)
 
@@ -34,7 +29,6 @@ class SeacNet(AbstractNet):
         self.dims           = dims
         self.f_dims         = f_dims
         self.K              = int(K)
-        self.nb_final_convs = nb_final_convs
         self.activation     = activation
         self.use_bias       = use_bias
 

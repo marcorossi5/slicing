@@ -2,7 +2,8 @@
 """ Module containing utility functions. """
 from slicerl.config import EPS, EPS_TF, float_me
 
-import os, json
+import json
+from collections import deque
 import numpy as np
 import tensorflow as tf
 
@@ -182,3 +183,47 @@ def onehot_to_indices(onehot):
         np.array, indices array of shape=(one_hot.shape[:-1])
     """
     return np.argmax(onehot, axis=-1)
+
+#----------------------------------------------------------------------
+def dfs(visited, node, graph):
+    """
+    Depth First Search graph traversing.
+
+    Problem of this implementation is that instantiated for loops are already given
+    and cannot be modified. Some redundancy occurs in this implementation.    
+    """
+    if node not in visited:
+        visited.add(node)
+        print(f"Check in node {node}, slice: {visited}")
+        to_visit = graph[node].difference(visited)
+        for neighbor in to_visit:
+            print(f"For loop made with {to_visit}")
+            dfs(visited, neighbor, graph)
+
+#----------------------------------------------------------------------
+def bfs(visited, root, graph):
+    """
+    Breadth First Search graph traversing. Fills in the visited set with the
+    node indices reachable from root node.
+    
+    Parameters
+    ----------
+        - visited : set, of already visited nodes
+        - root    : int, index of root search node
+        - graph   : list, of same slice neighbours indices
+    """
+    queue = deque([root])
+    visited.add(root)
+
+    while queue:
+
+        # Dequeue a node from queue
+        node = queue.popleft()
+        # print(str(node) + " ", end="")
+
+        # If not visited, mark it as visited, and
+        # enqueue it
+        for neighbour in graph[node]:
+            if neighbour not in visited:
+                visited.add(neighbour)
+                queue.append(neighbour)

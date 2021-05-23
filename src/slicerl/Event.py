@@ -105,15 +105,17 @@ class Event:
         status = np.zeros_like(self.status)
         return np.put_along_axis(status, self.sorting_x_idx, self.status, axis=1)
     #----------------------------------------------------------------------
-    def store_preds(self, pred):
+    def store_preds(self, status, graph):
         """
         Store predicted slicing info in self.status.
 
         Parameters
         ----------
-            - pred : np.array, predictions array of shape=(num calohits,)
+            - status : np.array, status predictions array of shape=(num calohits,)
+            - graph   : np.array, graph predictions array of shape=(num calohits, num neighbors)
         """
-        self.status = pred
+        self.status = status
+        self.graph  = graph
 
     #----------------------------------------------------------------------
     def calohits_to_array(self):

@@ -1,4 +1,5 @@
 from slicerl.config import NP_DTYPE_INT
+from slicerl.tools import bfs
 
 import numpy as np
 import tensorflow as tf
@@ -11,11 +12,6 @@ from tensorflow.keras.layers import (
     Conv1D,
 )
 from tensorflow.keras.constraints import MaxNorm
-
-# import knn
-# 
-# def py_knn(points, queries, K):
-#     return knn.knn_batch(points, queries, K=K,omp=True)
 
 #======================================================================
 class LocSE(Layer):
@@ -256,16 +252,18 @@ class SEAC(Layer):
 #======================================================================
 class Predictions:
     """ Utility class to return RandLA-Net predictions. """
-    def __init__(self, states):
+    def __init__(self, graph, status):
         """
         Parameters
         ----------
-            - states : list, each element is a np.array with shape=(N)
+            - graph  : list, KNN graphs each with shape=[(N,nb_neighs,2)]
+            - status : list, each element is a np.array with shape=(N)
         """
-        self.states = states
+        self.graph  = graph
+        self.status = status
 
     #----------------------------------------------------------------------
-    def get_pred(self, index):
+    def get_graph(self, index):
         """
         Parameters
         ----------
@@ -273,10 +271,22 @@ class Predictions:
 
         Returns
         -------
-            - np.array: prediction at index i of shape=(N,)
+            - np.array: graph at index i of shape=(N,nb_neighs,2)
         """
-        return self.states[index]
+        return self.graph[index]
+    #----------------------------------------------------------------------
+    def get_status(self, index):
+        """
+        Parameters
+        ----------
+            - index : int, index in status list
 
+        Returns
+        -------
+            - np.array: status at index i of shape=(N,)
+        """
+        return self.status[index]
+    
 #======================================================================
 class AbstractNet(Model):
     def __init__(self, name, **kwargs):
@@ -289,7 +299,7 @@ class AbstractNet(Model):
         return Model(inputs=[pc, feats], outputs=self.call([pc,feats]), name=self.name)
 
     #----------------------------------------------------------------------
-    def get_prediction(self, inputs, knn_idxs, threshold=0.5):
+    def get_prediction(self, inputs, targets, knn_idxs, threshold=0.5):
         """
         Predict over a iterable of inputs
 
@@ -304,28 +314,34 @@ class AbstractNet(Model):
             Predictions object
         """
         # TODO: think about converting this into some more clever implementation
-        states = []
-        for inp, knn_idx in zip(inputs, knn_idxs):
+        status = []
+        graphs = []
+        for inp, trg, knn_idx in zip(inputs, targets, knn_idxs):
             # predict hits connections
-            pred = self.predict_on_batch(inp)
+            # pred = self.predict_on_batch(inp).astype(bool)
+            pred = trg.astype(bool)
 
-            # build slices
-            inslice = set()
-            slices = [set()]
-            for idx, p in zip(knn_idx[0], pred[0]):
-                current = set(idx[p>threshold])
-                if current.isdisjoint(inslice):
-                    slices.append(current)
-                else:
-                    for slice in slices:
-                        if not current.isdisjoint(slice):
-                            slice.update(current)                    
-                inslice.update(current)
+            graph = [set(node[p]) for node, p in zip(knn_idx[0], pred[0])]
+            graphs.append( graph )
             
+            # DFS (depth first search) implementation
+            visited = set() # the all visited set
+            slices = []
+            for node in range(len(graph)):
+                if node in visited:
+                    continue
+                slice = set() # the current slice only
+                bfs(slice, node, graph)
+                slices.append(slice)
+                visited.update(slice)
+
+            print(f"Slices found: {len(slices)}")
+
+            N = inp[0].shape[1]
             sorted_slices = sorted(slices, key=len, reverse=True)
-            state = np.zeros(inp[0].shape[1])
+            state = np.zeros(N)
             for i, slice in enumerate(sorted_slices):
                 state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
-            states.append(state)
+            status.append(state)
             
-        return Predictions(states)
+        return Predictions(graphs, status)

@@ -73,8 +73,6 @@ class EventDataset(tf.keras.utils.Sequence):
 
         self.prep_inputs  = prep_inputs
         self.prep_targets = prep_targets
-        # print(self.prep_inputs[0][0].shape, self.prep_inputs[0][1].shape, self.prep_targets[0].shape)
-
 
     #----------------------------------------------------------------------
     def get_pc(self, index):
@@ -149,7 +147,7 @@ class EventDataset(tf.keras.utils.Sequence):
         print("[+] setting events")
         if self.__events:
             for i,event in enumerate(self.__events):
-                event.store_preds(y_pred.get_pred(i))
+                event.store_preds(y_pred.get_status(i), y_pred.get_graph(i))
         else:
             raise ValueError("Cannot set events attribute, found None"
                              " (is the EventDataset generator in training mode?)")

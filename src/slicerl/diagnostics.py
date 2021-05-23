@@ -127,6 +127,7 @@ def plot_slice_size(events, output_folder='./'):
         verticalalignment='top', bbox=props)
 
     ax.legend()
+
     fname = f"{output_folder}/slice_size.pdf"
     print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches='tight')
@@ -143,6 +144,7 @@ def plot_plane_view(pc, pc_pred, pc_test, nb_event, output_folder='./'):
     ax = fig.add_subplot(122)
     ax.scatter(pc[:,0], pc[:,1], s=0.5, c=pc_test, cmap=cmap, norm=norm)
     ax.set_title("pc_true")
+
     fname = f"{output_folder}/pview_{nb_event}.png"
     print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches='tight', dpi=300)
