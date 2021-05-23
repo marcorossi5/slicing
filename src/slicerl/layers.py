@@ -316,7 +316,7 @@ class AbstractNet(Model):
         # TODO: think about converting this into some more clever implementation
         status = []
         graphs = []
-        for inp, trg, knn_idx in zip(inputs, knn_idxs):
+        for inp, knn_idx in zip(inputs, knn_idxs):
             # predict hits connections
             pred = self.predict_on_batch(inp).astype(bool)
 
