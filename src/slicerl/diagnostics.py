@@ -1,12 +1,7 @@
 # This file is part of SliceRL by M. Rossi
-import os
-from tensorflow.keras.utils import Progbar
-from slicerl.Event import Event
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
-import math
-from time import time as tm
 
 #----------------------------------------------------------------------
 # available cmaps
@@ -151,34 +146,52 @@ def plot_plane_view(pc, pc_pred, pc_test, nb_event, output_folder='./'):
     plt.close()
 
 #----------------------------------------------------------------------
-def make_plots(events_obj, plotdir):
+def plot_histogram(y_true, y_pred, output_folder='./'):
     """
-    Make diagnostics plots from a list of subtracted events.
-
     Parameters
     ----------
-        - events_obj:  list, list of sliced Event objects
-        - plotdir:     str, plots output folder
+        - y_true : list, predictions each of shape=(num hits*(1+K))
+        - y_pred : list, predictions each of shape=(num hits*(1+K))
     """
-    events = [event.calohits_to_namedtuple() for event in events_obj]
-    plot_multiplicity(events, plotdir)
-    plot_slice_size(events, plotdir)
-    plot_plane_view(events, plotdir)
-    produce_slicing_animation(events[0], f"{plotdir}/slicing.gif")
+    bins = np.linspace(0,1,201)
 
-#----------------------------------------------------------------------
-def load_and_dump_plots(plotdir, loaddir):
-    """
-    Make diagnostics plots from plot data contained in loaddir.
+    h_edged = []
+    h_non_edged = []
+    for truths, preds in zip(y_true, y_pred):
+        mask = truths == 1
+        pred_edged = preds[mask]
+        pred_non_edged = preds[~mask]
 
-    Parameters
-    ----------
-        - plotdir: str, plots output folder
-        - loaddir: str, directory where to load plot data from
-    """
-    plot_multiplicity(None, plotdir, loaddir)
-    plot_slice_size(None, plotdir, loaddir)
-    plot_plane_view(None, plotdir, loaddir)
+        h_edged.append(np.histogram(pred_edged, bins=bins)[0])
+        h_non_edged.append(np.histogram(pred_non_edged, bins=bins)[0])
+        
+    mean_edged = h_edged.mean(0)
+    std_edged  = h_edged.std(0)
 
-# TODO: fix plot_plane_view when loaded from results (it always needs the events)
-# TODO: fix EMD function in this version
+    mean_non_edged = h_non_edged.mean(0)
+    std_non_edged  = h_non_edged.std(0)
+
+    fig = plt.figure()
+    ax = fig.add_subplot()
+
+    ax.hist(
+        bins[:-1], bins, weights=mean_edged, histtype='step',
+        lw=0.7,color='green', label='Positives'
+           )
+    ax.fill_between(
+        bins[:-1], mean_edged-std_edged, mean_edged+std_edged,
+        color='green', alpha=0.4, step='post', edgecolor=None
+                   )
+    ax.hist(
+        bins[:-1], bins, weights=mean_non_edged, histtype='step', lw=0.7,
+        color='red', label='Negatives'
+           )
+    ax.fill_between(
+        bins[:-1], mean_non_edged-std_non_edged, mean_non_edged+std_non_edged,
+        color='red', alpha=0.4, step='post', edgecolor=None
+                   )
+
+    fname = f"{output_folder}/pred_hist.png"
+    print(f"[+] Saving plot at {fname} ")
+    plt.savefig(fname, bbox_inches='tight', dpi=300)
+    plt.close()

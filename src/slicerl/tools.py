@@ -32,27 +32,31 @@ def get_window_width(masses, lower_frac=20, upper_frac=80):
     return lower, upper, median
 
 #----------------------------------------------------------------------
-def confusion_matrix_per_event(scores):
+def confusion_matrix_per_event(y_true, y_pred):
     """
-    Computes confusion matrix values for each jet in list
-      - scores  list of event numpy array scores per event: first level events,
-                second level arrays of shape [num particles, 2]
+    Computes confusion matrix values for each graph in list
+
+    Parameters
+    ----------
+        - y_true : list, of ground truths graphs arrays each of shape=(N,1+K)
+        - y_true : list, of predicted graphs arrays each of shape=(N,1+K)
+      
     Returns
-      - tp      true positives ratio in jet distribution
-      - fp      false positives ratio in jet distribution
-      - fn      false negatives ratio in jet distribution
-      - tn      true negatives ratio in jet distribution
+      - tp      true positives ratio
+      - fp      false positives ratio
+      - fn      false negatives ratio
+      - tn      true negatives ratio
     """
+    # flatten arrays
+    y_true = y_true.flatten()
+    y_pred = y_pred.flatten()
     tp = []
     fp = []
     fn = []
     tn = []
-    for score in scores:
-        if score.shape[0] == 0:
-            continue
-        truths = score[:,0].astype(bool)
-        preds  = score[:,1]
-        tot = score.shape[0]
+    for preds, truths in zip(y_true, y_pred):
+        truths = truths.astype(bool)
+        tot = truths.shape[0]
         tp.append(len(np.where(preds[truths]  == 1)[0])/tot)
         fp.append(len(np.where(preds[~truths] == 1)[0])/tot)
         fn.append(len(np.where(preds[truths]  == 0)[0])/tot)

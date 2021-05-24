@@ -5,10 +5,12 @@ from slicerl.losses import get_loss
 from slicerl.diagnostics import (
     plot_plane_view,
     plot_slice_size,
-    plot_multiplicity
+    plot_multiplicity,
+    plot_histogram
 )
 
 import os
+import numpy as np
 from time import time as tm
 
 import tensorflow as tf
@@ -172,6 +174,7 @@ def inference(setup, test_generator):
     y_pred = net.get_prediction(test_generator.prep_inputs,
                                 test_generator.knn_idxs,
                                 threshold=setup['model']['threshold'])
+
     test_generator.events = y_pred
 
     plot_slice_size(test_generator.events, setup['output'].joinpath('plots'))
@@ -183,3 +186,8 @@ def inference(setup, test_generator):
         pc_pred = y_pred.get_status(i)          # shape=(N,)
         pc_test = test_generator.get_targets(i) # shape=(N,)
         plot_plane_view(pc, pc_pred, pc_test, i, setup['output'].joinpath('plots'))
+    
+    # plot histogram of the network decisions
+    hist_true = [inp.flatten() for inp, _ in test_generator.prep_inputs]
+    hist_pred = list( map(lambda graph: np.concatenate(graph).flatten(), y_pred.graphs) )
+    plot_histogram(hist_true, hist_pred, setup['output'].joinpath('plots'))

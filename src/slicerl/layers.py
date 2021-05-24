@@ -252,14 +252,14 @@ class SEAC(Layer):
 #======================================================================
 class Predictions:
     """ Utility class to return RandLA-Net predictions. """
-    def __init__(self, graph, status):
+    def __init__(self, graphs, status):
         """
         Parameters
         ----------
-            - graph  : list, KNN graphs each with shape=[(N,nb_neighs,2)]
+            - graph  : list, KNN graphs which is list with elements of shape=(nb_neighs)
             - status : list, each element is a np.array with shape=(N)
         """
-        self.graph  = graph
+        self.graphs  = graphs
         self.status = status
 
     #----------------------------------------------------------------------
@@ -273,7 +273,7 @@ class Predictions:
         -------
             - np.array: graph at index i of shape=(N,nb_neighs,2)
         """
-        return self.graph[index]
+        return self.graphs[index]
     #----------------------------------------------------------------------
     def get_status(self, index):
         """
