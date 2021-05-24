@@ -56,9 +56,15 @@ def load_network(setup, checkpoint_filepath=None):
         opt = RMSprop(lr=lr)
     elif setup['train']['optimizer'] == 'Adagrad':
         opt = Adagrad(lr=lr)
+    
+    if setup['train']['loss'] == 'xent':
+        loss = tf.keras.losses.BinaryCrossentropy(name='xent')
+    elif setup['train']['loss'] == 'hinge':
+        loss = tf.keras.losses.Hinge(name='hinge')
+    else: raise NotImplementedError("Loss function not implemented")
 
     net.compile(
-            loss= tf.keras.losses.BinaryCrossentropy(name='xent'),
+            loss= loss,
             optimizer= opt,
             metrics=[
                 tf.keras.metrics.BinaryAccuracy(name='acc'),
@@ -105,6 +111,7 @@ def build_and_train_model(setup, generators):
     callbacks = [
         ModelCheckpoint(
             filepath=checkpoint_filepath,
+            save_weights_only=True,
             save_best_only=True,
             mode='max',
             monitor='val_acc',
@@ -116,13 +123,13 @@ def build_and_train_model(setup, generators):
             patience=setup['train']['patience'],
             min_lr=setup['train']['min_lr']
         ),
-        EarlyStopping(
-            monitor='val_acc',
-            min_delta=0.001,
-            mode='max',
-            patience=15,
-            restore_best_weights=True
-        )
+        # EarlyStopping(
+        #     monitor='val_acc',
+        #     min_delta=0.001,
+        #     mode='max',
+        #     patience=15,
+        #     restore_best_weights=True
+        # )
     ]
     if setup['scan']:
         tboard = TensorBoard(log_dir=logdir, profile_batch=0)
@@ -162,7 +169,9 @@ def inference(setup, test_generator):
     results = net.evaluate(test_generator)
     print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
 
-    y_pred = net.get_prediction(test_generator.prep_inputs, test_generator.knn_idxs)
+    y_pred = net.get_prediction(test_generator.prep_inputs,
+                                test_generator.knn_idxs,
+                                threshold=setup['model']['threshold'])
     test_generator.events = y_pred
 
     plot_slice_size(test_generator.events, setup['output'].joinpath('plots'))

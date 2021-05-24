@@ -15,6 +15,7 @@ model:
     nb_final_convs: hp.chioce("nb_final_convs", [1,2,3,4])
     dropout: hp.uniform("dropout", 0.1, 0.5)
     use_bias: hp.choice("use_bias", [True, False])
+    threshold: 0.6
 test:
     fn: data/test_data_03GeV.csv.gz
     nev: -1
