@@ -189,5 +189,5 @@ def inference(setup, test_generator):
     
     # plot histogram of the network decisions
     hist_true = [inp.flatten() for inp, _ in test_generator.prep_inputs]
-    hist_pred = list( map(lambda graph: np.concatenate(graph).flatten(), y_pred.graphs) )
+    hist_pred = [pred.flatten() for pred in y_pred.preds]
     plot_histogram(hist_true, hist_pred, setup['output'].joinpath('plots'))

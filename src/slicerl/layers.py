@@ -252,19 +252,23 @@ class SEAC(Layer):
 #======================================================================
 class Predictions:
     """ Utility class to return RandLA-Net predictions. """
-    def __init__(self, graphs, status):
+    def __init__(self, graphs, status, preds):
         """
         Parameters
         ----------
             - graph  : list, KNN graphs which is list with elements of shape=(nb_neighs)
             - status : list, each element is a np.array with shape=(N)
+            - preds  : list, each element is a np.array with shape=(N,1+K)
         """
-        self.graphs  = graphs
+        self.graphs = graphs
         self.status = status
+        self.preds  = preds
 
     #----------------------------------------------------------------------
     def get_graph(self, index):
         """
+        Returns the i-th graph.
+
         Parameters
         ----------
             - index : int, index in prediction list
@@ -277,6 +281,7 @@ class Predictions:
     #----------------------------------------------------------------------
     def get_status(self, index):
         """
+        Returns the slice state for each hit in the i-th graph.
         Parameters
         ----------
             - index : int, index in status list
@@ -286,6 +291,22 @@ class Predictions:
             - np.array: status at index i of shape=(N,)
         """
         return self.status[index]
+    
+    #----------------------------------------------------------------------
+    def get_preds(self, index):
+        """
+        Returns the predictions for each possible edge in the i-th graph.
+        Range is [0,1].
+
+        Parameters
+        ----------
+            - index : int, index in preds list
+
+        Returns
+        -------
+            - np.array: status at index i of shape=(N,1+K)
+        """
+        return self.preds[index]
     
 #======================================================================
 class AbstractNet(Model):
@@ -316,10 +337,12 @@ class AbstractNet(Model):
         # TODO: think about converting this into some more clever implementation
         status = []
         graphs = []
+        preds  = []
         for inp, knn_idx in zip(inputs, knn_idxs):
             # predict hits connections
-            pred = self.predict_on_batch(inp).astype(bool)
+            pred = self.predict_on_batch(inp)
 
+            preds.append(pred[0])
             graph = [set(node[p > threshold]) for node, p in zip(knn_idx[0], pred[0])]
             graphs.append( graph )
             
@@ -341,4 +364,4 @@ class AbstractNet(Model):
                 state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
             status.append(state)
             
-        return Predictions(graphs, status)
+        return Predictions(graphs, status, preds)
