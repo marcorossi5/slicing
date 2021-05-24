@@ -363,5 +363,5 @@ class AbstractNet(Model):
             for i, slice in enumerate(sorted_slices):
                 state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
             status.append(state)
-            
+
         return Predictions(graphs, status, preds)

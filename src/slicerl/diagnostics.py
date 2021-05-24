@@ -154,6 +154,13 @@ def plot_histogram(y_true, y_pred, output_folder='./'):
         - y_pred : list, predictions each of shape=(num hits*(1+K))
     """
     bins = np.linspace(0,1,201)
+    plt.rcParams.update({
+                    'ytick.labelsize': 13,
+                    'xtick.labelsize': 13,
+                    'axes.labelsize': 16,
+                    'axes.titlesize': 28,
+                    'legend.fontsize': 13
+                        })
 
     h_edged = []
     h_non_edged = []
@@ -164,12 +171,12 @@ def plot_histogram(y_true, y_pred, output_folder='./'):
 
         h_edged.append(np.histogram(pred_edged, bins=bins)[0])
         h_non_edged.append(np.histogram(pred_non_edged, bins=bins)[0])
-        
-    mean_edged = h_edged.mean(0)
-    std_edged  = h_edged.std(0)
+    
+    mean_edged = np.array(h_edged).mean(0)
+    std_edged  = np.array(h_edged).std(0)
 
-    mean_non_edged = h_non_edged.mean(0)
-    std_non_edged  = h_non_edged.std(0)
+    mean_non_edged = np.array(h_non_edged).mean(0)
+    std_non_edged  = np.array(h_non_edged).std(0)
 
     fig = plt.figure()
     ax = fig.add_subplot()
@@ -191,6 +198,8 @@ def plot_histogram(y_true, y_pred, output_folder='./'):
         color='red', alpha=0.4, step='post', edgecolor=None
                    )
 
+    ax.set_yscale('log')
+    ax.legend()
     fname = f"{output_folder}/pred_hist.png"
     print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches='tight', dpi=300)
