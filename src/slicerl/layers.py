@@ -215,14 +215,33 @@ class SEAC(Layer):
         self.reshape0 = Reshape((-1,(1+self.K)*self.da), name='reshape0')
         shape = (None, self.f_dims + self.dims + (1+self.K)*self.da)
 
-        self.conv_block = [
-            Conv1D(1, 3, padding='same', input_shape=shape,
+        self.conv_block_0 = [
+            Conv1D(10, 3, padding='same', input_shape=shape,
                    activation=self.activation,
                    use_bias=self.use_bias,
                    kernel_constraint=MaxNorm(axis=[0,1]),
-                   name=f'conv_block{i}') for i in range(5)
+                   name=f'conv_block0_{i}') for i in range(5)
         ]
-        self.bns_block = [BatchNormalization(name=f'bn{i}') for i in range(5)]
+
+        self.conv_block_1 = [
+            Conv1D(10, 3, padding='same', input_shape=shape,
+                   activation=self.activation,
+                   use_bias=self.use_bias,
+                   kernel_constraint=MaxNorm(axis=[0,1]),
+                   name=f'conv_block1_{i}') for i in range(5)
+        ]
+
+        self.conv_block_2 = [
+            Conv1D(10, 3, padding='same', input_shape=shape,
+                   activation=self.activation,
+                   use_bias=self.use_bias,
+                   kernel_constraint=MaxNorm(axis=[0,1]),
+                   name=f'conv_block2_{i}') for i in range(5)
+        ]
+
+        self.bns_block_0 = [BatchNormalization(name=f'bn_block0_{i}') for i in range(5)]
+        self.bns_block_1 = [BatchNormalization(name=f'bn_block1_{i}') for i in range(5)]
+        self.bns_block_2 = [BatchNormalization(name=f'bn_block2_{i}') for i in range(5)]
 
         self.conv = Conv1D((1+self.K)*self.do, 1, input_shape=shape,
                            activation=self.activation,
@@ -264,9 +283,15 @@ class SEAC(Layer):
         cat = self.cat([pc[:,:,0], reshaped])
 
         res = []
-        for conv, bn in zip(self.conv_block, self.bns_block):
+        for conv, bn in zip(self.conv_block_0, self.bns_block_0):
             res.append( bn(conv(cat)) )
         
+        for i, (r, conv, bn) in enumerate(zip(res, self.conv_block_1, self.bns_block_1)):
+            res[i] = bn(conv(r))
+        
+        for i, (r, conv, bn) in enumerate(zip(res, self.conv_block_2, self.bns_block_2)):
+            res[i] = bn(conv(r))
+
         res = self.reshape1( self.conv(self.cat(res)) )
 
         skip = self.skip_conv( self.cat([feats, res]) )
