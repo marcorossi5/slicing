@@ -23,7 +23,7 @@ class EventDataset(tf.keras.utils.Sequence):
         # needed to generate the dataset
         self.__events = data[0]
         self.inputs, self.targets = data[1]
-        self.K = K
+        self.K = int(K)
         self.shuffle = shuffle
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(self.targets), \

@@ -49,9 +49,11 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
         env_setup = search_space.get('expurl_env')
         trials = Trials()
     
-    generators = load_data_fn(search_space)
+    def wrap_fn(setup):
+        generators = load_data_fn(search_space)
+        return function(setup, generators)
 
-    best = fmin(lambda p: function(p, generators), search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)
+    best = fmin(wrap_fn, search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)
 
     best_setup = space_eval(search_space, best)
     print('\n[+] Best scan setup:')
