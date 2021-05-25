@@ -14,33 +14,38 @@ class SeacNet(AbstractNet):
     def __init__(self, dims=2, f_dims=2, K=16,
                  activation='relu',
                  use_bias=True,
+                 use_bnorm=False,
                  name='SEAC-Net', **kwargs):
         """
         Parameters
         ----------
-            - dims           : int, point cloud spatial dimensions
-            - f_dims         : int, point cloud feature dimensions
-            - K              : int, number of nearest neighbours to find
-            - use_bias       : bool, wether to use bias or not
+            - dims      : int, point cloud spatial dimensions
+            - f_dims    : int, point cloud feature dimensions
+            - K         : int, number of nearest neighbours to find
+            - use_bias  : bool, wether to use bias or not
+            - use_bnorm : bool, wether to use batchnormalization
         """
         super(SeacNet, self).__init__(name=name, **kwargs)
 
         # store args
-        self.dims           = dims
-        self.f_dims         = f_dims
-        self.K              = int(K)
-        self.activation     = activation
-        self.use_bias       = use_bias
+        self.dims       = dims
+        self.f_dims     = f_dims
+        self.K          = int(K)
+        self.activation = activation
+        self.use_bias   = use_bias
+        self.use_bnorm  = use_bnorm
 
         # store some useful parameters
-        ds = [2,5,10,5,3,1]
+        ds = [2,5,7,5,3,1]
         self.seacs = [
-            SEAC(dh=dh, do=do, K=self.K, activation=self.activation, name=f'seac{i+1}') \
+            SEAC(dh=dh, do=do, K=self.K, activation=self.activation,
+                 use_bias=self.use_bias, use_bnorm=self.use_bnorm, name=f'seac{i+1}') \
                 for i,(dh,do) in enumerate(zip(ds[1:-1], ds[2:]))
                      ]
         self.seacs.insert(0,
                           SEAC(dh=ds[0], do=ds[1], K=self.K,
-                               use_cache=False, activation=self.activation,
+                               use_cache=False, use_bias=self.use_bias,
+                               use_bnorm=self.use_bnorm, activation=self.activation,
                                name='seac0')
                          )
         self.final_conv = Conv1D(

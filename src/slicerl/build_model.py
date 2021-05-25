@@ -47,6 +47,7 @@ def load_network(setup, checkpoint_filepath=None):
     net_dict = {
         'K' : setup['model']['K'],
         'use_bias' : setup['model']['use_bias'],
+        'use_bnorm' : setup['model']['use_bnorm']
     }
     net = SeacNet(name='SEAC-Net', **net_dict)
 

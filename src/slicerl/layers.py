@@ -10,6 +10,7 @@ from tensorflow.keras.layers import (
     Reshape,
     Concatenate,
     Conv1D,
+    BatchNormalization
 )
 from tensorflow.keras.constraints import MaxNorm
 
@@ -154,7 +155,7 @@ class SEAC(Layer):
     """ Class defining Spatial Encoding Attention Convolutional Layer. """
     #----------------------------------------------------------------------
     def __init__(self, dh, do, K, ds=None, dims=2, f_dims=2,
-                 activation='relu', use_bias=True, use_cache=True,
+                 activation='relu', use_bias=True, use_cache=True, use_bnorm=False,
                  name='seac', **kwargs):
         """
         Parameters
@@ -166,7 +167,8 @@ class SEAC(Layer):
             - dims       : int, point cloud spatial dimensions
             - f_dims     : int, point cloud feature dimensions
             - activation : str, MLP layer activation
-            - use_bias   : wether to use bias in MLPs
+            - use_bias   : bool, wether to use bias in MLPs
+            - use_bnorm  : bool, wether to use batchnormalization
         """
         super(SEAC, self).__init__(name=name, **kwargs)
         self.dh         = dh
@@ -179,6 +181,7 @@ class SEAC(Layer):
         self.activation = activation
         self.use_bias   = use_bias
         self.use_cache  = use_cache
+        self.use_bnorm  = use_bnorm
 
         self.locse = LocSE(self.ds, K=self.K, use_bias=self.use_bias, name='locse')
 
@@ -210,6 +213,8 @@ class SEAC(Layer):
                            use_bias=self.use_bias,
                            kernel_constraint=MaxNorm(axis=[0,1]),
                            name='skip_conv')
+        if self.use_bnorm:
+            self.bns = [BatchNormalization() for i in range(2)]
 
     #----------------------------------------------------------------------
     def call(self, inputs):
@@ -229,9 +234,13 @@ class SEAC(Layer):
         se = self.locse([pc, feats], use_cache=self.use_cache)
         attention_score = self.att(se) * se
         reshaped = self.reshape0(attention_score)
+        if self.use_bnorm:
+            reshaped = self.bns[0](reshaped)
         cat = self.cat([pc[:,:,0], reshaped])
         res = self.reshape1( self.conv(cat) )
         skip = self.skip_conv( self.cat([feats, res]) )
+        if self.use_bnorm:
+            skip = self.bns[1](skip)
         return skip
 
     #----------------------------------------------------------------------
@@ -245,7 +254,8 @@ class SEAC(Layer):
             "K"          : self.K,
             "activation" : self.activation,
             "use_bias"   : self.use_bias,
-            "use_cache"  : self.use_cache
+            "use_cache"  : self.use_cache,
+            "use_bnorm"  : self.use_bnorm
          })
         return config
 
