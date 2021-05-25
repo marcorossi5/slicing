@@ -50,7 +50,7 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
         trials = Trials()
     
     def wrap_fn(setup):
-        generators = load_data_fn(search_space)
+        generators = load_data_fn(setup)
         return function(setup, generators)
 
     best = fmin(wrap_fn, search_space, algo=tpe.suggest, max_evals=max_evals, trials=trials)

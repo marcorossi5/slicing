@@ -77,8 +77,8 @@ def load_network(setup, checkpoint_filepath=None):
                 ],
             run_eagerly=setup.get('debug')
             )
-    
-    net.model().summary()
+    if not setup['scan']:
+        net.model().summary()
     # tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
     if checkpoint_filepath:

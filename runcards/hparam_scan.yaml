@@ -6,14 +6,8 @@ dataset:
 model:
     net_type: SEAC
     use_bnorm: true
-    use_ggf: hp.choice("ggf", [True, False])
-    fc_type: conv
     nb_classes: 128
-    K: hp.quniform("K", 16, 32, 2)
-    scale_factor: hp.choice("scale_factor", [2,3,4])
-    nb_layers: hp.choice("nb_layers", [2,3,4])
-    nb_final_convs: hp.chioce("nb_final_convs", [1,2,3,4])
-    dropout: hp.uniform("dropout", 0.1, 0.5)
+    K: hp.quniform("K", 64, 160, 4)
     use_bias: hp.choice("use_bias", [True, False])
     threshold: 0.6
 test:
@@ -31,12 +25,9 @@ train:
     nev: -1
     min_hits: 1
     split: 0.9
-    hist_freq: 1
+    hist_freq: 5
     loss: xent
-    from_logits: true
-    wgt: 50
-    gamma: 2
-    epochs: 30
+    epochs: 50
     lr: hp.loguniform("lr", -10, -2)
     min_lr: 0.00001
     patience: 5
