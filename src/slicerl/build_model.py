@@ -156,9 +156,9 @@ def build_and_train_model(setup, generators):
 
     if setup['scan']:
         net.load_weights(checkpoint_filepath)
-        loss, acc = net.evaluate(val_generator, verbose=0)
-        print(f"Evaluate model instance: [loss: {loss:.5f}, acc: {acc:.5f}]")
-        res = {'loss': loss, 'acc': acc, 'status': STATUS_OK}
+        loss, acc, prec, rec = net.evaluate(val_generator, verbose=0)
+        print(f"Evaluate model instance: [loss: {loss:.5f}, acc: {acc:.5f}, prec: {prec:.5f}, rec: {rec:.5f}]")
+        res = {'loss': -acc, 'xent': loss, 'prec': prec, 'rec': rec, 'status': STATUS_OK}
     else:
         res = net
     return res
@@ -171,7 +171,7 @@ def inference(setup, test_generator):
     net = load_network(setup, checkpoint_filepath.as_posix())
 
     results = net.evaluate(test_generator)
-    print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]}")
+    print(f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]} \t test precision: {results[2]} \t test recall: {results[3]}")
 
     y_pred = net.get_prediction(test_generator.prep_inputs,
                                 test_generator.knn_idxs,
