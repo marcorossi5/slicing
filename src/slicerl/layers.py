@@ -18,7 +18,8 @@ from tensorflow.keras.constraints import MaxNorm
 class LocSE(Layer):
     """ Class defining Local Spatial Encoding Layer. """
     #----------------------------------------------------------------------
-    def __init__(self, units, K=8, dims=2, activation='relu', use_bias=True, **kwargs):
+    def __init__(self, units, K=8, dims=2, activation='relu', use_bias=True,
+                 use_bnorm=False, **kwargs):
         """
         Parameters
         ----------
@@ -26,6 +27,8 @@ class LocSE(Layer):
             - K          : int, number of nearest neighbors
             - dims       : int, point cloud spatial dimensions number
             - activation : str, MLP layer activation
+            - use_bias   : bool, wether to use bias in MLPs
+            - use_bnorm  : bool, wether to use batchnormalization            
         """
         super(LocSE, self).__init__(**kwargs)
         self.units      = units
@@ -35,6 +38,7 @@ class LocSE(Layer):
         self._cache     = None
         self._is_cached = False
         self.use_bias   = use_bias
+        self.use_bnorm  = use_bnorm
 
     #----------------------------------------------------------------------
     @property
@@ -73,6 +77,8 @@ class LocSE(Layer):
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='MLP')
         self.cat = Concatenate(axis=-1, name='cat')
+        if self.use_bnorm:
+            self.bnorm = BatchNormalization()
 
     #----------------------------------------------------------------------
     def call(self, inputs, use_cache=False):
@@ -115,6 +121,9 @@ class LocSE(Layer):
         rppe = tf.ensure_shape(rppe, [None,None,1+self.K,self.ch_dims])
         r = self.MLP(rppe)
 
+        if self.use_bnorm:
+            r = self.bnorm(r)
+
         return self.cat([r, feats])
 
     #----------------------------------------------------------------------
@@ -124,7 +133,8 @@ class LocSE(Layer):
             "units"      : self.units,
             "K"          : self.K,
             "activation" : self.activation,
-            "use_bias"   : self.use_bias
+            "use_bias"   : self.use_bias,
+            "use_bnorm"  : self.use_bnorm
         })
         return config
 
@@ -195,6 +205,7 @@ class SEAC(Layer):
         self.att  = Conv1D(self.da, 1, input_shape=shape,
                           activation='softmax',
                           use_bias=self.use_bias,
+                          use_bnorm=self.use_bnorm,
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='attention_score')
         self.reshape0 = Reshape((-1,(1+self.K)*self.da), name='reshape0')
