@@ -193,7 +193,12 @@ class SEAC(Layer):
         self.use_cache  = use_cache
         self.use_bnorm  = use_bnorm
 
-        self.locse = LocSE(self.ds, K=self.K, use_bias=self.use_bias, name='locse')
+        self.locse = LocSE(
+                        self.ds,
+                        K=self.K,
+                        use_bias=self.use_bias,
+                        use_bnorm=self.use_bnorm,
+                        name='locse')
 
     #----------------------------------------------------------------------
     def build(self, input_shape):
@@ -205,7 +210,6 @@ class SEAC(Layer):
         self.att  = Conv1D(self.da, 1, input_shape=shape,
                           activation='softmax',
                           use_bias=self.use_bias,
-                          use_bnorm=self.use_bnorm,
                           kernel_constraint=MaxNorm(axis=[0,1]),
                           name='attention_score')
         self.reshape0 = Reshape((-1,(1+self.K)*self.da), name='reshape0')
