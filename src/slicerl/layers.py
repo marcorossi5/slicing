@@ -2,6 +2,7 @@ from slicerl.config import NP_DTYPE_INT
 from slicerl.tools import bfs
 
 import numpy as np
+from time import time as tm
 import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Layer
@@ -367,12 +368,14 @@ class AbstractNet(Model):
             # DFS (depth first search)
             visited = set() # the all visited set
             slices = []
+            start = tm()
             for node in range(len(graph)):
                 if node in visited:
                     continue
                 slice = set() # the current slice only
                 bfs(slice, visited, node, graph)
                 slices.append(slice)
+            print(f"bfs done in {tm()-start}")
 
             N = inp[0].shape[1]
             sorted_slices = sorted(slices, key=len, reverse=True)

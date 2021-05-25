@@ -230,7 +230,7 @@ def bfs(slice, visited, root, graph):
         # If not visited, mark it as visited, and
         # enqueue it
         for neighbour in graph[node]:
-            if neighbour not in visited.union(slice):
+            if (neighbour not in visited) and (neighbour not in slice):
                 slice.add(neighbour)
                 visited.add(neighbour)
                 queue.append(neighbour)
