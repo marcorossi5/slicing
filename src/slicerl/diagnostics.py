@@ -218,14 +218,14 @@ def plot_graph(pc, status, slices, output_folder='./'):
         - status : np.array, slice index of shape=(N,)
         - slices  : list, of sets of connected slices
     """
-    fig = plt.figure()
+    fig = plt.figure(figsize=(18,14))
     ax = fig.add_subplot()
 
     for slice in slices:
         inslice = np.array(list(slice), dtype=NP_DTYPE_INT)
         points = pc[inslice]
 
-        ax.plot(points[:,0], points[:,1], lw=0.2, color='grey')
+        ax.plot(points[:,0], points[:,1], lw=0.3, color='grey')
     
     ax.scatter(pc[:,0], pc[:,1], s=0.5, c=status, cmap=cmap, norm=norm)
     
