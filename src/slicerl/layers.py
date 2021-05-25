@@ -252,17 +252,19 @@ class SEAC(Layer):
 #======================================================================
 class Predictions:
     """ Utility class to return RandLA-Net predictions. """
-    def __init__(self, graphs, status, preds):
+    def __init__(self, graphs, status, preds, slices):
         """
         Parameters
         ----------
             - graph  : list, KNN graphs which is list with elements of shape=(nb_neighs)
             - status : list, each element is a np.array with shape=(N)
             - preds  : list, each element is a np.array with shape=(N,1+K)
+            - slices : list, of sets with decreasing size containing
         """
         self.graphs = graphs
         self.status = status
         self.preds  = preds
+        self.slices = slices
 
     #----------------------------------------------------------------------
     def get_graph(self, index):
@@ -291,7 +293,7 @@ class Predictions:
             - np.array: status at index i of shape=(N,)
         """
         return self.status[index]
-    
+
     #----------------------------------------------------------------------
     def get_preds(self, index):
         """
@@ -307,7 +309,23 @@ class Predictions:
             - np.array: status at index i of shape=(N,1+K)
         """
         return self.preds[index]
-    
+
+    #----------------------------------------------------------------------
+    def get_slices(self, index):
+        """
+        Returns the slices: each slice contains the calohits indices inside the
+        slice set.
+
+        Parameters
+        ----------
+            - index : int, index in slice list
+
+        Returns
+        -------
+            - list: of set objects with calohit indices
+        """
+        return self.slices[index]
+
 #======================================================================
 class AbstractNet(Model):
     def __init__(self, name, **kwargs):
@@ -334,10 +352,10 @@ class AbstractNet(Model):
         -------
             Predictions object
         """
-        # TODO: think about converting this into some more clever implementation
         status = []
         graphs = []
         preds  = []
+        all_slices = []
         for inp, knn_idx in zip(inputs, knn_idxs):
             # predict hits connections
             pred = self.predict_on_batch(inp)
@@ -345,23 +363,23 @@ class AbstractNet(Model):
             preds.append(pred[0])
             graph = [set(node[p > threshold]) for node, p in zip(knn_idx[0], pred[0])]
             graphs.append( graph )
-            
-            # DFS (depth first search) implementation
+
+            # DFS (depth first search)
             visited = set() # the all visited set
             slices = []
             for node in range(len(graph)):
                 if node in visited:
                     continue
                 slice = set() # the current slice only
-                bfs(slice, node, graph)
+                bfs(slice, visited, node, graph)
                 slices.append(slice)
-                visited.update(slice)
 
             N = inp[0].shape[1]
             sorted_slices = sorted(slices, key=len, reverse=True)
+            all_slices.append(sorted_slices)
             state = np.zeros(N)
             for i, slice in enumerate(sorted_slices):
                 state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
             status.append(state)
 
-        return Predictions(graphs, status, preds)
+        return Predictions(graphs, status, preds, all_slices)

@@ -6,7 +6,8 @@ from slicerl.diagnostics import (
     plot_plane_view,
     plot_slice_size,
     plot_multiplicity,
-    plot_histogram
+    plot_histogram,
+    plot_graph
 )
 
 import os
@@ -191,3 +192,7 @@ def inference(setup, test_generator):
     hist_true = [trg.flatten() for trg in test_generator.prep_targets]
     hist_pred = [pred.flatten() for pred in y_pred.preds]
     plot_histogram(hist_true, hist_pred, setup['output'].joinpath('plots'))
+    plot_graph(
+        test_generator.get_pc(0), y_pred.get_status(0), y_pred.get_slices(0),
+        setup['output'].joinpath('plots')
+              )

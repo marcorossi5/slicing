@@ -1,4 +1,6 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.config import NP_DTYPE_INT
+
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
@@ -202,5 +204,32 @@ def plot_histogram(y_true, y_pred, output_folder='./'):
     ax.legend()
     fname = f"{output_folder}/pred_hist.png"
     print(f"[+] Saving plot at {fname} ")
+    plt.savefig(fname, bbox_inches='tight', dpi=300)
+    plt.close()
+
+#----------------------------------------------------------------------
+def plot_graph(pc, status, slices, output_folder='./'):
+    """
+    Plots the graph.
+
+    Parameters
+    ----------
+        - pc     : np.array, point cloud space hits of shape=(N,2)
+        - status : np.array, slice index of shape=(N,)
+        - slices  : list, of sets of connected slices
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot()
+
+    for slice in slices:
+        inslice = np.array(list(slice), dtype=NP_DTYPE_INT)
+        points = pc[inslice]
+
+        ax.plot(points[:,0], points[:,1], lw=0.2, color='grey')
+    
+    ax.scatter(pc[:,0], pc[:,1], s=0.5, c=status, cmap=cmap, norm=norm)
+    
+    fname = f"{output_folder}/pred_graph.png"
+    print(f"[+] Saving plot at {fname}")
     plt.savefig(fname, bbox_inches='tight', dpi=300)
     plt.close()
