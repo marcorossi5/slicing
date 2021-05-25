@@ -214,6 +214,16 @@ class SEAC(Layer):
                           name='attention_score')
         self.reshape0 = Reshape((-1,(1+self.K)*self.da), name='reshape0')
         shape = (None, self.f_dims + self.dims + (1+self.K)*self.da)
+
+        self.conv_block = [
+            Conv1D(1, 3, padding='same', input_shape=shape,
+                   activation=self.activation,
+                   use_bias=self.use_bias,
+                   kernel_constraint=MaxNorm(axis=[0,1]),
+                   name=f'conv_block{i}') for i in range(5)
+        ]
+        self.bns_block = [BatchNormalization(name=f'bn{i}') for i in range(5)]
+
         self.conv = Conv1D((1+self.K)*self.do, 1, input_shape=shape,
                            activation=self.activation,
                            use_bias=self.use_bias,
@@ -252,7 +262,13 @@ class SEAC(Layer):
         if self.use_bnorm:
             reshaped = self.bns[0](reshaped)
         cat = self.cat([pc[:,:,0], reshaped])
-        res = self.reshape1( self.conv(cat) )
+
+        res = []
+        for conv, bn in zip(self.conv_block, self.bns_block):
+            res.append( bn(conv(cat)) )
+        
+        res = self.reshape1( self.conv(self.cat(res)) )
+
         skip = self.skip_conv( self.cat([feats, res]) )
         if self.use_bnorm:
             skip = self.bns[1](skip)
