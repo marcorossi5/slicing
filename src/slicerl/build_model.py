@@ -1,7 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.SEACNet import SeacNet
 from slicerl.build_dataset import dummy_dataset
-from slicerl.losses import get_loss
 from slicerl.diagnostics import (
     plot_plane_view,
     plot_slice_size,
@@ -11,11 +10,10 @@ from slicerl.diagnostics import (
 )
 
 import os
-import numpy as np
 from time import time as tm
-import pprint
 
 import tensorflow as tf
+import tensorflow.keras.backend as K
 from tensorflow.keras.callbacks import (
     TensorBoard,
     ModelCheckpoint,
@@ -104,6 +102,7 @@ def build_and_train_model(setup, generators):
     -------
         network model if scan is False, else dict with loss and status keys.
     """
+    K.clear_session()
     if setup['scan']:
         use_bnorm = setup['model']['use_bnorm']
         K = setup['model']['K']
@@ -175,6 +174,7 @@ def build_and_train_model(setup, generators):
 #----------------------------------------------------------------------
 
 def inference(setup, test_generator):
+    K.clear_session()
     print("[+] done with training, load best weights")
     checkpoint_filepath = setup['output'].joinpath('network.h5')
     net = load_network(setup, checkpoint_filepath.as_posix())
