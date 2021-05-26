@@ -105,7 +105,12 @@ def build_and_train_model(setup, generators):
         network model if scan is False, else dict with loss and status keys.
     """
     if setup['scan']:
-        pprint.pprint(setup)
+        use_bnorm = setup['model']['use_bnorm']
+        K = setup['model']['K']
+        use_bias = setup['model']['use_bias']
+        lr = setup['train']['lr']
+        opt = setup['train']['optimizer']
+        print(f"{{use_bnorm: {use_bnorm}, K {K}, use_bias: {use_bias}, lr: {lr}, opt: {opt}}}")
 
     train_generator, val_generator = generators
 
