@@ -13,7 +13,7 @@ import os
 from time import time as tm
 
 import tensorflow as tf
-import tensorflow.keras.backend as K
+import tensorflow.keras.backend as tfK
 from tensorflow.keras.callbacks import (
     TensorBoard,
     ModelCheckpoint,
@@ -102,7 +102,7 @@ def build_and_train_model(setup, generators):
     -------
         network model if scan is False, else dict with loss and status keys.
     """
-    K.clear_session()
+    tfK.clear_session()
     if setup['scan']:
         use_bnorm = setup['model']['use_bnorm']
         K = setup['model']['K']
@@ -174,7 +174,7 @@ def build_and_train_model(setup, generators):
 #----------------------------------------------------------------------
 
 def inference(setup, test_generator):
-    K.clear_session()
+    tfK.clear_session()
     print("[+] done with training, load best weights")
     checkpoint_filepath = setup['output'].joinpath('network.h5')
     net = load_network(setup, checkpoint_filepath.as_posix())
