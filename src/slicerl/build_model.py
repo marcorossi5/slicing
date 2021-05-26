@@ -13,6 +13,7 @@ from slicerl.diagnostics import (
 import os
 import numpy as np
 from time import time as tm
+import pprint
 
 import tensorflow as tf
 from tensorflow.keras.callbacks import (
@@ -60,7 +61,7 @@ def load_network(setup, checkpoint_filepath=None):
         opt = RMSprop(lr=lr)
     elif setup['train']['optimizer'] == 'Adagrad':
         opt = Adagrad(lr=lr)
-    
+
     if setup['train']['loss'] == 'xent':
         loss = tf.keras.losses.BinaryCrossentropy(name='xent')
     elif setup['train']['loss'] == 'hinge':
@@ -103,6 +104,9 @@ def build_and_train_model(setup, generators):
     -------
         network model if scan is False, else dict with loss and status keys.
     """
+    if setup['scan']:
+        pprint.pprint(setup)
+
     train_generator, val_generator = generators
 
     initial_weights = setup['train']['initial_weights']
@@ -188,7 +192,7 @@ def inference(setup, test_generator):
         pc_pred = y_pred.get_status(i)          # shape=(N,)
         pc_test = test_generator.get_targets(i) # shape=(N,)
         plot_plane_view(pc, pc_pred, pc_test, i, setup['output'].joinpath('plots'))
-    
+
     # plot histogram of the network decisions
     hist_true = [trg.flatten() for trg in test_generator.prep_targets]
     hist_pred = [pred.flatten() for pred in y_pred.preds]
