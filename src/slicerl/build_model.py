@@ -109,7 +109,7 @@ def build_and_train_model(setup, generators):
         use_bias = setup['model']['use_bias']
         lr = setup['train']['lr']
         opt = setup['train']['optimizer']
-        print(f"{{use_bnorm: {use_bnorm}, K {K}, use_bias: {use_bias}, lr: {lr}, opt: {opt}}}")
+        print(f"{{use_bnorm: {use_bnorm}, K: {K}, use_bias: {use_bias}, lr: {lr}, opt: {opt}}}")
 
     train_generator, val_generator = generators
 

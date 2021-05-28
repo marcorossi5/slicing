@@ -1,4 +1,4 @@
-from slicerl.config import NP_DTYPE_INT
+from slicerl.config import NP_DTYPE_INT, EPS_TF
 from slicerl.tools import bfs
 
 import numpy as np
@@ -68,7 +68,7 @@ class LocSE(Layer):
                           second is (B,N,feature number)
 
         """
-        self.ch_dims  = (self.dims + 1)*(1+self.K) + self.dims # point + neighbor point + relative space dims + 1 (the norm)
+        self.ch_dims  = self.dims*2 + 2 # point + relative space dims + 2 (norm, angles)
         self.MLP = Conv1D(self.units, 1, input_shape=(1+self.K, self.ch_dims),
                           activation=self.activation,
                           use_bias=self.use_bias,
@@ -99,16 +99,16 @@ class LocSE(Layer):
             rppe   = self._cache
         else:
             # relative positions between neighbours
-            rpbns = []
-            for i in range(1+self.K):
-                current = pc[:,:,i:i+1]
-                diff = current - pc
-                norms = tf.norm(pc, ord='euclidean', axis=-1, keepdims=True, name='norm')
-                rpbn = tf.concat([diff, norms], axis=-1)
-                rpbns.append(rpbn)
+            current = pc[:,:,:1]
+            diff = current - pc
+            norms = tf.norm(pc, ord='euclidean', axis=-1, keepdims=True, name='norm')
+            x = diff[...,:1]
+            y = diff[...,1:]
+            angles = y / (tf.math.abs(x) + EPS_TF) * tf.math.sign(x)
+            rpbn = tf.concat([diff, norms, angles], axis=-1)
 
             # relative point position encoding
-            rppe = self.cat([pc] + rpbns)
+            rppe = self.cat([pc] + [rpbn])
 
             # save cache
             self._cache     = rppe
