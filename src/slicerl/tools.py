@@ -8,22 +8,24 @@ import numpy as np
 import tensorflow as tf
 
 
-#======================================================================
+# ======================================================================
 def load_runcard(runcard):
     """Read in a runcard json file and set up dimensions correctly."""
-    with open(runcard,'r') as f:
+    with open(runcard, "r") as f:
         res = json.load(f)
     return res
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def makedir(folder):
     """Create directory."""
     if not folder.exists():
         folder.mkdir()
     else:
-        raise Exception(f'Output folder {folder} already exists.')
+        raise Exception(f"Output folder {folder} already exists.")
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def get_window_width(masses, lower_frac=20, upper_frac=80):
     """Returns"""
     lower = np.nanpercentile(masses, lower_frac)
@@ -31,7 +33,8 @@ def get_window_width(masses, lower_frac=20, upper_frac=80):
     median = np.median(masses[(masses > lower) & (masses < upper)])
     return lower, upper, median
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def confusion_matrix_per_event(y_true, y_pred):
     """
     Computes confusion matrix values for each graph in list
@@ -40,7 +43,7 @@ def confusion_matrix_per_event(y_true, y_pred):
     ----------
         - y_true : list, of ground truths graphs arrays each of shape=(N,1+K)
         - y_true : list, of predicted graphs arrays each of shape=(N,1+K)
-      
+
     Returns
       - tp      true positives ratio
       - fp      false positives ratio
@@ -57,107 +60,120 @@ def confusion_matrix_per_event(y_true, y_pred):
     for preds, truths in zip(y_true, y_pred):
         truths = truths.astype(bool)
         tot = truths.shape[0]
-        tp.append(len(np.where(preds[truths]  == 1)[0])/tot)
-        fp.append(len(np.where(preds[~truths] == 1)[0])/tot)
-        fn.append(len(np.where(preds[truths]  == 0)[0])/tot)
-        tn.append(len(np.where(preds[~truths] == 0)[0])/tot)
+        tp.append(len(np.where(preds[truths] == 1)[0]) / tot)
+        fp.append(len(np.where(preds[~truths] == 1)[0]) / tot)
+        fn.append(len(np.where(preds[truths] == 0)[0]) / tot)
+        tn.append(len(np.where(preds[~truths] == 0)[0]) / tot)
 
     return np.array(tp), np.array(fp), np.array(fn), np.array(tn)
 
-#----------------------------------------------------------------------
-def m_lin_fit(x,y):
+
+# ----------------------------------------------------------------------
+def m_lin_fit(x, y):
     """ Compute the angular coefficient of a linear fit. """
     assert x.shape == y.shape
     n = x.shape[0]
-    num = n * (x*y).sum() - x.sum()*y.sum()
-    den = n * (x*x).sum() - (x.sum())**2
+    num = n * (x * y).sum() - x.sum() * y.sum()
+    den = n * (x * x).sum() - (x.sum()) ** 2
     return num / (den + EPS)
 
-#----------------------------------------------------------------------
-def pearson_distance(x,y, axis):
+
+# ----------------------------------------------------------------------
+def pearson_distance(x, y, axis):
     """ Computes modified pearson distance. """
     xc = x - x.mean()
     yc = y - y.mean()
     num = (xc * yc).sum()
-    den = (xc**2).sum() * (yc**2).sum()
+    den = (xc ** 2).sum() * (yc ** 2).sum()
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def rsum(x, axis=None, keepdims=False):
     return tf.reduce_sum(x, axis=axis, keepdims=keepdims)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def rmean(x, axis=None, keepdims=False):
     return tf.reduce_mean(x, axis=axis, keepdims=keepdims)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def m_lin_fit_tf(pc):
     """
     Compute the angular coefficient of a linear fit.
-    
+
     Parameters
     ----------
         - pc: tf.Tensor, spatial point cloud of shape=(B,N,K,dims)
-    
+
     Returns
     -------
         - tf.Tensor, squared pearson coefficient of shape=(B,N,1)
     """
-    x = pc[:,:,:,:1]
-    y = pc[:,:,:,1:]
+    x = pc[:, :, :, :1]
+    y = pc[:, :, :, 1:]
     n = float_me(tf.shape(x)[-2])
-    num = n * rsum(x*y,-2,True) - rsum(x,-2,True) * rsum(y,-2,True)
-    den = n * rsum(x*x,-2,True) - rsum(x,-2,True)**2
+    num = n * rsum(x * y, -2, True) - rsum(x, -2, True) * rsum(y, -2, True)
+    den = n * rsum(x * x, -2, True) - rsum(x, -2, True) ** 2
     return num / (den + EPS_TF)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def pearson_distance_tf(pc):
     """
     Computes modified pearson distance.
-    
+
     Parameters
     ----------
         - pc: tf.Tensor, spatial point cloud of shape=(B,N,K,dims)
-    
+
     Returns
     -------
         - tf.Tensor, squared pearson coefficient of shape=(B,N,1)
     """
-    x = pc[:,:,:,:1]
-    y = pc[:,:,:,1:]
+    x = pc[:, :, :, :1]
+    y = pc[:, :, :, 1:]
     xc = x - rmean(x, -2, True)
     yc = y - rmean(y, -2, True)
     num = rsum(xc * yc, -2, True)
-    den = rsum(xc**2, -2, True) * rsum(yc**2, -2, True)
-    return 1 - num**2 / (den + EPS)
+    den = rsum(xc ** 2, -2, True) * rsum(yc ** 2, -2, True)
+    return 1 - num ** 2 / (den + EPS)
 
-#----------------------------------------------------------------------
-def mse(x,y):
-    return ((x-y)**2).mean()
 
-#----------------------------------------------------------------------
-def bce_loss(x,y):
+# ----------------------------------------------------------------------
+def mse(x, y):
+    return ((x - y) ** 2).mean()
+
+
+# ----------------------------------------------------------------------
+def bce_loss(x, y):
     # Warning: computing log is expensive
-    ratio = 0.1 # percentage of ones over zeros
-    loss = - y*np.log(x + EPS)/ratio - (1-y)*np.log(1-x + EPS)/(1-ratio)
+    ratio = 0.1  # percentage of ones over zeros
+    loss = -y * np.log(x + EPS) / ratio - (1 - y) * np.log(1 - x + EPS) / (
+        1 - ratio
+    )
     return loss.mean()
 
-#----------------------------------------------------------------------
-def dice_loss(x,y):
-    ix = 1-x
-    iy = 1-y
-    num1 = (x*y).sum(-1) + EPS
-    den1 = (x*x + y*y).sum(-1) + EPS
-    num2 = (ix*iy).sum(-1) + EPS
-    den2 = (ix*ix + iy*iy).sum(-1) + EPS
-    return 1 - (num1/den1 + num2/den2).mean()
 
-#----------------------------------------------------------------------
-def efficiency_rejection_rate_loss(x,y):
-    efficiency     = np.count_nonzero(x[y]) / (np.count_nonzero(y) + EPS )
+# ----------------------------------------------------------------------
+def dice_loss(x, y):
+    ix = 1 - x
+    iy = 1 - y
+    num1 = (x * y).sum(-1) + EPS
+    den1 = (x * x + y * y).sum(-1) + EPS
+    num2 = (ix * iy).sum(-1) + EPS
+    den2 = (ix * ix + iy * iy).sum(-1) + EPS
+    return 1 - (num1 / den1 + num2 / den2).mean()
+
+
+# ----------------------------------------------------------------------
+def efficiency_rejection_rate_loss(x, y):
+    efficiency = np.count_nonzero(x[y]) / (np.count_nonzero(y) + EPS)
     rejection_rate = np.count_nonzero(x[~y]) / (np.count_nonzero(~y) + EPS)
     return 1 - efficiency + rejection_rate
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def onehot(ind, depth):
     """
     One-hot encoding on the last axis
@@ -173,7 +189,8 @@ def onehot(ind, depth):
     """
     return np.eye(depth)[ind.astype(np.int16)]
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def onehot_to_indices(onehot):
     """
     From one-hot encoding to indices on the last axis
@@ -188,13 +205,14 @@ def onehot_to_indices(onehot):
     """
     return np.argmax(onehot, axis=-1)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def dfs(visited, node, graph):
     """
     Depth First Search graph traversing.
 
     Problem of this implementation is that instantiated for loops are already given
-    and cannot be modified. Some redundancy occurs in this implementation.    
+    and cannot be modified. Some redundancy occurs in this implementation.
     """
     if node not in visited:
         visited.add(node)
@@ -204,12 +222,13 @@ def dfs(visited, node, graph):
             print(f"For loop made with {to_visit}")
             dfs(visited, neighbor, graph)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def bfs(slice, visited, root, graph):
     """
     Breadth First Search graph traversing. Fills in the visited set with the
     node indices reachable from root node.
-    
+
     Parameters
     ----------
         - slice   : set, of points in the same slice
