@@ -27,11 +27,13 @@ def encode(inputs, layers, loop=True):
     -------
         tf.Tensor, result of the computation
     """
-    result = layers[0](inputs)
+    result = layers[0](inputs + tf.reduce_sum(inputs, axis=-1, keepdims=True))
 
     if loop:
         for layer in layers[1:]:
-            residual = layer(result)
+            residual = layer(
+                result + tf.reduce_sum(result, axis=-1, keepdims=True)
+            )
             result = result + residual
     return result
 
