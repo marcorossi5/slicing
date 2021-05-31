@@ -1,41 +1,42 @@
 # This file is part of SliceRL by M. Rossi
 gpu: "0"
 dataset:
-    split: 0.9
-    augment: false
+  split: 0.9
+  augment: false
 model:
-    net_type: SEAC
-    use_bnorm: true
-    nb_classes: 128
-    K: hp.quniform("K", 64, 160, 4)
-    use_bias: hp.choice("use_bias", [True, False])
-    threshold: 0.6
+  net_type: SEAC
+  use_bnorm: true
+  nb_classes: 128
+  locse_nb_layers: hp.choice("locse_nb_layers", [1,2,3,4,5])
+  K: hp.quniform("K", 64, 160, 4)
+  use_bias: hp.choice("use_bias", [True, False])
+  threshold: 0.9
 test:
-    fn: data/test_data_03GeV.csv.gz
-    nev: -1
-    min_hits: 1
+  fn: data/test_data_03GeV.csv.gz
+  nev: -1
+  min_hits: 1
 train:
-    fn:
+  fn:
     - data/test_data_05GeV.csv.gz
     - data/test_data_1GeV.csv.gz
     - data/test_data_2GeV.csv.gz
     - data/test_data_3GeV.csv.gz
     - data/test_data_6GeV.csv.gz
     - data/test_data_7GeV.csv.gz
-    nev: -1
-    min_hits: 1
-    split: 0.9
-    hist_freq: 5
-    loss: xent
-    epochs: 50
-    lr: hp.loguniform("lr", -10, -2)
-    min_lr: 0.00001
-    patience: 5
-    optimizer: hp.choice("optimizer", ["Adam", "SGD", "RMSprop", "Adagrad"])
-    initial_weights: null
+  nev: -1
+  min_hits: 1
+  split: 0.9
+  hist_freq: 5
+  loss: xent
+  epochs: 50
+  lr: hp.loguniform("lr", -10, -2)
+  min_lr: 0.00001
+  patience: 5
+  optimizer: hp.choice("optimizer", ["Adam", "SGD", "RMSprop", "Adagrad"])
+  initial_weights: null
 scan: true
 cluster:
-    max_evals: 100
-    enable: false
-    url: null
-    exp_key: null
+  max_evals: 100
+  enable: false
+  url: null
+  exp_key: null

@@ -14,6 +14,7 @@ class SeacNet(AbstractNet):
         dims=2,
         f_dims=2,
         K=16,
+        locse_nb_layers=3,
         activation="relu",
         use_bias=True,
         use_bnorm=False,
@@ -23,11 +24,12 @@ class SeacNet(AbstractNet):
         """
         Parameters
         ----------
-            - dims      : int, point cloud spatial dimensions
-            - f_dims    : int, point cloud feature dimensions
-            - K         : int, number of nearest neighbours to find
-            - use_bias  : bool, wether to use bias or not
-            - use_bnorm : bool, wether to use batchnormalization
+            - dims            : int, point cloud spatial dimensions
+            - f_dims          : int, point cloud feature dimensions
+            - K               : int, number of nearest neighbours to find
+            - locse_nb_layers : int, number of hidden layers in LocSE block
+            - use_bias        : bool, wether to use bias or not
+            - use_bnorm       : bool, wether to use batchnormalization
         """
         super(SeacNet, self).__init__(name=name, **kwargs)
 
@@ -35,6 +37,7 @@ class SeacNet(AbstractNet):
         self.dims = dims
         self.f_dims = f_dims
         self.K = int(K)
+        self.locse_nb_layers = locse_nb_layers
         self.activation = activation
         self.use_bias = use_bias
         self.use_bnorm = use_bnorm
@@ -46,6 +49,7 @@ class SeacNet(AbstractNet):
                 dh=dh,
                 do=do,
                 K=self.K,
+                locse_nb_layers=self.locse_nb_layers,
                 activation=self.activation,
                 use_bias=self.use_bias,
                 use_bnorm=self.use_bnorm,
@@ -59,6 +63,7 @@ class SeacNet(AbstractNet):
                 dh=ds[0],
                 do=ds[1],
                 K=self.K,
+                locse_nb_layers=self.locse_nb_layers,
                 use_cache=False,
                 use_bias=self.use_bias,
                 use_bnorm=self.use_bnorm,

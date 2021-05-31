@@ -14,6 +14,29 @@ from tensorflow.keras.layers import (
 )
 from tensorflow.keras.constraints import MaxNorm
 
+
+def encode(inputs, layers, loop=True):
+    """
+    Encoding forward pass. Implements residual connections.
+
+    Parameters
+    ----------
+        - inputs : tf.Tensor, input tensor
+        - layers : list, of tf.keras.layers.Layer subclasses
+
+    Returns
+    -------
+        tf.Tensor, result of the computation
+    """
+    result = layers[0](inputs)
+
+    if loop:
+        for layer in layers[1:]:
+            residual = layer(result)
+            result = result + residual
+    return result
+
+
 # ======================================================================
 class LocSE(Layer):
     """ Class defining Local Spatial Encoding Layer. """
@@ -24,6 +47,7 @@ class LocSE(Layer):
         units,
         K=8,
         dims=2,
+        nb_layers=3,
         activation="relu",
         use_bias=True,
         use_bnorm=False,
@@ -35,6 +59,7 @@ class LocSE(Layer):
             - units      : int, output channels (twice of input channels)
             - K          : int, number of nearest neighbors
             - dims       : int, point cloud spatial dimensions number
+            - nb_layers  : int, number of shared MLP layers for each encoding
             - activation : str, MLP layer activation
             - use_bias   : bool, wether to use bias in MLPs
             - use_bnorm  : bool, wether to use batchnormalization
@@ -43,11 +68,14 @@ class LocSE(Layer):
         self.units = units
         self.K = K
         self.dims = dims
+        self.nb_layers = nb_layers
         self.activation = activation
         self._cache = None
         self._is_cached = False
         self.use_bias = use_bias
         self.use_bnorm = use_bnorm
+
+        self.enc_with_loop = True if self.nb_layers > 1 else False
 
     # ----------------------------------------------------------------------
     @property
@@ -80,29 +108,68 @@ class LocSE(Layer):
         self.ch_dims = (
             self.dims * 2 + 2
         )  # point + relative space dims + norm + angles
-        self.MLP = Conv1D(
-            self.units,
-            1,
-            input_shape=(1 + self.K, self.ch_dims),
-            activation=self.activation,
-            use_bias=self.use_bias,
-            kernel_constraint=MaxNorm(axis=[0, 1]),
-            name="MLP0",
-        )
 
-        self.MLPs = [
+        self.pc_enc = [
             Conv1D(
                 self.units,
                 3,
                 padding="same",
-                input_shape=(1 + self.K, self.units),
+                input_shape=(1 + self.K, self.dims),
                 activation=self.activation,
                 use_bias=self.use_bias,
-                kernel_constraint=MaxNorm(axis=[0, 1]),
-                name=f"MLP{i}",
+                name=f"pc_enc{i}",
             )
-            for i in range(1, 4)
+            for i in range(1, self.nb_layers + 1)
         ]
+
+        self.rel_pos_enc = [
+            Conv1D(
+                self.units,
+                3,
+                padding="same",
+                input_shape=(1 + self.K, self.dims),
+                activation=self.activation,
+                use_bias=self.use_bias,
+                name=f"rel_pos_enc{i}",
+            )
+            for i in range(1, self.nb_layers + 1)
+        ]
+
+        self.angles_enc = [
+            Conv1D(
+                self.units,
+                3,
+                padding="same",
+                input_shape=(1 + self.K, 1),
+                activation=self.activation,
+                use_bias=self.use_bias,
+                name=f"angles_enc{i}",
+            )
+            for i in range(1, self.nb_layers + 1)
+        ]
+
+        self.norms_enc = [
+            Conv1D(
+                self.units,
+                3,
+                padding="same",
+                input_shape=(1 + self.K, 1),
+                activation=self.activation,
+                use_bias=self.use_bias,
+                name=f"norms_enc{i}",
+            )
+            for i in range(1, self.nb_layers + 1)
+        ]
+
+        self.MLP = Conv1D(
+            self.units,
+            1,
+            padding="same",
+            input_shape=(1 + self.K, 1),
+            activation=self.activation,
+            use_bias=self.use_bias,
+            name=f"MLP",
+        )
 
         self.cat = Concatenate(axis=-1, name="cat")
         if self.use_bnorm:
@@ -149,10 +216,18 @@ class LocSE(Layer):
         # MLP call cannot be included in the cache because each MLP in the
         # network has different weights
         rppe = tf.ensure_shape(rppe, [None, None, 1 + self.K, self.ch_dims])
-        r = self.MLP(rppe)
 
-        for MLP in self.MLPs:
-            r = MLP(r)
+        pos = rppe[..., :2]
+        rel_pos = rppe[..., 2:4]
+        angles = rppe[..., 4:5]
+        norms = rppe[..., 5:]
+
+        pos = encode(pos, self.pc_enc, loop=self.enc_with_loop)
+        rel_pos = encode(rel_pos, self.rel_pos_enc, loop=self.enc_with_loop)
+        angles = encode(angles, self.angles_enc, loop=self.enc_with_loop)
+        norms = encode(norms, self.norms_enc, loop=self.enc_with_loop)
+
+        r = self.MLP(self.cat([pos, rel_pos, angles, norms]))
 
         if self.use_bnorm:
             r = self.bnorm(r)
@@ -166,6 +241,7 @@ class LocSE(Layer):
             {
                 "units": self.units,
                 "K": self.K,
+                "nb_layers": self.nb_layers,
                 "activation": self.activation,
                 "use_bias": self.use_bias,
                 "use_bnorm": self.use_bnorm,
@@ -211,6 +287,7 @@ class SEAC(Layer):
         ds=None,
         dims=2,
         f_dims=2,
+        locse_nb_layers=3,
         activation="relu",
         use_bias=True,
         use_cache=True,
@@ -221,15 +298,16 @@ class SEAC(Layer):
         """
         Parameters
         ----------
-            - dh         : int, number of hidden feature dimensions
-            - do         : int, number of output dimensions
-            - ds         : int, number of spatial encoding output dimensions
-            - K          : int, number of nearest neighbors
-            - dims       : int, point cloud spatial dimensions
-            - f_dims     : int, point cloud feature dimensions
-            - activation : str, MLP layer activation
-            - use_bias   : bool, wether to use bias in MLPs
-            - use_bnorm  : bool, wether to use batchnormalization
+            - dh              : int, number of hidden feature dimensions
+            - do              : int, number of output dimensions
+            - ds              : int, number of spatial encoding output dimensions
+            - K               : int, number of nearest neighbors
+            - dims            : int, point cloud spatial dimensions
+            - f_dims          : int, point cloud feature dimensions
+            - locse_nb_layers : int, number of hidden layers in LocSE block
+            - activation      : str, MLP layer activation
+            - use_bias        : bool, wether to use bias in MLPs
+            - use_bnorm       : bool, wether to use batchnormalization
         """
         super(SEAC, self).__init__(name=name, **kwargs)
         self.dh = dh
@@ -247,6 +325,7 @@ class SEAC(Layer):
         self.locse = LocSE(
             self.ds,
             K=self.K,
+            nb_layers=locse_nb_layers,
             use_bias=self.use_bias,
             use_bnorm=self.use_bnorm,
             name="locse",
