@@ -10,7 +10,6 @@ from tensorflow.keras.layers import (
     Reshape,
     Concatenate,
     Conv1D,
-    BatchNormalization,
 )
 from tensorflow.keras.constraints import MaxNorm
 
@@ -50,7 +49,6 @@ class LocSE(Layer):
         nb_layers=3,
         activation="relu",
         use_bias=True,
-        use_bnorm=False,
         **kwargs,
     ):
         """
@@ -62,7 +60,6 @@ class LocSE(Layer):
             - nb_layers  : int, number of shared MLP layers for each encoding
             - activation : str, MLP layer activation
             - use_bias   : bool, wether to use bias in MLPs
-            - use_bnorm  : bool, wether to use batchnormalization
         """
         super(LocSE, self).__init__(**kwargs)
         self.units = units
@@ -73,7 +70,6 @@ class LocSE(Layer):
         self._cache = None
         self._is_cached = False
         self.use_bias = use_bias
-        self.use_bnorm = use_bnorm
 
         self.enc_with_loop = True if self.nb_layers > 1 else False
 
@@ -172,8 +168,6 @@ class LocSE(Layer):
         )
 
         self.cat = Concatenate(axis=-1, name="cat")
-        if self.use_bnorm:
-            self.bnorm = BatchNormalization()
 
     # ----------------------------------------------------------------------
     def call(self, inputs, use_cache=False):
@@ -229,9 +223,6 @@ class LocSE(Layer):
 
         r = self.MLP(self.cat([pos, rel_pos, angles, norms]))
 
-        if self.use_bnorm:
-            r = self.bnorm(r)
-
         return self.cat([r, feats])
 
     # ----------------------------------------------------------------------
@@ -244,7 +235,6 @@ class LocSE(Layer):
                 "nb_layers": self.nb_layers,
                 "activation": self.activation,
                 "use_bias": self.use_bias,
-                "use_bnorm": self.use_bnorm,
             }
         )
         return config
@@ -291,7 +281,6 @@ class SEAC(Layer):
         activation="relu",
         use_bias=True,
         use_cache=True,
-        use_bnorm=False,
         name="seac",
         **kwargs,
     ):
@@ -307,7 +296,6 @@ class SEAC(Layer):
             - locse_nb_layers : int, number of hidden layers in LocSE block
             - activation      : str, MLP layer activation
             - use_bias        : bool, wether to use bias in MLPs
-            - use_bnorm       : bool, wether to use batchnormalization
         """
         super(SEAC, self).__init__(name=name, **kwargs)
         self.dh = dh
@@ -320,14 +308,12 @@ class SEAC(Layer):
         self.activation = activation
         self.use_bias = use_bias
         self.use_cache = use_cache
-        self.use_bnorm = use_bnorm
 
         self.locse = LocSE(
             self.ds,
             K=self.K,
             nb_layers=locse_nb_layers,
             use_bias=self.use_bias,
-            use_bnorm=self.use_bnorm,
             name="locse",
         )
 
@@ -392,16 +378,6 @@ class SEAC(Layer):
             for i in range(5)
         ]
 
-        self.bns_block_0 = [
-            BatchNormalization(name=f"bn_block0_{i}") for i in range(5)
-        ]
-        self.bns_block_1 = [
-            BatchNormalization(name=f"bn_block1_{i}") for i in range(5)
-        ]
-        self.bns_block_2 = [
-            BatchNormalization(name=f"bn_block2_{i}") for i in range(5)
-        ]
-
         self.conv = Conv1D(
             (1 + self.K) * self.do,
             1,
@@ -424,8 +400,6 @@ class SEAC(Layer):
             kernel_constraint=MaxNorm(axis=[0, 1]),
             name="skip_conv",
         )
-        if self.use_bnorm:
-            self.bns = [BatchNormalization() for i in range(2)]
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -445,30 +419,21 @@ class SEAC(Layer):
         se = self.locse([pc, feats], use_cache=self.use_cache)
         attention_score = self.att(se) * se
         reshaped = self.reshape0(attention_score)
-        if self.use_bnorm:
-            reshaped = self.bns[0](reshaped)
         cat = self.cat([pc[:, :, 0], reshaped])
 
         res = []
-        for conv, bn in zip(self.conv_block_0, self.bns_block_0):
-            res.append(bn(conv(cat)))
+        for conv in self.conv_block_0:
+            res.append(conv(cat))
 
-        for i, (r, conv, bn) in enumerate(
-            zip(res, self.conv_block_1, self.bns_block_1)
-        ):
-            res[i] = bn(conv(r))
+        for i, (r, conv) in enumerate(zip(res, self.conv_block_1)):
+            res[i] = conv(r)
 
-        for i, (r, conv, bn) in enumerate(
-            zip(res, self.conv_block_2, self.bns_block_2)
-        ):
-            res[i] = bn(conv(r))
+        for i, (r, conv) in enumerate(zip(res, self.conv_block_2)):
+            res[i] = conv(r)
 
         res = self.reshape1(self.conv(self.cat(res)))
 
-        skip = self.skip_conv(self.cat([feats, res]))
-        if self.use_bnorm:
-            skip = self.bns[1](skip)
-        return skip
+        return self.skip_conv(self.cat([feats, res]))
 
     # ----------------------------------------------------------------------
     def get_config(self):
@@ -483,7 +448,6 @@ class SEAC(Layer):
                 "activation": self.activation,
                 "use_bias": self.use_bias,
                 "use_cache": self.use_cache,
-                "use_bnorm": self.use_bnorm,
             }
         )
         return config

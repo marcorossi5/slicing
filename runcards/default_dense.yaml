@@ -8,7 +8,6 @@ model:
   nb_classes: 128
   K: 64
   locse_nb_layers: 3
-  use_bnorm: true
   use_bias: true
   threshold: 0.9
 test:

@@ -5,7 +5,6 @@ dataset:
   augment: false
 model:
   net_type: SEAC
-  use_bnorm: true
   nb_classes: 128
   locse_nb_layers: hp.choice("locse_nb_layers", [1,2,3,4,5])
   K: hp.quniform("K", 64, 160, 4)

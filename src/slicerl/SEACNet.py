@@ -17,7 +17,6 @@ class SeacNet(AbstractNet):
         locse_nb_layers=3,
         activation="relu",
         use_bias=True,
-        use_bnorm=False,
         name="SEAC-Net",
         **kwargs,
     ):
@@ -29,7 +28,6 @@ class SeacNet(AbstractNet):
             - K               : int, number of nearest neighbours to find
             - locse_nb_layers : int, number of hidden layers in LocSE block
             - use_bias        : bool, wether to use bias or not
-            - use_bnorm       : bool, wether to use batchnormalization
         """
         super(SeacNet, self).__init__(name=name, **kwargs)
 
@@ -40,7 +38,6 @@ class SeacNet(AbstractNet):
         self.locse_nb_layers = locse_nb_layers
         self.activation = activation
         self.use_bias = use_bias
-        self.use_bnorm = use_bnorm
 
         # store some useful parameters
         ds = [2, 5, 7, 5, 3, 1]
@@ -52,7 +49,6 @@ class SeacNet(AbstractNet):
                 locse_nb_layers=self.locse_nb_layers,
                 activation=self.activation,
                 use_bias=self.use_bias,
-                use_bnorm=self.use_bnorm,
                 name=f"seac{i+1}",
             )
             for i, (dh, do) in enumerate(zip(ds[1:-1], ds[2:]))
@@ -66,7 +62,6 @@ class SeacNet(AbstractNet):
                 locse_nb_layers=self.locse_nb_layers,
                 use_cache=False,
                 use_bias=self.use_bias,
-                use_bnorm=self.use_bnorm,
                 activation=self.activation,
                 name="seac0",
             ),
