@@ -59,10 +59,16 @@ class Reader(object):
             c.append(self.readline_fn(self.stream) / 100)  # energies [ADC]/100
             c.append(self.readline_fn(self.stream) / 1000.0)  # xs [10^1 m]
             c.append(self.readline_fn(self.stream) / 1000.0)  # zs [10^1 m]
+            c.append(
+                self.readline_fn(self.stream) / 1000.0
+            )  # x expected direction
+            c.append(
+                self.readline_fn(self.stream) / 1000.0
+            )  # z expected direction
             c.append(self.readline_fn(self.stream))  # cluster_idx
             c.append(self.readline_fn(self.stream))  # pndr_idx
             c.append(self.readline_fn(self.stream))  # cheating_idx (mc truth)
-            if self.num_lines == 7:
+            if self.num_lines == 9:
                 c.append(self.readline_fn(self.stream))  # slicerl_idx
             else:
                 c.append(np.full_like(c[-1], -1))

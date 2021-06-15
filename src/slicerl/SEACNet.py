@@ -33,6 +33,7 @@ class SeacNet(AbstractNet):
 
         # store args
         self.dims = dims
+        self.input_dims = self.dims + 2
         self.f_dims = f_dims
         self.K = int(K)
         self.locse_nb_layers = locse_nb_layers

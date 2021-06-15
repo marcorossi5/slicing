@@ -3,6 +3,7 @@ from slicerl.tools import bfs
 
 import numpy as np
 import tensorflow as tf
+import tensorflow.math as tfmath
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Layer
 from tensorflow.keras.layers import (
@@ -12,6 +13,8 @@ from tensorflow.keras.layers import (
     Conv1D,
 )
 from tensorflow.keras.constraints import MaxNorm
+
+fn = lambda x, y: y / (tfmath.abs(x) + EPS_TF) * tfmath.sign(x)
 
 
 def encode(inputs, layers, loop=True):
@@ -104,8 +107,8 @@ class LocSE(Layer):
 
         """
         self.ch_dims = (
-            self.dims * 2 + 2
-        )  # point + relative space dims + norm + angles
+            self.dims * 2 + 2 + 2
+        )  # point + relative space dims + norm + angles + directions
 
         self.pc_enc = [
             Conv1D(
@@ -191,14 +194,25 @@ class LocSE(Layer):
         else:
             # relative positions between neighbours
             current = pc[:, :, :1]
-            diff = current - pc
+            diff = current[..., :2] - pc[..., :2]
             norms = tf.norm(
-                pc, ord="euclidean", axis=-1, keepdims=True, name="norm"
+                pc[..., :2],
+                ord="euclidean",
+                axis=-1,
+                keepdims=True,
+                name="norm",
             )
             x = diff[..., :1]
-            y = diff[..., 1:]
-            angles = y / (tf.math.abs(x) + EPS_TF) * tf.math.sign(x)
-            rpbn = tf.concat([diff, norms, angles], axis=-1)
+            z = diff[..., 1:2]
+
+            angles = fn(x,z)
+
+            exp_x = pc[..., 2:3]  # expected direction x
+            exp_z = pc[..., 3:4]  # expected direction z
+            exp_angles = fn(exp_x, exp_z)
+
+            ratio = fn(exp_angles, angles) - 1
+            rpbn = tf.concat([diff, norms, ratio], axis=-1)
 
             # relative point position encoding
             rppe = self.cat([pc] + [rpbn])
@@ -542,7 +556,7 @@ class AbstractNet(Model):
 
     # ----------------------------------------------------------------------
     def model(self):
-        pc = Input(shape=(None, 1 + self.K, self.dims), name="pc")
+        pc = Input(shape=(None, 1 + self.K, self.input_dims), name="pc")
         feats = Input(shape=(None, 1 + self.K, self.f_dims), name="feats")
         return Model(
             inputs=[pc, feats], outputs=self.call([pc, feats]), name=self.name

@@ -5,7 +5,17 @@ from copy import deepcopy
 
 EventTuple = namedtuple(
     "EventTuple",
-    ["E", "x", "z", "cluster_idx", "pndr_idx", "mc_idx", "slicerl_idx"],
+    [
+        "E",
+        "x",
+        "z",
+        "x_dir",
+        "z_dir",
+        "cluster_idx",
+        "pndr_idx",
+        "mc_idx",
+        "slicerl_idx",
+    ],
 )
 
 # ======================================================================
@@ -17,12 +27,14 @@ class Event:
         """
         Parameters
         ----------
-            - original_hits : np.array, shape=(7, num calohits), containing all the
+            - original_hits : np.array, shape=(8, num calohits), containing all the
                               event information. Each calohit is described by:
                               - energy [ADC/100]
                               - x coordinate [10^1 m]
                               - z coordinate [10^1 m]
-                              - input pfo list cluster idx
+                              - x expected direction
+                              - z expected direction
+                              - input cluster idx
                               - pandora slice index
                               - cheating slice idx (mc truth)
                               - slicing output (array of minus ones if not loading
@@ -32,6 +44,7 @@ class Event:
         """
         # order the calohits by x and store the idx permutation
         self.original_calohits = original_hits
+
         calohits = deepcopy(original_hits)
         idx = np.argsort(calohits[1])
         self.sorting_x_idx = np.repeat(
@@ -41,7 +54,7 @@ class Event:
 
         if min_hits > 1:
             filter_fn = (
-                lambda x: np.count_nonzero(calohits[5] == x[5]) > min_hits
+                lambda x: np.count_nonzero(calohits[7] == x[7]) > min_hits
             )
             calohits = np.stack(list(filter(filter_fn, list(calohits.T))), -1)
         self.calohits = calohits
@@ -56,43 +69,41 @@ class Event:
         ), f"found calohit z coordinate range: [{calohits[2].min()}, {calohits[2].max()}]"
 
         # build the mc slice size ordering
-        # TODO: mc_idx contains some -1, think about masking out those
-        # un-associated calohits and then make the ordering
-        self.mc_idx = calohits[5]
-        self.ordered_mc_idx = deepcopy(calohits[5])
-        sort_fn = lambda x: np.count_nonzero(calohits[5] == x)
+        self.mc_idx = calohits[7]
+        self.ordered_mc_idx = deepcopy(calohits[7])
+        sort_fn = lambda x: np.count_nonzero(calohits[7] == x)
         self.sorted_mc_idx = sorted(
-            list(set(calohits[5])), key=sort_fn, reverse=True
+            list(set(calohits[7])), key=sort_fn, reverse=True
         )
         for i, idx in enumerate(self.sorted_mc_idx):
-            self.ordered_mc_idx[calohits[5] == idx] = i
+            self.ordered_mc_idx[calohits[7] == idx] = i
 
         # build the pndr_slice ordering (useful for testing)
-        self.pndr_idx = calohits[4]
-        self.ordered_pndr_idx = deepcopy(calohits[4])
-        sort_fn = lambda x: np.count_nonzero(calohits[4] == x)
+        self.pndr_idx = calohits[6]
+        self.ordered_pndr_idx = deepcopy(calohits[6])
+        sort_fn = lambda x: np.count_nonzero(calohits[6] == x)
         self.sorted_pndr_idx = sorted(
-            list(set(calohits[4])), key=sort_fn, reverse=True
+            list(set(calohits[6])), key=sort_fn, reverse=True
         )
         for i, idx in enumerate(self.sorted_pndr_idx):
-            self.ordered_pndr_idx[calohits[4] == idx] = i
+            self.ordered_pndr_idx[calohits[6] == idx] = i
 
         # build pfo cluster list ordering
-        self.cluster_idx = calohits[3]
-        self.ordered_cluster_idx = deepcopy(calohits[3])
-        sort_fn = lambda x: np.count_nonzero(calohits[3] == x)
+        self.cluster_idx = calohits[5]
+        self.ordered_cluster_idx = deepcopy(calohits[5])
+        sort_fn = lambda x: np.count_nonzero(calohits[5] == x)
         self.sorted_cluster_idx = sorted(
-            list(set(calohits[3])), key=sort_fn, reverse=True
+            list(set(calohits[5])), key=sort_fn, reverse=True
         )
         for i, idx in enumerate(self.sorted_cluster_idx):
-            self.ordered_cluster_idx[calohits[3] == idx] = i
+            self.ordered_cluster_idx[calohits[5] == idx] = i
 
         # point cloud to be passed to the agent:
-        # (energy, x, z, pfo cluster idx)
+        # (energy, x, z, x_dir, z_dir, pfo cluster idx)
         self.point_cloud = np.concatenate(
-            [calohits[:3], [self.ordered_cluster_idx]]
+            [calohits[:5], [self.ordered_cluster_idx]]
         )
-        self.status = calohits[6]
+        self.status = calohits[8]
         self.num_calohits = len(self.status)
 
     # ----------------------------------------------------------------------
@@ -112,7 +123,7 @@ class Event:
 
         Returns
         -------
-            - array of shape=(max_hits, 4)
+            - array of shape=(max_hits, 6)
         """
         return self.point_cloud.T
 
@@ -152,7 +163,7 @@ class Event:
             - spatial coordinates x and z are converted in cm
         """
         # remove padding and restore natural measure units
-        array = deepcopy(self.original_calohits[:4])
+        array = deepcopy(self.original_calohits[:6])
         array[0] = array[0] * 100  # to ADC
         array[1] = array[1] * 1000  # to cm
         array[2] = array[2] * 1000  # to cm

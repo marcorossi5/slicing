@@ -192,7 +192,7 @@ def main():
         print("[+] Training best model:")
 
         generators = build_dataset_train(setup)
-        model = build_and_train_model(setup, generators)
+        build_and_train_model(setup, generators)
         print(f"[+] done in {tm()-start} s")
 
         # save the final runcard
@@ -219,7 +219,7 @@ def main():
     from slicerl.build_model import inference
 
     test_generator = build_dataset_test(setup)
-    model = inference(setup, test_generator, show_graph=args.show_graph)
+    inference(setup, test_generator, show_graph=args.show_graph)
 
 
 if __name__ == "__main__":

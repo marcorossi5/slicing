@@ -61,7 +61,9 @@ class EventDataset(tf.keras.utils.Sequence):
         self.knn_idxs = []
         for (pc, feats), targets in zip(self.inputs, self.targets):
             # select knn neighbours
-            knn_idx = knn.knn_batch(pc, pc, K=1 + self.K, omp=True)
+            knn_idx = knn.knn_batch(
+                pc[..., :2], pc[..., :2], K=1 + self.K, omp=True
+            )
             self.knn_idxs.append(knn_idx)
             pc = LocSE.gather_neighbours(pc, knn_idx).numpy()
             feats = LocSE.gather_neighbours(feats, knn_idx).numpy()
@@ -97,7 +99,7 @@ class EventDataset(tf.keras.utils.Sequence):
             - np.array, KNN indices of shape=(N,K)
         """
         pc = self.inputs[index][0][0]
-        return knn.knn_batch(pc, pc, K=K, omp=True)
+        return knn.knn_batch(pc[..., :2], pc[..., :2], K=K, omp=True)
 
     # ----------------------------------------------------------------------
     def get_feats(self, index):
@@ -295,8 +297,8 @@ def build_dataset(
     targets = []
     for event in events:
         state = event.state()
-        pc = state[:, 1:3]
-        feats = state[:, ::3]
+        pc = state[:, 1:5]
+        feats = state[:, ::5]
         m = event.ordered_mc_idx
         if augment:
             pc, feats, target = transform(pc, feats, m)
@@ -386,7 +388,7 @@ def dummy_dataset(nb_classes, K):
     """ Return a dummy dataset to build the model first when loading. """
     B = 1
     N = 256
-    inputs = [np.random.rand(B, N, 2), np.random.rand(B, N, 2)]
+    inputs = [np.random.rand(B, N, 4), np.random.rand(B, N, 2)]
     targets = np.random.rand(B, N, nb_classes)
     data = (None, [[inputs], [targets]])
     return EventDataset(data, K)
