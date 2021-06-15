@@ -107,7 +107,8 @@ class LocSE(Layer):
 
         """
         self.ch_dims = (
-            self.dims * 2 + 2 + 2
+            # self.dims * 2 + 2 + 2
+            2
         )  # point + relative space dims + norm + angles + directions
 
         self.pc_enc = [
@@ -123,18 +124,18 @@ class LocSE(Layer):
             for i in range(1, self.nb_layers + 1)
         ]
 
-        self.rel_pos_enc = [
-            Conv1D(
-                self.units,
-                3,
-                padding="same",
-                input_shape=(1 + self.K, self.dims),
-                activation=self.activation,
-                use_bias=self.use_bias,
-                name=f"rel_pos_enc{i}",
-            )
-            for i in range(1, self.nb_layers + 1)
-        ]
+        # self.rel_pos_enc = [
+        #     Conv1D(
+        #         self.units,
+        #         3,
+        #         padding="same",
+        #         input_shape=(1 + self.K, self.dims),
+        #         activation=self.activation,
+        #         use_bias=self.use_bias,
+        #         name=f"rel_pos_enc{i}",
+        #     )
+        #     for i in range(1, self.nb_layers + 1)
+        # ]
 
         self.angles_enc = [
             Conv1D(
@@ -166,7 +167,7 @@ class LocSE(Layer):
             self.units,
             1,
             padding="same",
-            input_shape=(1 + self.K, 1),
+            input_shape=(1 + self.K, self.ch_dims),
             activation=self.activation,
             use_bias=self.use_bias,
             name=f"MLP",
@@ -212,10 +213,12 @@ class LocSE(Layer):
             exp_angles = fn(exp_x, exp_z)
 
             ratio = fn(exp_angles, angles) - 1
-            rpbn = tf.concat([diff, norms, ratio], axis=-1)
+            # rpbn = tf.concat([diff, norms, ratio], axis=-1)
+            rpbn = tf.concat([norms, ratio], axis=-1)
 
             # relative point position encoding
-            rppe = self.cat([pc] + [rpbn])
+            # rppe = self.cat([pc] + [rpbn])
+            rppe = rpbn
 
             # save cache
             self._cache = rppe
@@ -227,17 +230,21 @@ class LocSE(Layer):
         # network has different weights
         rppe = tf.ensure_shape(rppe, [None, None, 1 + self.K, self.ch_dims])
 
-        pos = rppe[..., :2]
-        rel_pos = rppe[..., 2:4]
-        angles = rppe[..., 4:5]
-        norms = rppe[..., 5:]
+        # pos = rppe[..., :2]
+        # rel_pos = rppe[..., 2:4]
+        # norms = rppe[..., 4:5]
+        # angles = rppe[..., 5:]
 
-        pos = encode(pos, self.pc_enc, loop=self.enc_with_loop)
-        rel_pos = encode(rel_pos, self.rel_pos_enc, loop=self.enc_with_loop)
-        angles = encode(angles, self.angles_enc, loop=self.enc_with_loop)
+        norms = rppe[..., :1]
+        angles = rppe[..., 1:2]
+
+        # pos = encode(pos, self.pc_enc, loop=self.enc_with_loop)
+        # rel_pos = encode(rel_pos, self.rel_pos_enc, loop=self.enc_with_loop)
         norms = encode(norms, self.norms_enc, loop=self.enc_with_loop)
+        angles = encode(angles, self.angles_enc, loop=self.enc_with_loop)
 
-        r = self.MLP(self.cat([pos, rel_pos, angles, norms]))
+        # r = self.MLP(self.cat([pos, rel_pos, norms, angles]))
+        r = self.MLP(self.cat([norms, angles]))
 
         return self.cat([r, feats])
 
