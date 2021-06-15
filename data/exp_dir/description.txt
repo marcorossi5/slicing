@@ -1,0 +1,15 @@
+Cosmic rays + proton beam sample.
+This dataset contains 10 events per beam energy.
+Beam energies available are: 0.3, 0.5, 1, 2, 3, 6, 7 GeV
+
+Each event has 3 readout planes: U,V,W
+Each readout plane is described by 8 rows:
+    - energy
+    - x position
+    - z position
+    - x expected direction
+    - z expected direction
+    - cluster idx
+    - pandora slicer idx
+    - mc slice idx
+Each line with space separated values, one for each recorded calohit.
