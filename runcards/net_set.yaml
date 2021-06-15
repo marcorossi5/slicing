@@ -12,21 +12,21 @@ model:
   threshold: 0.9
 test:
   fn: data/exp_dir/new_set_03GeV.csv.gz
-  nev: 1
-  min_hits: 300
+  nev: -1
+  min_hits: 200
 train:
   fn:
     - data/exp_dir/new_set_05GeV.csv.gz
-    # - data/exp_dir/test_data_1GeV.csv.gz
-    # - data/exp_dir/test_data_2GeV.csv.gz
-    # - data/exp_dir/test_data_3GeV.csv.gz
-    # - data/exp_dir/test_data_6GeV.csv.gz
-    # - data/exp_dir/test_data_7GeV.csv.gz
-  nev: 2
-  min_hits: 300
-  hist_freq: 1
+    - data/exp_dir/new_set_1GeV.csv.gz
+    - data/exp_dir/new_set_2GeV.csv.gz
+    - data/exp_dir/new_set_3GeV.csv.gz
+    - data/exp_dir/new_set_6GeV.csv.gz
+    - data/exp_dir/new_set_7GeV.csv.gz
+  nev: -1
+  min_hits: 200
+  hist_freq: 5
   loss: xent # xent | hinge
-  epochs: 50
+  epochs: 100
   lr: 0.005
   min_lr: 0.00001
   patience: 5
