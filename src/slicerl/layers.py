@@ -107,8 +107,7 @@ class LocSE(Layer):
 
         """
         self.ch_dims = (
-            # self.dims * 2 + 2 + 2
-            2
+            self.dims * 2 + 2 + 2
         )  # point + relative space dims + norm + angles + directions
 
         self.pc_enc = [
@@ -124,18 +123,18 @@ class LocSE(Layer):
             for i in range(1, self.nb_layers + 1)
         ]
 
-        # self.rel_pos_enc = [
-        #     Conv1D(
-        #         self.units,
-        #         3,
-        #         padding="same",
-        #         input_shape=(1 + self.K, self.dims),
-        #         activation=self.activation,
-        #         use_bias=self.use_bias,
-        #         name=f"rel_pos_enc{i}",
-        #     )
-        #     for i in range(1, self.nb_layers + 1)
-        # ]
+        self.rel_pos_enc = [
+            Conv1D(
+                self.units,
+                3,
+                padding="same",
+                input_shape=(1 + self.K, self.dims),
+                activation=self.activation,
+                use_bias=self.use_bias,
+                name=f"rel_pos_enc{i}",
+            )
+            for i in range(1, self.nb_layers + 1)
+        ]
 
         self.angles_enc = [
             Conv1D(
@@ -225,12 +224,10 @@ class LocSE(Layer):
 
             angles = 1 - tfmath.abs(num / den) # angle cosine
 
-            # rpbn = tf.concat([diff, norms, ratio], axis=-1)
-            rpbn = tf.concat([norms, angles], axis=-1)
+            rpbn = tf.concat([diff, norms, angles], axis=-1)
 
             # relative point position encoding
-            # rppe = self.cat([pc] + [rpbn])
-            rppe = rpbn
+            rppe = self.cat([pc] + [rpbn])
 
             # save cache
             self._cache = rppe
@@ -242,16 +239,13 @@ class LocSE(Layer):
         # network has different weights
         rppe = tf.ensure_shape(rppe, [None, None, 1 + self.K, self.ch_dims])
 
-        # pos = rppe[..., :2]
-        # rel_pos = rppe[..., 2:4]
-        # norms = rppe[..., 4:5]
-        # angles = rppe[..., 5:]
+        pos = rppe[..., :2]
+        rel_pos = rppe[..., 2:4]
+        norms = rppe[..., 4:5]
+        angles = rppe[..., 5:]
 
-        norms = rppe[..., :1]
-        angles = rppe[..., 1:2]
-
-        # pos = encode(pos, self.pc_enc, loop=self.enc_with_loop)
-        # rel_pos = encode(rel_pos, self.rel_pos_enc, loop=self.enc_with_loop)
+        pos = encode(pos, self.pc_enc, loop=self.enc_with_loop)
+        rel_pos = encode(rel_pos, self.rel_pos_enc, loop=self.enc_with_loop)
         norms = encode(norms, self.norms_enc, loop=self.enc_with_loop)
         angles = encode(angles, self.angles_enc, loop=self.enc_with_loop)
 
