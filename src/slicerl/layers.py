@@ -195,7 +195,7 @@ class LocSE(Layer):
         else:
             # relative positions between neighbours
             current = pc[:, :, :1]
-            # diff = current[..., :2] - pc[..., :2]
+            diff = current[..., :2] - pc[..., :2]
             norms = tf.norm(
                 pc[..., :2],
                 ord="euclidean",
@@ -204,8 +204,24 @@ class LocSE(Layer):
                 name="norm",
             )
 
-            num = tf.reduce_sum(pc[...,2:4] * current[...,2:4], axis=-1, keepdims=True)
-            den = norms * norms[:,:,:1] + EPS_TF
+            diff_norm = tf.norm(
+                diff,
+                ord="euclidean",
+                axis=-1,
+                keepdims=True,
+                name="norm",
+            )
+
+            current_norm = tf.norm(
+                current,
+                ord="euclidean",
+                axis=-1,
+                keepdims=True,
+                name="norm",
+            )
+
+            num = tf.reduce_sum(diff * current[...,2:4], axis=-1, keepdims=True)
+            den = diff_norm * current_norm + EPS_TF
 
             angles = 1 - tfmath.abs(num / den) # angle cosine
 
