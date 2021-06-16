@@ -41,7 +41,7 @@ class SeacNet(AbstractNet):
         self.use_bias = use_bias
 
         # store some useful parameters
-        ds = [2, 5, 7, 5, 3, 1]
+        ds = [2, 5, 7, 10, 15, 1]
         self.seacs = [
             SEAC(
                 dh=dh,

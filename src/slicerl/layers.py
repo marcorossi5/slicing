@@ -195,7 +195,7 @@ class LocSE(Layer):
         else:
             # relative positions between neighbours
             current = pc[:, :, :1]
-            diff = current[..., :2] - pc[..., :2]
+            # diff = current[..., :2] - pc[..., :2]
             norms = tf.norm(
                 pc[..., :2],
                 ord="euclidean",
@@ -203,18 +203,14 @@ class LocSE(Layer):
                 keepdims=True,
                 name="norm",
             )
-            x = diff[..., :1]
-            z = diff[..., 1:2]
 
-            angles = fn(x,z)
+            num = tf.reduce_sum(pc[...,2:4] * current[...,2:4], axis=-1, keepdims=True)
+            den = norms * norms[:,:,:1] + EPS_TF
 
-            exp_x = pc[..., 2:3]  # expected direction x
-            exp_z = pc[..., 3:4]  # expected direction z
-            exp_angles = fn(exp_x, exp_z)
+            angles = 1 - tfmath.abs(num / den) # angle cosine
 
-            ratio = fn(exp_angles, angles) - 1
             # rpbn = tf.concat([diff, norms, ratio], axis=-1)
-            rpbn = tf.concat([norms, ratio], axis=-1)
+            rpbn = tf.concat([norms, angles], axis=-1)
 
             # relative point position encoding
             # rppe = self.cat([pc] + [rpbn])
@@ -589,13 +585,23 @@ class AbstractNet(Model):
         preds = []
         all_slices = []
         for inp, knn_idx in zip(inputs, knn_idxs):
-            # predict hits connections
-            pred = self.predict_on_batch(inp)
+            N = inp[0].shape[1]
 
-            preds.append(pred[0])
+            # predict hits connections
+            pred = self.predict_on_batch(inp)[0]
+
+            # stronger prediction if both directed edges are positive
+            adj = np.full([N,N], 2.)
+            rows = np.repeat( np.expand_dims(np.arange(N), 1), pred.shape[1], axis=1)
+            adj[rows,knn_idx[0]] = pred
+            adj[adj==2.] = adj.T[adj==2.]
+            adj = (adj + adj.T) / 2
+            pred = np.take_along_axis(adj, knn_idx[0], axis=1)
+
+            preds.append(pred)
             graph = [
                 set(node[p > threshold])
-                for node, p in zip(knn_idx[0], pred[0])
+                for node, p in zip(knn_idx[0], pred)
             ]
             graphs.append(graph)
 
@@ -609,7 +615,6 @@ class AbstractNet(Model):
                 bfs(slice, visited, node, graph)
                 slices.append(slice)
 
-            N = inp[0].shape[1]
             sorted_slices = sorted(slices, key=len, reverse=True)
             all_slices.append(sorted_slices)
             state = np.zeros(N)

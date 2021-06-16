@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-EPS = np.finfo(np.float64).eps
+EPS = np.finfo(np.float32).eps
 
 TF_DTYPE_INT = tf.int32
 TF_DTYPE = tf.float32
