@@ -41,7 +41,7 @@ class SeacNet(AbstractNet):
         self.use_bias = use_bias
 
         # store some useful parameters
-        ds = [2, 5, 7, 10, 15, 1]
+        ds = [self.f_dims, 5, 7, 10, 15, 1]
         self.seacs = [
             SEAC(
                 dh=dh,
@@ -50,6 +50,7 @@ class SeacNet(AbstractNet):
                 locse_nb_layers=self.locse_nb_layers,
                 activation=self.activation,
                 use_bias=self.use_bias,
+                f_dims=self.f_dims,
                 name=f"seac{i+1}",
             )
             for i, (dh, do) in enumerate(zip(ds[1:-1], ds[2:]))
@@ -64,6 +65,7 @@ class SeacNet(AbstractNet):
                 use_cache=False,
                 use_bias=self.use_bias,
                 activation=self.activation,
+                f_dims=self.f_dims,
                 name="seac0",
             ),
         )

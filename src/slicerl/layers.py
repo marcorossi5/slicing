@@ -249,8 +249,7 @@ class LocSE(Layer):
         norms = encode(norms, self.norms_enc, loop=self.enc_with_loop)
         angles = encode(angles, self.angles_enc, loop=self.enc_with_loop)
 
-        # r = self.MLP(self.cat([pos, rel_pos, norms, angles]))
-        r = self.MLP(self.cat([norms, angles]))
+        r = self.MLP(self.cat([pos, rel_pos, norms, angles]))
 
         return self.cat([r, feats])
 

@@ -67,6 +67,10 @@ class EventDataset(tf.keras.utils.Sequence):
             self.knn_idxs.append(knn_idx)
             pc = LocSE.gather_neighbours(pc, knn_idx).numpy()
             feats = LocSE.gather_neighbours(feats, knn_idx).numpy()
+            
+            # generate edges based on "same cluster" property
+            feats = (feats[...,:1,1:] == feats[...,1:]).astype(NP_DTYPE)
+            
             prep_inputs.append([pc, feats])
 
             # produce targets

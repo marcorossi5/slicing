@@ -77,7 +77,7 @@ class Event:
         )
         for i, idx in enumerate(self.sorted_mc_idx):
             self.ordered_mc_idx[calohits[7] == idx] = i
-
+        
         # build the pndr_slice ordering (useful for testing)
         self.pndr_idx = calohits[6]
         self.ordered_pndr_idx = deepcopy(calohits[6])
@@ -88,7 +88,7 @@ class Event:
         for i, idx in enumerate(self.sorted_pndr_idx):
             self.ordered_pndr_idx[calohits[6] == idx] = i
 
-        # build pfo cluster list ordering
+        # build cluster list ordering
         self.cluster_idx = calohits[5]
         self.ordered_cluster_idx = deepcopy(calohits[5])
         sort_fn = lambda x: np.count_nonzero(calohits[5] == x)
