@@ -100,4 +100,6 @@ class SeacNet(AbstractNet):
             seac.locse.cache = cache
             edges = seac([pc, edges])
 
-        return self.final_conv(self.reshape(edges))
+        edges = self.reshape(edges + feats)
+
+        return self.final_conv(edges)

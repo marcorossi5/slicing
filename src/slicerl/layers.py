@@ -219,10 +219,12 @@ class LocSE(Layer):
                 name="norm",
             )
 
-            num = tf.reduce_sum(diff * current[...,2:4], axis=-1, keepdims=True)
+            num = tf.reduce_sum(
+                diff * current[..., 2:4], axis=-1, keepdims=True
+            )
             den = diff_norm * current_norm + EPS_TF
 
-            angles = 1 - tfmath.abs(num / den) # angle cosine
+            angles = 1 - tfmath.abs(num / den)  # angle cosine
 
             rpbn = tf.concat([diff, norms, angles], axis=-1)
 
@@ -563,7 +565,8 @@ class Predictions:
 
 # ======================================================================
 class AbstractNet(Model):
-    def __init__(self, name, **kwargs):
+    def __init__(self, name, K_test, **kwargs):
+        self.K_test = K_test
         super(AbstractNet, self).__init__(name=name, **kwargs)
 
     # ----------------------------------------------------------------------
@@ -595,22 +598,28 @@ class AbstractNet(Model):
         all_slices = []
         for inp, knn_idx in zip(inputs, knn_idxs):
             N = inp[0].shape[1]
+            knn_idx = knn_idx[..., :self.K_test]
 
             # predict hits connections
             pred = self.predict_on_batch(inp)[0]
 
             # stronger prediction if both directed edges are positive
-            adj = np.full([N,N], 2.)
-            rows = np.repeat( np.expand_dims(np.arange(N), 1), pred.shape[1], axis=1)
-            adj[rows,knn_idx[0]] = pred
-            adj[adj==2.] = adj.T[adj==2.]
+            adj = np.full([N, N], 2.0)
+            rows = np.repeat(
+                np.expand_dims(np.arange(N), 1), self.K_test, axis=1
+            )
+            adj[rows, knn_idx[0]] = pred[..., :self.K_test]
+            adj[adj == 2.0] = adj.T[adj == 2.0]
             adj = (adj + adj.T) / 2
             pred = np.take_along_axis(adj, knn_idx[0], axis=1)
 
             preds.append(pred)
+            # knn_idx = knn_idx[..., :self.K_test]
+
             graph = [
                 set(node[p > threshold])
                 for node, p in zip(knn_idx[0], pred)
+                # for node, p in zip(knn_idx[0], pred[..., :self.K_test])
             ]
             graphs.append(graph)
 

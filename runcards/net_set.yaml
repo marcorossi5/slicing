@@ -14,6 +14,7 @@ test:
   fn: data/exp_dir/new_set_03GeV.csv.gz
   nev: -1
   min_hits: 200
+  K_test: 48
 train:
   fn:
     - data/exp_dir/new_set_05GeV.csv.gz

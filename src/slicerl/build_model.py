@@ -44,7 +44,8 @@ def load_network(setup, checkpoint_filepath=None):
         "K": setup["model"]["K"],
         "locse_nb_layers": setup["model"]["locse_nb_layers"],
         "use_bias": setup["model"]["use_bias"],
-        "f_dims": 1
+        "f_dims": 1,
+        "K_test": setup["test"]["K_test"]
     }
     net = SeacNet(name="SEAC-Net", **net_dict)
 
@@ -259,7 +260,8 @@ def inference(setup, test_generator, show_graph=False):
         )
 
     # plot histogram of the network decisions
-    hist_true = [trg.flatten() for trg in test_generator.prep_targets]
+    K_test = setup["test"]["K_test"]
+    hist_true = [trg[...,:K_test].flatten() for trg in test_generator.prep_targets]
     hist_pred = [pred.flatten() for pred in y_pred.preds]
     plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
 
