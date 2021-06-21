@@ -170,7 +170,7 @@ def build_and_train_model(setup, generators):
             verbose=1,
         ),
         ReduceLROnPlateau(
-            monitor="val_acc",
+            monitor="val_prec",
             factor=0.5,
             mode="max",
             verbose=1,
