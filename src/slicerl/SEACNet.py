@@ -4,6 +4,7 @@ from slicerl.layers import AbstractNet, SEAC
 import tensorflow as tf
 from tensorflow.keras.layers import Conv1D, Reshape
 from tensorflow.keras.constraints import MaxNorm
+from tensorflow.keras.activations import sigmoid
 
 # ======================================================================
 class SeacNet(AbstractNet):
@@ -74,7 +75,7 @@ class SeacNet(AbstractNet):
             1,
             input_shape=(None, 1 + self.K),
             kernel_constraint=MaxNorm(axis=[0, 1]),
-            activation="sigmoid",
+            activation='linear',
             use_bias=self.use_bias,
             name=f"final_conv",
         )
@@ -102,4 +103,6 @@ class SeacNet(AbstractNet):
 
         edges = self.reshape(edges + feats)
 
-        return self.final_conv(edges)
+        edges = self.final_conv(edges) + self.reshape(feats)
+
+        return sigmoid(edges)
