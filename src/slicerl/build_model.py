@@ -45,7 +45,7 @@ def load_network(setup, checkpoint_filepath=None):
         "locse_nb_layers": setup["model"]["locse_nb_layers"],
         "use_bias": setup["model"]["use_bias"],
         "f_dims": 1,
-        "K_test": setup["test"]["K_test"]
+        "K_test": setup["test"]["K_test"],
     }
     net = SeacNet(name="SEAC-Net", **net_dict)
 
@@ -85,14 +85,45 @@ def load_network(setup, checkpoint_filepath=None):
         show_shapes=True,
     )
 
+    # dummy forward pass
+    dummy_generator = dummy_dataset(
+        setup["model"]["nb_classes"], setup["model"]["K"]
+    )
+    net.evaluate(dummy_generator, verbose=0)
+
     if checkpoint_filepath:
         print(f"[+] Loading weights at {checkpoint_filepath}")
-        dummy_generator = dummy_dataset(
-            setup["model"]["nb_classes"], setup["model"]["K"]
-        )
-        net.evaluate(dummy_generator, verbose=0)
         net.load_weights(checkpoint_filepath)
 
+    return net
+
+
+# ======================================================================
+def trace(net, generator):
+    """
+    Network first training epoch could last proportionally to the dataset size.
+    Build the network graph trace to speed up the incoming real computation with
+    a dummy backward pass.
+
+    Parameters
+    ----------
+        - net: AbstractNet, network to trace
+        - generator: EventDataset, iterable dataset to train
+
+    Returns
+    -------
+        - AbstractNet, traced network
+    """
+    print("[+] Ahead of time tracing ...")
+    # reduce generator to minimum
+    generator = deepcopy(generator)
+    generator.__len__ = 1
+    net.fit(
+        generator,
+        epochs=1,
+        verbose=0,
+    )
+    print("[+] Network traced ...")
     return net
 
 
@@ -122,34 +153,6 @@ def build_and_train_model(setup, generators):
         )
 
     train_generator, val_generator = generators
-
-    # import matplotlib.pyplot as plt
-    # import numpy as np
-    # from slicerl.config import EPS
-    # pc = train_generator[0][0][0][0] # (N,K,4)
-    # plt.scatter(pc[...,0,0], pc[...,0,1], s=0.5)
-    # x = np.stack([pc[...,0,0], pc[...,0,0]+2e-1*pc[...,0,2]], axis=0)
-    # y = np.stack([pc[...,0,1], pc[...,0,1]+2e-1*pc[...,0,3]], axis=0)
-    # plt.plot(x,y, color='grey', lw=0.5)
-    # x = np.stack([pc[...,0,0], pc[...,0,0]+5e-4*pc[...,1,0]], axis=0)
-    # y = np.stack([pc[...,0,1], pc[...,0,1]+5e-4*pc[...,1,1]], axis=0)
-    # plt.plot(x,y, color='green', lw=0.5)
-    # plt.show()
-    # exit()
-    # current = pc[:,:1]
-    # diff = current[..., :2] - pc[..., :2]
-    # diff_norm = np.sqrt((diff * diff).sum(-1))
-    # current_norm = np.sqrt((current * current).sum(-1))
-    # num = (diff * current[...,2:4]).sum(-1)
-    # den = diff_norm * current_norm + EPS
-    # angles = 1 - np.abs(num / den)
-    # h, bins = np.histogram(angles, bins=int(np.sqrt(angles.size)))
-    # plt.hist(bins[:-1], bins, weights=h, histtype='step')
-    # plt.show()
-    # exit()
-    # plt.scatter(pc[:,0,0], pc[:,0,1], s=0.5)
-    # plt.show()
-    # exit()
 
     initial_weights = setup["train"]["initial_weights"]
     if initial_weights and os.path.isfile(initial_weights):
@@ -197,6 +200,8 @@ def build_and_train_model(setup, generators):
         )
 
     callbacks.append(tboard)
+
+    net = trace(net, train_generator)
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(
@@ -261,7 +266,9 @@ def inference(setup, test_generator, show_graph=False):
 
     # plot histogram of the network decisions
     K_test = setup["test"]["K_test"]
-    hist_true = [trg[...,:K_test].flatten() for trg in test_generator.prep_targets]
+    hist_true = [
+        trg[..., :K_test].flatten() for trg in test_generator.prep_targets
+    ]
     hist_pred = [pred.flatten() for pred in y_pred.preds]
     plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
 
