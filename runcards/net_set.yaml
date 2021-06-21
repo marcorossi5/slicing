@@ -9,7 +9,7 @@ model:
   K: 64
   locse_nb_layers: 3
   use_bias: true
-  threshold: 0.9
+  threshold: 0.95
 test:
   fn: data/exp_dir/new_set_03GeV.csv.gz
   nev: -1
@@ -25,12 +25,12 @@ train:
     - data/exp_dir/new_set_7GeV.csv.gz
   nev: -1
   min_hits: 200
-  hist_freq: 5
+  hist_freq: 10
   loss: xent # xent | hinge
   epochs: 100
   lr: 0.005
   min_lr: 0.00001
-  patience: 5
+  patience: 15
   optimizer: Adam
   initial_weights: null
 scan: false
