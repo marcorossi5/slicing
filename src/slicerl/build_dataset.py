@@ -3,6 +3,7 @@ from slicerl.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 from slicerl.tools import onehot, onehot_to_indices
 from slicerl.layers import LocSE
+from slicerl.elliptic_topK import EllipticTopK
 
 import tensorflow as tf
 import numpy as np
@@ -31,7 +32,11 @@ class EventDataset(tf.keras.utils.Sequence):
             self.targets
         ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
 
-        self.preprocess()
+        self.use_elliptic_knn = True
+        if self.use_elliptic_knn:
+            self.elliptic_topK = EllipticTopK(0.1, 0.01, 1 + self.K, batched=True)
+
+        self.preprocess(use_elliptic_knn=self.use_elliptic_knn)
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -48,7 +53,7 @@ class EventDataset(tf.keras.utils.Sequence):
         return len(self.prep_inputs)
 
     # ----------------------------------------------------------------------
-    def preprocess(self):
+    def preprocess(self, use_elliptic_knn=True):
         """
         Preprocess dataset for SEAC-Net.
 
@@ -61,12 +66,26 @@ class EventDataset(tf.keras.utils.Sequence):
         self.knn_idxs = []
         for (pc, feats), targets in zip(self.inputs, self.targets):
             # select knn neighbours
-            knn_idx = knn.knn_batch(
-                pc[..., :2], pc[..., :2], K=1 + self.K, omp=True
-            )
+            if use_elliptic_knn:
+                knn_idx = self.elliptic_topK(pc, pc)
+            else:
+                knn_idx = knn.knn_batch(
+                    pc[..., :2], pc[..., :2], K=1 + self.K, omp=True
+                )
             self.knn_idxs.append(knn_idx)
             pc = LocSE.gather_neighbours(pc, knn_idx).numpy()
             feats = LocSE.gather_neighbours(feats, knn_idx).numpy()
+
+            import matplotlib.pyplot as plt
+            N = knn_idx.shape[1]
+            # plt.step(range(N), knn_idx[0,:,0])
+            # plt.show()
+            # exit()
+            # plt.scatter(pc[0,:,0,0], pc[0,:,0,1], s=0.5, c='blue')
+            # plt.scatter(pc[0,3500,:,0], pc[0,3500,:,1], s=0.5, color='red')
+            # plt.scatter(pc[0,3500,0,0], pc[0,3500,0,1], s=0.5, color='green')
+            # plt.show()
+            # exit()
             
             # generate edges based on "same cluster" property
             feats = (feats[...,:1,1:] == feats[...,1:]).astype(NP_DTYPE)
@@ -103,6 +122,8 @@ class EventDataset(tf.keras.utils.Sequence):
             - np.array, KNN indices of shape=(N,K)
         """
         pc = self.inputs[index][0][0]
+        if self.use_elliptic_knn:
+            return self.elliptic_topK(pc, pc)
         return knn.knn_batch(pc[..., :2], pc[..., :2], K=K, omp=True)
 
     # ----------------------------------------------------------------------
