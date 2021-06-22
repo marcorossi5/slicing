@@ -76,8 +76,8 @@ class EventDataset(tf.keras.utils.Sequence):
             pc = LocSE.gather_neighbours(pc, knn_idx).numpy()
             feats = LocSE.gather_neighbours(feats, knn_idx).numpy()
 
-            import matplotlib.pyplot as plt
-            N = knn_idx.shape[1]
+            # import matplotlib.pyplot as plt
+            # N = knn_idx.shape[1]
             # plt.step(range(N), knn_idx[0,:,0])
             # plt.show()
             # exit()
