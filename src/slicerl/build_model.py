@@ -181,7 +181,7 @@ def build_and_train_model(setup, generators):
             min_lr=setup["train"]["min_lr"],
         ),
         EarlyStopping(
-            monitor='val_acc',
+            monitor='val_prec',
             min_delta=0.001,
             mode='max',
             patience=25,
