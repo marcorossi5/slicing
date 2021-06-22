@@ -34,7 +34,9 @@ class EventDataset(tf.keras.utils.Sequence):
 
         self.use_elliptic_knn = True
         if self.use_elliptic_knn:
-            self.elliptic_topK = EllipticTopK(0.1, 0.01, 1 + self.K, batched=True)
+            self.elliptic_topK = EllipticTopK(
+                0.1, 0.01, 1 + self.K, batched=True
+            )
 
         self.preprocess(use_elliptic_knn=self.use_elliptic_knn)
 
@@ -67,7 +69,7 @@ class EventDataset(tf.keras.utils.Sequence):
         for (pc, feats), targets in zip(self.inputs, self.targets):
             # select knn neighbours
             if use_elliptic_knn:
-                knn_idx = self.elliptic_topK(pc, pc)
+                knn_idx = self.elliptic_topK(pc, pc).numpy()
             else:
                 knn_idx = knn.knn_batch(
                     pc[..., :2], pc[..., :2], K=1 + self.K, omp=True
@@ -86,10 +88,10 @@ class EventDataset(tf.keras.utils.Sequence):
             # plt.scatter(pc[0,3500,0,0], pc[0,3500,0,1], s=0.5, color='green')
             # plt.show()
             # exit()
-            
+
             # generate edges based on "same cluster" property
-            feats = (feats[...,:1,1:] == feats[...,1:]).astype(NP_DTYPE)
-            
+            feats = (feats[..., :1, 1:] == feats[..., 1:]).astype(NP_DTYPE)
+
             prep_inputs.append([pc, feats])
 
             # produce targets
@@ -123,7 +125,7 @@ class EventDataset(tf.keras.utils.Sequence):
         """
         pc = self.inputs[index][0][0]
         if self.use_elliptic_knn:
-            return self.elliptic_topK(pc, pc)
+            return self.elliptic_topK(pc, pc).numpy()
         return knn.knn_batch(pc[..., :2], pc[..., :2], K=K, omp=True)
 
     # ----------------------------------------------------------------------

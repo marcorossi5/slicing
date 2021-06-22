@@ -180,13 +180,13 @@ def build_and_train_model(setup, generators):
             patience=setup["train"]["patience"],
             min_lr=setup["train"]["min_lr"],
         ),
-        # EarlyStopping(
-        #     monitor='val_acc',
-        #     min_delta=0.001,
-        #     mode='max',
-        #     patience=15,
-        #     restore_best_weights=True
-        # )
+        EarlyStopping(
+            monitor='val_acc',
+            min_delta=0.001,
+            mode='max',
+            patience=25,
+            restore_best_weights=True
+        )
     ]
     if setup["scan"]:
         tboard = TensorBoard(log_dir=logdir, profile_batch=0)
