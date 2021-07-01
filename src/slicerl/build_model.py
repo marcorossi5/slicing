@@ -203,6 +203,20 @@ def build_and_train_model(setup, generators):
 
     net = trace(net, train_generator)
 
+    # warmup
+    original_lr = net.optimizer.learning_rate
+    tfK.set_value(net.optimizer.learning_rate, original_lr*50)
+    print(f"[+] Warmup 2 epochs ...")
+    r = net.fit(
+        train_generator,
+        epochs=2,
+        validation_data=val_generator,
+        callbacks=callbacks,
+        verbose=2,
+    )
+    tfK.set_value(net.optimizer.learning_rate, original_lr)
+
+
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(
         train_generator,
