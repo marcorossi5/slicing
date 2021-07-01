@@ -1,5 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.config import EPS, float_me
+from slicerl.config import EPS_TF, float_me
 
 import numpy as np
 import tensorflow as tf
@@ -11,17 +11,16 @@ from tensorflow.keras.losses import (
     Reduction,
 )
 
-eps = float_me(EPS)
 
 # ======================================================================
 def dice_loss(y_true, y_pred):
     """ Implementation of Dice loss. """
     iy_true = 1 - y_true
     iy_pred = 1 - y_pred
-    num1 = tf.math.reduce_sum((y_true * y_pred), -1) + eps
-    den1 = tf.math.reduce_sum(y_true * y_true + y_pred * y_pred, -1) + eps
-    num2 = tf.math.reduce_sum(iy_true * iy_pred, -1) + eps
-    den2 = tf.math.reduce_sum(iy_true * iy_true + iy_pred * iy_pred, -1) + eps
+    num1 = tf.math.reduce_sum((y_true * y_pred), -1) + EPS_TF
+    den1 = tf.math.reduce_sum(y_true * y_true + y_pred * y_pred, -1) + EPS_TF
+    num2 = tf.math.reduce_sum(iy_true * iy_pred, -1) + EPS_TF
+    den2 = tf.math.reduce_sum(iy_true * iy_true + iy_pred * iy_pred, -1) + EPS_TF
     return 1 - tf.math.reduce_mean(num1 / den1 + num2 / den2)
 
 
