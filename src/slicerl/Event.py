@@ -54,7 +54,7 @@ class Event:
 
         if min_hits > 1:
             filter_fn = (
-                lambda x: np.count_nonzero(calohits[7] == x[7]) > min_hits
+                lambda x: np.count_nonzero(calohits[5] == x[5]) > min_hits
             )
             calohits = np.stack(list(filter(filter_fn, list(calohits.T))), -1)
         self.calohits = calohits
