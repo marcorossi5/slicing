@@ -85,7 +85,7 @@ def load_network(setup, checkpoint_filepath=None):
     )
 
     # dummy forward pass
-    dummy_generator = dummy_dataset(f_dims)
+    dummy_generator = dummy_dataset(setup["model"]["f_dims"])
     net.evaluate(dummy_generator, verbose=0)
 
     if checkpoint_filepath:

@@ -200,7 +200,7 @@ def plot_multiplicity(events, output_folder="./"):
     plt.xlabel("multiplicity", loc="right")
     plt.xlim((bins[0], bins[-1]))
     plt.legend()
-    fname = f"{output_folder}/multiplicity.pdf"
+    fname = f"{output_folder}/multiplicity.png"
     print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
@@ -266,7 +266,7 @@ def plot_slice_size(events, output_folder="./"):
 
     ax.legend()
 
-    fname = f"{output_folder}/slice_size.pdf"
+    fname = f"{output_folder}/slice_size.png"
     print(f"[+] Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
