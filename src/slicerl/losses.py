@@ -20,7 +20,9 @@ def dice_loss(y_true, y_pred):
     num1 = tf.math.reduce_sum((y_true * y_pred), -1) + EPS_TF
     den1 = tf.math.reduce_sum(y_true * y_true + y_pred * y_pred, -1) + EPS_TF
     num2 = tf.math.reduce_sum(iy_true * iy_pred, -1) + EPS_TF
-    den2 = tf.math.reduce_sum(iy_true * iy_true + iy_pred * iy_pred, -1) + EPS_TF
+    den2 = (
+        tf.math.reduce_sum(iy_true * iy_true + iy_pred * iy_pred, -1) + EPS_TF
+    )
     return 1 - tf.math.reduce_mean(num1 / den1 + num2 / den2)
 
 

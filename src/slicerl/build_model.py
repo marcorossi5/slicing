@@ -1,5 +1,6 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.SEACNet import SeacNet
+from slicerl.CMNet import CMNet
+from slicerl.losses import dice_loss
 from slicerl.build_dataset import dummy_dataset
 from slicerl.diagnostics import (
     plot_plane_view,
@@ -39,15 +40,11 @@ def load_network(setup, checkpoint_filepath=None):
     -------
         - SeacNet
     """
-
     net_dict = {
-        "K": setup["model"]["K"],
-        "locse_nb_layers": setup["model"]["locse_nb_layers"],
         "use_bias": setup["model"]["use_bias"],
-        "f_dims": 1,
-        "K_test": setup["test"]["K_test"],
+        "f_dims": setup["model"]["f_dims"],
     }
-    net = SeacNet(name="SEAC-Net", **net_dict)
+    net = CMNet(name="SEAC-Net", **net_dict)
 
     lr = setup["train"]["lr"]
     if setup["train"]["optimizer"] == "Adam":
@@ -63,6 +60,8 @@ def load_network(setup, checkpoint_filepath=None):
         loss = tf.keras.losses.BinaryCrossentropy(name="xent")
     elif setup["train"]["loss"] == "hinge":
         loss = tf.keras.losses.Hinge(name="hinge")
+    elif setup["train"]["loss"] == "dice":
+        loss = dice_loss
     else:
         raise NotImplementedError("Loss function not implemented")
 
@@ -86,9 +85,7 @@ def load_network(setup, checkpoint_filepath=None):
     )
 
     # dummy forward pass
-    dummy_generator = dummy_dataset(
-        setup["model"]["nb_classes"], setup["model"]["K"]
-    )
+    dummy_generator = dummy_dataset(f_dims)
     net.evaluate(dummy_generator, verbose=0)
 
     if checkpoint_filepath:
@@ -144,12 +141,11 @@ def build_and_train_model(setup, generators):
     tfK.clear_session()
     if setup["scan"]:
         use_bnorm = setup["model"]["use_bnorm"]
-        K = setup["model"]["K"]
         use_bias = setup["model"]["use_bias"]
         lr = setup["train"]["lr"]
         opt = setup["train"]["optimizer"]
         print(
-            f"{{use_bnorm: {use_bnorm}, K: {K}, use_bias: {use_bias}, lr: {lr}, opt: {opt}}}"
+            f"{{use_bnorm: {use_bnorm}, use_bias: {use_bias}, lr: {lr}, opt: {opt}}}"
         )
 
     train_generator, val_generator = generators
@@ -169,11 +165,11 @@ def build_and_train_model(setup, generators):
             save_weights_only=True,
             save_best_only=True,
             mode="max",
-            monitor="val_prec",
+            monitor="val_acc",
             verbose=1,
         ),
         ReduceLROnPlateau(
-            monitor="val_prec",
+            monitor="val_acc",
             factor=0.75,
             mode="max",
             verbose=1,
@@ -181,12 +177,12 @@ def build_and_train_model(setup, generators):
             min_lr=setup["train"]["min_lr"],
         ),
         EarlyStopping(
-            monitor='val_prec',
+            monitor="val_acc",
             min_delta=0.001,
-            mode='max',
+            mode="max",
             patience=25,
-            restore_best_weights=True
-        )
+            restore_best_weights=True,
+        ),
     ]
     if setup["scan"]:
         tboard = TensorBoard(log_dir=logdir, profile_batch=0)
@@ -203,19 +199,18 @@ def build_and_train_model(setup, generators):
 
     net = trace(net, train_generator)
 
-    # warmup
-    original_lr = net.optimizer.learning_rate
-    tfK.set_value(net.optimizer.learning_rate, original_lr*50)
-    print(f"[+] Warmup 2 epochs ...")
-    r = net.fit(
-        train_generator,
-        epochs=2,
-        validation_data=val_generator,
-        callbacks=callbacks,
-        verbose=2,
-    )
-    tfK.set_value(net.optimizer.learning_rate, original_lr)
-
+    # # warmup
+    # original_lr = net.optimizer.learning_rate
+    # tfK.set_value(net.optimizer.learning_rate, original_lr*50)
+    # print(f"[+] Warmup 2 epochs ...")
+    # r = net.fit(
+    #     train_generator,
+    #     epochs=2,
+    #     validation_data=val_generator,
+    #     callbacks=callbacks,
+    #     verbose=2,
+    # )
+    # tfK.set_value(net.optimizer.learning_rate, original_lr)
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(
@@ -259,8 +254,7 @@ def inference(setup, test_generator, show_graph=False):
     )
 
     y_pred = net.get_prediction(
-        test_generator.prep_inputs,
-        test_generator.knn_idxs,
+        test_generator.inputs,
         threshold=setup["model"]["threshold"],
     )
 
@@ -272,17 +266,14 @@ def inference(setup, test_generator, show_graph=False):
     n = min(10, len(test_generator))
     for i in range(n):
         pc = test_generator.get_pc(i)  # shape=(N,2)
-        pc_pred = y_pred.get_status(i)  # shape=(N,)
+        pc_pred = test_generator.get_status(i)  # shape=(N,)
         pc_test = test_generator.get_targets(i)  # shape=(N,)
         plot_plane_view(
             pc, pc_pred, pc_test, i, setup["output"].joinpath("plots")
         )
 
     # plot histogram of the network decisions
-    K_test = setup["test"]["K_test"]
-    hist_true = [
-        trg[..., :K_test].flatten() for trg in test_generator.prep_targets
-    ]
+    hist_true = [trg.flatten() for trg in test_generator.targets]
     hist_pred = [pred.flatten() for pred in y_pred.preds]
     plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
 

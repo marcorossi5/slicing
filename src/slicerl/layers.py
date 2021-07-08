@@ -13,6 +13,7 @@ from tensorflow.keras.layers import (
     Conv1D,
 )
 from tensorflow.keras.constraints import MaxNorm
+from copy import deepcopy
 
 fn = lambda x, y: y / (tfmath.abs(x) + EPS_TF) * tfmath.sign(x)
 
@@ -487,48 +488,15 @@ class SEAC(Layer):
 class Predictions:
     """ Utility class to return RandLA-Net predictions. """
 
-    def __init__(self, graphs, status, preds, slices):
+    def __init__(self, preds, slices):
         """
         Parameters
         ----------
-            - graph  : list, KNN graphs which is list with elements of shape=(nb_neighs)
-            - status : list, each element is a np.array with shape=(N)
-            - preds  : list, each element is a np.array with shape=(N,1+K)
-            - slices : list, of sets with decreasing size containing
+            - preds  : list, each element is a np.array with shape=(N,N)
+            - slices : list, of sets
         """
-        self.graphs = graphs
-        self.status = status
         self.preds = preds
         self.slices = slices
-
-    # ----------------------------------------------------------------------
-    def get_graph(self, index):
-        """
-        Returns the i-th graph.
-
-        Parameters
-        ----------
-            - index : int, index in prediction list
-
-        Returns
-        -------
-            - list, of sets calohit predicted connections
-        """
-        return self.graphs[index]
-
-    # ----------------------------------------------------------------------
-    def get_status(self, index):
-        """
-        Returns the slice state for each hit in the i-th graph.
-        Parameters
-        ----------
-            - index : int, index in status list
-
-        Returns
-        -------
-            - np.array: status at index i of shape=(N,)
-        """
-        return self.status[index]
 
     # ----------------------------------------------------------------------
     def get_preds(self, index):
@@ -542,7 +510,7 @@ class Predictions:
 
         Returns
         -------
-            - np.array: status at index i of shape=(N,1+K)
+            - np.array: status at index i of shape=(N,N)
         """
         return self.preds[index]
 
@@ -565,63 +533,45 @@ class Predictions:
 
 # ======================================================================
 class AbstractNet(Model):
-    def __init__(self, name, K_test, **kwargs):
-        self.K_test = K_test
+    def __init__(self, f_dims, name, **kwargs):
+        self.f_dims = f_dims
         super(AbstractNet, self).__init__(name=name, **kwargs)
 
     # ----------------------------------------------------------------------
     def model(self):
-        pc = Input(shape=(None, 1 + self.K, self.input_dims), name="pc")
-        feats = Input(shape=(None, 1 + self.K, self.f_dims), name="feats")
-        return Model(
-            inputs=[pc, feats], outputs=self.call([pc, feats]), name=self.name
-        )
+        inputs = Input(shape=(None, None, 2, self.f_dims), name="pc")
+        return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
     # ----------------------------------------------------------------------
-    def get_prediction(self, inputs, knn_idxs, threshold=0.5):
+    def get_prediction(self, inputs, threshold=0.5):
         """
         Predict over a iterable of inputs
 
         Parameters
         ----------
-            - inputs    : list, elements of shape [(1,N,1+K,dims), (1,N,1+K,f_dims)]
-            - knn_idxs  : list, elements of shape=(N,1+K)
-            - threshold : float, classification threshold
+            - inputs    : list, elements of shape (1,N,N,2,f_dims)
+            - threshold : float
 
         Returns
         -------
             Predictions object
         """
-        status = []
-        graphs = []
         preds = []
         all_slices = []
-        for inp, knn_idx in zip(inputs, knn_idxs):
-            N = inp[0].shape[1]
-            knn_idx = knn_idx[..., :self.K_test]
+        for inp in inputs:
+            N = inp[0].shape[0]
 
             # predict hits connections
             pred = self.predict_on_batch(inp)[0]
 
             # stronger prediction if both directed edges are positive
-            adj = np.full([N, N], 2.0)
-            rows = np.repeat(
-                np.expand_dims(np.arange(N), 1), self.K_test, axis=1
-            )
-            adj[rows, knn_idx[0]] = pred[..., :self.K_test]
-            adj[adj == 2.0] = adj.T[adj == 2.0]
-            adj = (adj + adj.T) / 2
-            pred = np.take_along_axis(adj, knn_idx[0], axis=1)
+            pred = (pred + pred.T) / 2
 
             preds.append(pred)
-            # knn_idx = knn_idx[..., :self.K_test]
+            # threshold to find positive and negative edges
+            pred = pred > threshold
 
-            graph = [
-                set(node[p > threshold])
-                for node, p in zip(knn_idx[0], pred)
-                # for node, p in zip(knn_idx[0], pred[..., :self.K_test])
-            ]
-            graphs.append(graph)
+            graph = [set(np.argwhere(merge)[:, 0]) for merge in pred]
 
             # DFS (depth first search)
             visited = set()  # the all visited set
@@ -633,11 +583,6 @@ class AbstractNet(Model):
                 bfs(slice, visited, node, graph)
                 slices.append(slice)
 
-            sorted_slices = sorted(slices, key=len, reverse=True)
-            all_slices.append(sorted_slices)
-            state = np.zeros(N)
-            for i, slice in enumerate(sorted_slices):
-                state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
-            status.append(state)
+            all_slices.append(slices)
 
-        return Predictions(graphs, status, preds, all_slices)
+        return Predictions(preds, all_slices)

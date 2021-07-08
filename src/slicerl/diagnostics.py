@@ -105,7 +105,6 @@ colors = [
     "lightslategrey",
     "slateblue",
     "purple",
-    "ivory",
     "lemonchiffon",
     "orchid",
     "darkred",

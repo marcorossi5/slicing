@@ -3,6 +3,8 @@ import numpy as np
 from collections import namedtuple
 from copy import deepcopy
 
+from numpy.linalg.linalg import LinAlgError, eig
+
 EventTuple = namedtuple(
     "EventTuple",
     [
@@ -17,6 +19,8 @@ EventTuple = namedtuple(
         "slicerl_idx",
     ],
 )
+
+SWAP = np.array([[0, -1], [1, 0]])
 
 # ======================================================================
 class Event:
@@ -77,7 +81,7 @@ class Event:
         )
         for i, idx in enumerate(self.sorted_mc_idx):
             self.ordered_mc_idx[calohits[7] == idx] = i
-        
+
         # build the pndr_slice ordering (useful for testing)
         self.pndr_idx = calohits[6]
         self.ordered_pndr_idx = deepcopy(calohits[6])
@@ -98,6 +102,9 @@ class Event:
         for i, idx in enumerate(self.sorted_cluster_idx):
             self.ordered_cluster_idx[calohits[5] == idx] = i
 
+        self.cluster_set = set(self.ordered_cluster_idx)
+        self.nb_clusters = len(self.cluster_set)
+
         # point cloud to be passed to the agent:
         # (energy, x, z, x_dir, z_dir, pfo cluster idx)
         self.point_cloud = np.concatenate(
@@ -106,26 +113,186 @@ class Event:
         self.status = calohits[8]
         self.num_calohits = len(self.status)
 
+        self.cluster_features = self.get_cluster_features()
+        self.target_adj = self.get_cluster_target()
+
+        """
+        import matplotlib.pyplot as plt
+        from slicerl.diagnostics import cmap, norm
+        from slicerl.tools import bfs
+
+        pred = deepcopy(self.ordered_cluster_idx)
+
+        graph = [
+                set(np.argwhere(merge==1)[:,0])
+                for merge in adj
+            ]
+        # DFS (depth first search)
+        visited = set()  # the all visited set
+        slices = []
+        for node in range(len(graph)):
+            if node in visited:
+                continue
+            slice = set()  # the current slice only
+            bfs(slice, visited, node, graph)
+            slices.append(slice)
+        
+        for slice in deepcopy(slices):
+            idx = np.min(list(slice))
+            slice.remove(idx)
+            for cluster in slice:
+                pred[pred == cluster] = idx
+        
+        print("Initial clusters: ", len(set(self.ordered_cluster_idx)))
+        print("Predicted slices: ", len(set(pred)))
+        print("mc slices: ", len(set(self.ordered_mc_idx)))
+        print("-------------------------")
+        
+        fig = plt.figure()
+        ax0 = fig.add_subplot(131)
+        ax0.scatter(self.point_cloud[1], self.point_cloud[2], s=3, cmap=cmap, norm=norm, c=self.ordered_cluster_idx%128)
+        
+        ax1 = fig.add_subplot(132)
+        ax1.scatter(self.point_cloud[1], self.point_cloud[2], s=3, cmap=cmap, norm=norm, c=pred%128)
+
+        ax2 = fig.add_subplot(133)
+        ax2.scatter(self.point_cloud[1], self.point_cloud[2], s=3, cmap=cmap, norm=norm, c=self.ordered_mc_idx%128)
+
+        #for x, z, i1, p, i2 in zip(self.point_cloud[1], self.point_cloud[2], self.ordered_cluster_idx, pred, self.ordered_mc_idx):
+        #    ax0.annotate(f"{int(i1):d}", (x,z), fontsize=3)
+        #    # ax1.annotate(f"{int(p):d}", (x,z), fontsize=3)
+        #    # ax2.annotate(f"{int(i2):d}", (x,z), fontsize=3)
+
+
+        plt.show()        
+
+        # sorted_slices = sorted(slices, key=len, reverse=True)
+        # all_slices.append(sorted_slices)
+        # state = np.zeros(N)
+        # for i, slice in enumerate(sorted_slices):
+        #     state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
+        # status.append(state)
+        """
+
+    # ----------------------------------------------------------------------
+    def get_cluster_features(self):
+        """
+        Compute the adjecency matrix for the all clusters features.
+
+        Returns
+        -------
+            - np.array, of shape=(nb_clusters, nb_clusters, 2, nb_features)
+        """
+        all_features = []
+        for idx in self.cluster_set:
+            features = []
+            mask = self.ordered_cluster_idx == idx
+
+            pc = self.point_cloud[1:3, mask]
+            mux, muz = pc.mean(1)
+
+            # standardize
+            std = pc.std(1, keepdims=True)
+            # if there's no variance on some axis, just keep it as it is
+            std[std == 0] = 1
+            std_pc = (pc - pc.mean(1, keepdims=True)) / std
+
+            # correlation matrix
+            cov = np.cov(std_pc)
+            # cov = np.corrcoef(std_pc) # raises
+            evalues, evectors = np.linalg.eig(cov)
+            pct = evalues[0] / evalues.sum()
+            # eigenvectors are evector[:,i]
+
+            # rotate the standardized cluster
+            rot_pc = np.matmul(evectors, std_pc)
+
+            # compute the cluster delimiter points
+            # the box is ok along the first PCA component, not on the second one
+            dists = (rot_pc[:, None] * evectors[..., None]).sum(0)
+            p0, p1 = np.argmin(dists, axis=1)
+            p2, p3 = np.argmax(dists, axis=1)
+            delimiters = pc[:, [p0, p1, p2, p3]]
+
+            features.append(
+                np.count_nonzero(mask) / len(self.ordered_cluster_idx)
+            )  # cluster hits percentage
+            features.extend([mux, muz])  # cluster mean x and z
+            features.append(
+                self.point_cloud[3, mask][0]
+            )  # expected direction x
+            features.append(
+                self.point_cloud[4, mask][0]
+            )  # expected direction z
+            features.extend(evalues.flatten().tolist())  # eigenvalues
+            features.extend(evectors.flatten().tolist())  # eigenvectors
+            features.append(pct)  # eigenvalues percentage
+            features.extend(
+                [cov[0, 0], cov[1, 0], cov[1, 1]]
+            )  # covariance matrix
+            features.extend(delimiters.flatten().tolist())  # delimiters
+            features.append(
+                self.point_cloud[0, mask].mean()
+            )  # cluster hits mean energy
+            features.append(
+                self.point_cloud[0, mask].std()
+            )  # cluster hits energy standard deviation
+
+            all_features.append(np.array(features))
+        all_features = np.stack(all_features, axis=0)
+        rows = np.repeat(all_features[:, None], self.nb_clusters, axis=1)
+        cols = np.repeat(all_features[None], self.nb_clusters, axis=0)
+        return np.stack([rows, cols], axis=-2)
+
     # ----------------------------------------------------------------------
     def __len__(self):
         return self.num_calohits
 
     # ----------------------------------------------------------------------
-    def state(self, step=None, is_training=False):
+    def state(self):
         """
-        Return the observable state: padded point cloud, describing
-        (E, x, z, pfo cluster idx, current status) for each calohit
-
-        Parameter
-        ---------
-            - step        : int, episode_step (needed during training only)
-            - is_training : bool, training mode or not
+        Return the observable state: describes the clusters adjecency matrix.
 
         Returns
         -------
-            - array of shape=(max_hits, 6)
+            - np.array, of shape=(nb_clusters, nb_clusters, 2, nb_features)
         """
-        return self.point_cloud.T
+        return self.cluster_features
+
+    # ----------------------------------------------------------------------
+    def get_cluster_target(self):
+        """
+        Return the perfect target state for supervised learning. Describes the
+        clusters adjecency matrix.
+
+        Returns
+        -------
+            - array of shape=(nb_clusters, nb_clusters)
+        """
+        adj = np.eye(self.nb_clusters)
+        for i in range(self.nb_clusters):
+            for j in range(i):
+                mask_0 = self.ordered_cluster_idx == i
+                mask_1 = self.ordered_cluster_idx == j
+                mask = np.logical_or(mask_0, mask_1)
+                mc_masked = self.ordered_mc_idx[mask]
+                mc_set = set(mc_masked)
+
+                if len(mc_set) == 1:
+                    adj[i, j] = 1
+                else:
+                    pct = [
+                        np.count_nonzero(mc_masked == idx) for idx in mc_set
+                    ]
+                    pct.sort(reverse=True)
+                    pct = np.array(pct)
+
+                    if pct[1] < 5 and pct[0] / pct.sum() > 0.9:
+                        adj[i, j] = 1
+                    else:
+                        adj[i, j] = 0
+
+        return adj + adj.T - np.eye(self.nb_clusters)
 
     # ----------------------------------------------------------------------
     def original_order_status(self):
@@ -135,7 +302,7 @@ class Event:
         )
 
     # ----------------------------------------------------------------------
-    def store_preds(self, status, graph):
+    def store_preds(self, slices):
         """
         Store predicted slicing info in self.status.
 
@@ -144,8 +311,13 @@ class Event:
             - status : np.array, status predictions array of shape=(num calohits,)
             - graph   : np.array, graph predictions array of shape=(num calohits, num neighbors)
         """
-        self.status = status
-        self.graph = graph
+        pred = deepcopy(self.ordered_cluster_idx)
+        for slice in deepcopy(slices):
+            idx = np.min(list(slice))
+            slice.remove(idx)
+            for cluster in slice:
+                pred[pred == cluster] = idx
+        self.status = pred
 
     # ----------------------------------------------------------------------
     def calohits_to_array(self):

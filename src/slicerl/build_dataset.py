@@ -14,31 +14,21 @@ class EventDataset(tf.keras.utils.Sequence):
     """ Class defining dataset. """
 
     # ----------------------------------------------------------------------
-    def __init__(self, data, K, shuffle=True, **kwargs):
+    def __init__(self, data, shuffle=True, **kwargs):
         """
         Parameters
         ----------
             - data    : list, [inputs, targets] for RandLA-Net
-            - K       : int, neighbours number in KNN graph
             - shuffle : bool, wether to shuffle dataset on epoch end
         """
         # needed to generate the dataset
         self.__events = data[0]
         self.inputs, self.targets = data[1]
-        self.K = int(K)
         self.shuffle = shuffle
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(
             self.targets
         ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
-
-        self.use_elliptic_knn = True
-        if self.use_elliptic_knn:
-            self.elliptic_topK = EllipticTopK(
-                0.1, 0.01, 1 + self.K, batched=True
-            )
-
-        self.preprocess(use_elliptic_knn=self.use_elliptic_knn)
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -48,118 +38,45 @@ class EventDataset(tf.keras.utils.Sequence):
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
         index = self.indexes[idx]
-        return self.prep_inputs[index], self.prep_targets[index]
+        return self.inputs[index], self.targets[index]
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return len(self.prep_inputs)
-
-    # ----------------------------------------------------------------------
-    def preprocess(self, use_elliptic_knn=True):
-        """
-        Preprocess dataset for SEAC-Net.
-
-        Returns
-        -------
-            - np.array, KNN indices of shape=(B,N,K)
-        """
-        prep_inputs = []
-        prep_targets = []
-        self.knn_idxs = []
-        for (pc, feats), targets in zip(self.inputs, self.targets):
-            # select knn neighbours
-            if use_elliptic_knn:
-                knn_idx = self.elliptic_topK(pc, pc).numpy()
-            else:
-                knn_idx = knn.knn_batch(
-                    pc[..., :2], pc[..., :2], K=1 + self.K, omp=True
-                )
-            self.knn_idxs.append(knn_idx)
-            pc = LocSE.gather_neighbours(pc, knn_idx).numpy()
-            feats = LocSE.gather_neighbours(feats, knn_idx).numpy()
-
-            # import matplotlib.pyplot as plt
-            # N = knn_idx.shape[1]
-            # plt.step(range(N), knn_idx[0,:,0])
-            # plt.show()
-            # exit()
-            # plt.scatter(pc[0,:,0,0], pc[0,:,0,1], s=0.5, c='blue')
-            # plt.scatter(pc[0,3500,:,0], pc[0,3500,:,1], s=0.5, color='red')
-            # plt.scatter(pc[0,3500,0,0], pc[0,3500,0,1], s=0.5, color='green')
-            # plt.show()
-            # exit()
-
-            # generate edges based on "same cluster" property
-            feats = (feats[..., :1, 1:] == feats[..., 1:]).astype(NP_DTYPE)
-
-            prep_inputs.append([pc, feats])
-
-            # produce targets
-            tgt = onehot_to_indices(targets)[..., None]
-            tgt = LocSE.gather_neighbours(tgt, knn_idx).numpy().squeeze(-1)
-            mask = (tgt[:, :, :1] == tgt).astype(NP_DTYPE)
-            prep_targets.append(mask)
-
-        self.prep_inputs = prep_inputs
-        self.prep_targets = prep_targets
+        return len(self.inputs)
 
     # ----------------------------------------------------------------------
     def get_pc(self, index):
         """
         Get the point cloud at a certain index.
+        TODO: this has to be changed into cluster input adj or similar
 
         Returns
         -------
             - np.array, point cloud of shape=(N,2)
         """
-        return self.inputs[index][0][0]
+        return self.events[index].point_cloud[1:3].T
 
     # ----------------------------------------------------------------------
-    def get_knn_idx(self, index, K):
+    def get_status(self, index):
         """
-        Get the KNN graph indices for a pc at a certain index.
-
-        Returns
-        -------
-            - np.array, KNN indices of shape=(N,K)
-        """
-        pc = self.inputs[index][0][0]
-        if self.use_elliptic_knn:
-            return self.elliptic_topK(pc, pc).numpy()
-        return knn.knn_batch(pc[..., :2], pc[..., :2], K=K, omp=True)
-
-    # ----------------------------------------------------------------------
-    def get_feats(self, index):
-        """
-        Get the point cloud features at a certain index.
-
-        Returns
-        -------
-            - np.array, point cloud of shape=(N,2)
-        """
-        return self.inputs[index][1][0]
-
-    # ----------------------------------------------------------------------
-    def get_onehot_targets(self, index):
-        """
-        Get the point cloud features at a certain index.
-
-        Returns
-        -------
-            - np.array, point cloud of shape=(N, nb_classes)
-        """
-        return self.targets[index][0]
-
-    # ----------------------------------------------------------------------
-    def get_targets(self, index):
-        """
-        Get the point cloud features at a certain index.
+        Returns the status vector of event at index `index`.
 
         Returns
         -------
             - np.array, point cloud of shape=(N,)
         """
-        return onehot_to_indices(self.targets[index][0])
+        return self.events[index].status
+
+    # ----------------------------------------------------------------------
+    def get_targets(self, index):
+        """
+        Returns the mc status vector of event at index `index`.
+
+        Returns
+        -------
+            - np.array, point cloud of shape=(N,)
+        """
+        return self.events[index].ordered_mc_idx
 
     # ----------------------------------------------------------------------
     @property
@@ -178,7 +95,7 @@ class EventDataset(tf.keras.utils.Sequence):
         print("[+] setting events")
         if self.__events:
             for i, event in enumerate(self.__events):
-                event.store_preds(y_pred.get_status(i), y_pred.get_graph(i))
+                event.store_preds(y_pred.get_slices(i))
         else:
             raise ValueError(
                 "Cannot set events attribute, found None"
@@ -291,9 +208,7 @@ def split_dataset(data, split=0.5):
 
 
 # ======================================================================
-def build_dataset(
-    fn, nev=-1, min_hits=1, split=None, augment=False, nb_classes=128
-):
+def build_dataset(fn, nev=-1, min_hits=1, split=None):
     """
     Parameters
     ----------
@@ -301,16 +216,13 @@ def build_dataset(
         - nev        : int, number of events to take from each file
         - min_hits   : int, minimum hits per slice for dataset inclusion
         - split      : float, split percentage between train and val in events
-        - augment    : bool, wether to augment training set with rotations
-        - nb_classes : int, number of classes to segment events in
 
     Returns
     -------
         - list, of Event instances
         - list, of inputs and targets couples:
-            inputs is a list of couples [pc, features], pc of shape=(B,N,2) and
-            features of shape=(B,N);
-            targets is a list on np.arrays of shape=(B,N, nb_classes)
+            inputs is list of np.arrays [1, nb_cluster, nb_cluster, 2, nb_features];
+            targets is a list of np.arrays of shape=(1,nb_cluster,nb_cluster)
     """
     if isinstance(fn, str):
         events = load_Events_from_file(fn, nev, min_hits)
@@ -320,22 +232,8 @@ def build_dataset(
         raise NotImplementedError(
             f"please provide string or list, not {type(fn)}"
         )
-    inputs = []
-    targets = []
-    for event in events:
-        state = event.state()
-        pc = state[:, 1:5]
-        feats = state[:, ::5]
-        m = event.ordered_mc_idx
-        if augment:
-            pc, feats, target = transform(pc, feats, m)
-        else:
-            pc = pc[None]
-            feats = feats[None]
-            target = m[None]
-        target = onehot(target, nb_classes)
-        inputs.extend([[p[None], f[None]] for p, f in zip(pc, feats)])
-        targets.extend(np.split(target, len(target), axis=0))
+    inputs = [event.cluster_features[None] for event in events]
+    targets = [event.target_adj[None] for event in events]
 
     if split:
         nb_events = len(inputs)
@@ -371,23 +269,16 @@ def build_dataset_train(setup):
     fn = setup["train"]["fn"]
     nev = setup["train"]["nev"]
     min_hits = setup["train"]["min_hits"]
-    nb_classes = setup["model"]["nb_classes"]
     split = setup["dataset"]["split"]
-    augment = (
-        False if setup["scan"] or (not setup["dataset"]["augment"]) else True
-    )
-    K = setup["model"]["K"]
 
     train, val = build_dataset(
         fn,
         nev=nev,
         min_hits=min_hits,
-        nb_classes=nb_classes,
         split=split,
-        augment=augment,
     )
-    train_generator = EventDataset(train, K, shuffle=True)
-    val_generator = EventDataset(val, K) if split else None
+    train_generator = EventDataset(train, shuffle=True)
+    val_generator = EventDataset(val) if split else None
     return train_generator, val_generator
 
 
@@ -403,19 +294,17 @@ def build_dataset_test(setup):
     fn = setup["test"]["fn"]
     nev = setup["test"]["nev"]
     min_hits = setup["test"]["min_hits"]
-    nb_classes = setup["model"]["nb_classes"]
-    K = setup["model"]["K"]
 
-    data = build_dataset(fn, nev=nev, min_hits=min_hits, nb_classes=nb_classes)
-    return EventDataset(data, K)
+    data = build_dataset(fn, nev=nev, min_hits=min_hits)
+    return EventDataset(data)
 
 
 # ======================================================================
-def dummy_dataset(nb_classes, K):
+def dummy_dataset(nb_feats):
     """ Return a dummy dataset to build the model first when loading. """
     B = 1
-    N = 256
-    inputs = [np.random.rand(B, N, 4), np.random.rand(B, N, 2)]
-    targets = np.random.rand(B, N, nb_classes)
-    data = (None, [[inputs], [targets]])
-    return EventDataset(data, K)
+    N = 50
+    inputs = np.random.rand(B, N, N, 2, nb_feats)
+    targets = np.random.rand(B, N, N)
+    data = (None, [inputs, targets])
+    return EventDataset(data)

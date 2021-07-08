@@ -75,7 +75,7 @@ class SeacNet(AbstractNet):
             1,
             input_shape=(None, 1 + self.K),
             kernel_constraint=MaxNorm(axis=[0, 1]),
-            activation='linear',
+            activation="linear",
             use_bias=self.use_bias,
             name=f"final_conv",
         )

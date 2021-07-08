@@ -2,19 +2,15 @@
 gpu: "0"
 dataset:
   split: 0.9
-  augment: false
 model:
-  net_type: SEAC # DRB | RandLA
-  nb_classes: 128
-  K: 64
-  locse_nb_layers: 3
+  net_type: CM # DRB | RandLA | CM
+  f_dims: 25
   use_bias: true
-  threshold: 0.95
+  threshold: 0.5
 test:
   fn: data/exp_dir/new_set_03GeV.csv.gz
   nev: -1
-  min_hits: 200
-  K_test: 48
+  min_hits: 10
 train:
   fn:
     - data/exp_dir/new_set_05GeV.csv.gz
@@ -24,9 +20,9 @@ train:
     - data/exp_dir/new_set_6GeV.csv.gz
     - data/exp_dir/new_set_7GeV.csv.gz
   nev: -1
-  min_hits: 200
+  min_hits: 10
   hist_freq: 10
-  loss: xent # xent | hinge
+  loss: xent # xent | hinge | dice
   epochs: 100
   lr: 0.005
   min_lr: 0.00001
