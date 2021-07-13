@@ -273,13 +273,23 @@ def plot_slice_size(events, output_folder="./"):
 
 
 # ----------------------------------------------------------------------
-def plot_plane_view(pc, pc_pred, pc_test, nb_event, output_folder="./"):
-    fig = plt.figure(figsize=(18 * 2, 14))
-    ax = fig.add_subplot(121)
+def plot_plane_view(
+    pc, pc_init, pc_pred, pc_pndr, pc_test, nb_event, output_folder="./"
+):
+    fig = plt.figure(figsize=(9 * 3, 14))
+    ax = fig.add_subplot(221)
+    ax.scatter(pc[:, 0], pc[:, 1], s=0.5, c=pc_init, cmap=cmap, norm=norm)
+    ax.set_title("pc_init")
+
+    ax = fig.add_subplot(222)
     ax.scatter(pc[:, 0], pc[:, 1], s=0.5, c=pc_pred, cmap=cmap, norm=norm)
     ax.set_title("pc_pred")
 
-    ax = fig.add_subplot(122)
+    ax = fig.add_subplot(223)
+    ax.scatter(pc[:, 0], pc[:, 1], s=0.5, c=pc_pndr, cmap=cmap, norm=norm)
+    ax.set_title("pc_pndr")
+
+    ax = fig.add_subplot(224)
     ax.scatter(pc[:, 0], pc[:, 1], s=0.5, c=pc_test, cmap=cmap, norm=norm)
     ax.set_title("pc_true")
 

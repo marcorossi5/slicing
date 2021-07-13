@@ -41,6 +41,7 @@ def load_network(setup, checkpoint_filepath=None):
         - SeacNet
     """
     net_dict = {
+        "batch_size": setup["model"]["batch_size"],
         "use_bias": setup["model"]["use_bias"],
         "f_dims": setup["model"]["f_dims"],
     }
@@ -122,6 +123,7 @@ def trace(net, generator):
     )
     print("[+] Network traced ...")
     return net
+    # TODO: fix this to use dummy dataset instead of modifying generator length
 
 
 # ======================================================================
@@ -140,12 +142,12 @@ def build_and_train_model(setup, generators):
     """
     tfK.clear_session()
     if setup["scan"]:
-        use_bnorm = setup["model"]["use_bnorm"]
-        use_bias = setup["model"]["use_bias"]
+        batch_size = setup["model"]["batch_size"]
+        loss = setup["train"]["loss"]
         lr = setup["train"]["lr"]
         opt = setup["train"]["optimizer"]
         print(
-            f"{{use_bnorm: {use_bnorm}, use_bias: {use_bias}, lr: {lr}, opt: {opt}}}"
+            f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}"
         )
 
     train_generator, val_generator = generators
@@ -176,14 +178,18 @@ def build_and_train_model(setup, generators):
             patience=setup["train"]["patience"],
             min_lr=setup["train"]["min_lr"],
         ),
-        EarlyStopping(
-            monitor="val_acc",
-            min_delta=0.001,
-            mode="max",
-            patience=25,
-            restore_best_weights=True,
-        ),
     ]
+    if setup["train"]["es_patience"]:
+        callbacks.append(
+            EarlyStopping(
+                monitor="val_acc",
+                min_delta=0.0001,
+                mode="max",
+                patience=setup["train"]["es_patience"],
+                restore_best_weights=True,
+            )
+        )
+
     if setup["scan"]:
         tboard = TensorBoard(log_dir=logdir, profile_batch=0)
     else:
@@ -197,7 +203,7 @@ def build_and_train_model(setup, generators):
 
     callbacks.append(tboard)
 
-    net = trace(net, train_generator)
+    # net = trace(net, train_generator)
 
     # # warmup
     # original_lr = net.optimizer.learning_rate
@@ -266,10 +272,18 @@ def inference(setup, test_generator, show_graph=False):
     n = min(10, len(test_generator))
     for i in range(n):
         pc = test_generator.get_pc(i)  # shape=(N,2)
+        pc_init = test_generator.events[i].ordered_cluster_idx
         pc_pred = test_generator.get_status(i)  # shape=(N,)
+        pc_pndr = test_generator.events[i].ordered_pndr_idx
         pc_test = test_generator.get_targets(i)  # shape=(N,)
         plot_plane_view(
-            pc, pc_pred, pc_test, i, setup["output"].joinpath("plots")
+            pc,
+            pc_init,
+            pc_pred,
+            pc_pndr,
+            pc_test,
+            i,
+            setup["output"].joinpath("plots"),
         )
 
     # plot histogram of the network decisions

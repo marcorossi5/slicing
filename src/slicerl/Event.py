@@ -3,6 +3,8 @@ import numpy as np
 from collections import namedtuple
 from copy import deepcopy
 
+from knn import knn
+
 from numpy.linalg.linalg import LinAlgError, eig
 
 EventTuple = namedtuple(
@@ -21,6 +23,7 @@ EventTuple = namedtuple(
 )
 
 SWAP = np.array([[0, -1], [1, 0]])
+
 
 # ======================================================================
 class Event:
@@ -214,35 +217,49 @@ class Event:
             p2, p3 = np.argmax(dists, axis=1)
             delimiters = pc[:, [p0, p1, p2, p3]]
 
+            idx = knn(delimiters.T, delimiters.T, 2)[:, 1]
+
+            # build the cluster feature vector
             features.append(
                 np.count_nonzero(mask) / len(self.ordered_cluster_idx)
-            )  # cluster hits percentage
-            features.extend([mux, muz])  # cluster mean x and z
+            )  # cluster hits percentage (0)
+            features.extend([mux, muz])  # cluster mean x and z (1:3)
             features.append(
                 self.point_cloud[3, mask][0]
-            )  # expected direction x
+            )  # expected direction x (3)
             features.append(
                 self.point_cloud[4, mask][0]
-            )  # expected direction z
-            features.extend(evalues.flatten().tolist())  # eigenvalues
-            features.extend(evectors.flatten().tolist())  # eigenvectors
-            features.append(pct)  # eigenvalues percentage
+            )  # expected direction z (4)
+            features.extend(evalues.flatten().tolist())  # eigenvalues (5:7)
+            features.extend(evectors.flatten().tolist())  # eigenvectors (7:11)
+            features.append(pct)  # eigenvalues percentage (11)
             features.extend(
                 [cov[0, 0], cov[1, 0], cov[1, 1]]
-            )  # covariance matrix
-            features.extend(delimiters.flatten().tolist())  # delimiters
+            )  # covariance matrix (12:15)
+            features.extend(
+                delimiters.flatten().tolist()
+            )  # delimiters (15:23)
             features.append(
                 self.point_cloud[0, mask].mean()
-            )  # cluster hits mean energy
+            )  # cluster hits mean energy (23)
             features.append(
                 self.point_cloud[0, mask].std()
-            )  # cluster hits energy standard deviation
+            )  # cluster hits energy standard deviation (24)
 
             all_features.append(np.array(features))
         all_features = np.stack(all_features, axis=0)
         rows = np.repeat(all_features[:, None], self.nb_clusters, axis=1)
         cols = np.repeat(all_features[None], self.nb_clusters, axis=0)
-        return np.stack([rows, cols], axis=-2)
+        adj = np.stack([rows, cols], axis=-2)
+        N = adj.shape[0]
+        first_d = adj[..., :1, 15:23].reshape(N, N, 1, 2, 4)
+        second_d = adj[..., 1:, 15:23].reshape(N, N, 1, 2, 4)
+        mins = np.full_like(adj[..., :1], np.inf)
+        for d in np.moveaxis(second_d, -1, 0):
+            dists = np.sqrt(((first_d - d[..., None]) ** 2).sum(-2))
+            dists = np.min(dists, axis=-1)[..., None]
+            mins = np.fmin(mins, dists)
+        return np.concatenate([adj, mins], axis=-1)
 
     # ----------------------------------------------------------------------
     def __len__(self):

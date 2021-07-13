@@ -304,7 +304,7 @@ def dummy_dataset(nb_feats):
     """ Return a dummy dataset to build the model first when loading. """
     B = 1
     N = 50
-    inputs = np.random.rand(B, N, N, 2, nb_feats)
-    targets = np.random.rand(B, N, N)
+    inputs = [np.random.rand(B, N, N, 2, nb_feats)]
+    targets = [np.random.rand(B, N, N)]
     data = (None, [inputs, targets])
     return EventDataset(data)
