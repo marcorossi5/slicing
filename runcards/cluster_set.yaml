@@ -4,7 +4,7 @@ dataset:
   split: 0.9
 model:
   net_type: CM # DRB | RandLA | CM
-  batch_size: 32
+  batch_size: 20
   f_dims: 26
   use_bias: true
   threshold: 0.5
@@ -23,9 +23,9 @@ train:
   nev: -1
   min_hits: 10
   hist_freq: 10
-  loss: xent # xent | hinge | dice
+  loss: dice # xent | hinge | dice
   epochs: 10
-  lr: 0.01
+  lr: 0.005636993511552649
   min_lr: 0.00001
   patience: 15
   es_patience: 50
