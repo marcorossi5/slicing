@@ -95,7 +95,7 @@ class AbstractNet(Model):
                 for j in range(i):
                     if i == j:
                         continue
-                    adj[i,j] = pred[k]
+                    adj[i, j] = pred[k]
                     k += 1
 
             adj += adj.T + np.eye(nb_clusters)

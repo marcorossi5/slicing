@@ -46,7 +46,7 @@ class Reader(object):
     # ----------------------------------------------------------------------
     def next(self):
         return self.__next__()
-    
+
     # ----------------------------------------------------------------------
     def next_plane(self):
         """ Main function to read one plane view at a time from file."""
@@ -89,7 +89,7 @@ class Reader(object):
             )
             return None
         except StopIteration:
-            print("# Exiting after having read all the events")
+            print(f"# Exiting after having read all the {self.n} events")
             return None
         return np.stack(c)
 
@@ -111,7 +111,6 @@ class Reader(object):
             self.n += 1
             return tpc_view_U, tpc_view_V, tpc_view_W
         return None
-
 
 
 # ======================================================================

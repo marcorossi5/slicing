@@ -27,28 +27,64 @@ class EventDataset(tf.keras.utils.Sequence):
         self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
         self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
         self.batch_size = batch_size
+        self.is_training = is_training
         self.shuffle = shuffle
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(
             self.targets
         ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
+        if is_training:
+            nb_positive = np.count_nonzero(self.targets)
+            nb_all = len(self.targets)
+            balancing = nb_positive / nb_all
+            print(f"Training points: {nb_all} of which positives: {nb_positive}")
+            print(f"Percentage of positives: {balancing}")
+            self.balance_dataset(balancing)
+        else:
+            self.bal_inputs = self.inputs
+            self.bal_targets = self.targets
+
+    # ----------------------------------------------------------------------
+    def balance_dataset(self, balancing):
+        """
+        Balances the dataset discarding part of the negative samples to match
+        the size of the positive ones. This happens if the ratio of positve
+        samples is below 20%.
+
+        Parameters
+        ----------
+            - balancing: float, percentage of positive samples over the total
+        """
+        if balancing < 0.2:
+            m_positives = self.targets.astype(bool)
+            neg_idx = np.argwhere(~m_positives).flatten()
+            neg_selected = np.random.choice(
+                neg_idx, size=np.count_nonzero(m_positives), replace=False
+            )
+            m_negatives = np.isin(np.arange(len(self.targets)), neg_selected)
+            mask = np.logical_or(m_positives, m_negatives)
+            self.bal_inputs = self.inputs[mask]
+            self.bal_targets = self.targets[mask]
+        else:
+            self.bal_inputs = self.inputs
+            self.bal_targets = self.targets
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
         if self.shuffle:
-            perm = np.random.permutation(len(self.inputs))
-            self.inputs = self.inputs[perm]
-            self.targets = self.targets[perm]
+            perm = np.random.permutation(len(self.bal_inputs))
+            self.bal_inputs = self.bal_inputs[perm]
+            self.bal_targets = self.bal_targets[perm]
 
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
-        batch_x = self.inputs[idx * self.batch_size : (idx + 1) * self.batch_size]
-        batch_y = self.targets[idx * self.batch_size : (idx + 1) * self.batch_size]
+        batch_x = self.bal_inputs[idx * self.batch_size : (idx + 1) * self.batch_size]
+        batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
         return batch_x, batch_y
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return ceil(len(self.inputs) / self.batch_size)
+        return ceil(len(self.bal_inputs) / self.batch_size)
 
     # ----------------------------------------------------------------------
     def get_pc(self, index):
@@ -158,7 +194,7 @@ def generate_inputs_and_targets(event, is_training=False):
         - np.array, inputs of shape=(nb_clusters_pairs, nb_features*2)
         - np.array, target labels of shape=(nb_clusters_pairs)
     """
-    #all clusters features
+    # all clusters features
     acf = np.concatenate(
         [
             event.U.all_cluster_features,
@@ -181,7 +217,6 @@ def generate_inputs_and_targets(event, is_training=False):
     # create network inputs and targets
     inputs = []
     targets = []
-    print("All clusters number: ", event.nb_all_clusters)
     for i in range(event.nb_all_clusters):
         for j in range(event.nb_all_clusters):
             if i == j:
@@ -193,6 +228,8 @@ def generate_inputs_and_targets(event, is_training=False):
             tgt = 1.0 if c2mpfo[i] == c2mpfo[j] else 0.0
             targets.append(tgt)
     return np.stack(inputs, axis=0), np.array(targets)
+
+    # TODO: if is_training, filter away the zeros and balance the dataset
 
 
 # ======================================================================

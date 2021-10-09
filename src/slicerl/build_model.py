@@ -80,7 +80,6 @@ def load_network(setup, checkpoint_filepath=None):
     if not setup["scan"]:
         net.model().summary()
 
-
     if checkpoint_filepath:
         # dummy forward pass to build the layers
         # dummy_generator = dummy_dataset(setup["model"]["f_dims"])
@@ -255,7 +254,7 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
     y_pred = net.get_prediction(
         test_generator.inputs,
         setup["model"]["test_batch_size"],
-        threshold=setup["model"]["threshold"]
+        threshold=setup["model"]["threshold"],
     )
 
     test_generator.events = y_pred
@@ -264,7 +263,6 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
         if i > 10:
             break
     exit("build_model.py l. 271")
-
 
     plot_slice_size(test_generator.events, setup["output"].joinpath("plots"))
     plot_multiplicity(test_generator.events, setup["output"].joinpath("plots"))
@@ -300,17 +298,23 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
             setup["output"].joinpath("plots"),
         )
 
+
 def do_visual_checks(ev, evno, output_dir, no_graphics):
     import matplotlib.pyplot as plt
     import numpy as np
     from slicerl.diagnostics import norm, cmap
     from copy import deepcopy
+
     pfoU = deepcopy(ev.U.calohits[-1])
     pfoV = deepcopy(ev.V.calohits[-1])
     pfoW = deepcopy(ev.W.calohits[-1])
+
     def sort_fn(x):
-        all_calo = np.concatenate([ev.U.calohits[-1], ev.V.calohits[-1], ev.W.calohits[-1]])
+        all_calo = np.concatenate(
+            [ev.U.calohits[-1], ev.V.calohits[-1], ev.W.calohits[-1]]
+        )
         return np.count_nonzero(all_calo == x)
+
     sorted_pfosU = sorted(list(set(ev.U.calohits[-1])), key=sort_fn, reverse=True)
     sorted_pfosV = sorted(list(set(ev.V.calohits[-1])), key=sort_fn, reverse=True)
     sorted_pfosW = sorted(list(set(ev.W.calohits[-1])), key=sort_fn, reverse=True)
@@ -320,13 +324,15 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         pfoV[ev.V.calohits[-1] == idx] = i
     for i, idx in enumerate(sorted_pfosW):
         pfoW[ev.W.calohits[-1] == idx] = i
-    
+
     statusU = deepcopy(ev.U.status)
     statusV = deepcopy(ev.V.status)
     statusW = deepcopy(ev.W.status)
+
     def sort_fn(x):
         all_calo = np.concatenate([ev.U.status, ev.V.status, ev.W.status])
         return np.count_nonzero(all_calo == x)
+
     sorted_pfosU = sorted(list(set(ev.U.status)), key=sort_fn, reverse=True)
     sorted_pfosV = sorted(list(set(ev.V.status)), key=sort_fn, reverse=True)
     sorted_pfosW = sorted(list(set(ev.W.status)), key=sort_fn, reverse=True)
@@ -340,21 +346,63 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     plt.subplot(231)
     plt.title("U plane")
     plt.ylabel("output")
-    plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=statusU%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.U.calohits[1] * 1000,
+        ev.U.calohits[2] * 1000,
+        s=0.5,
+        c=statusU % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(232)
     plt.title("V plane")
-    plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=statusV%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.V.calohits[1] * 1000,
+        ev.V.calohits[2] * 1000,
+        s=0.5,
+        c=statusV % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(233)
     plt.title("W plane")
-    plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=statusW%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.W.calohits[1] * 1000,
+        ev.W.calohits[2] * 1000,
+        s=0.5,
+        c=statusW % 128,
+        norm=norm,
+        cmap=cmap,
+    )
 
     plt.subplot(234)
     plt.ylabel("pfos")
-    plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=pfoU%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.U.calohits[1] * 1000,
+        ev.U.calohits[2] * 1000,
+        s=0.5,
+        c=pfoU % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(235)
-    plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=pfoV%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.V.calohits[1] * 1000,
+        ev.V.calohits[2] * 1000,
+        s=0.5,
+        c=pfoV % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(236)
-    plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=pfoW%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.W.calohits[1] * 1000,
+        ev.W.calohits[2] * 1000,
+        s=0.5,
+        c=pfoW % 128,
+        norm=norm,
+        cmap=cmap,
+    )
 
     # plt.subplot(337)
     # plt.ylabel("clusters")

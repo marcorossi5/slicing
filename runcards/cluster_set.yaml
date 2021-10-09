@@ -16,9 +16,10 @@ test:
   min_hits: 50
 train:
   fn:
+    - data/pfo/prod4.csv.gz
     - data/pfo/prova.csv.gz
-  nev: 3
-  min_hits: 50
+  nev: -1
+  min_hits: 3
   hist_freq: 10
   loss: dice # xent | hinge | dice
   epochs: 1

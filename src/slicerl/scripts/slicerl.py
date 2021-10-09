@@ -219,7 +219,9 @@ def main():
     from slicerl.build_model import inference
 
     test_generator = build_dataset_test(setup)
-    inference(setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics)
+    inference(
+        setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics
+    )
 
 
 if __name__ == "__main__":

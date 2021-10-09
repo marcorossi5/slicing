@@ -177,12 +177,18 @@ class PlaneView:
 
         # look at the do_checks function docstring
         self.calo2mpfo = self.cluster_to_main_pfo[self.ordered_cluster_idx.astype(int)]
-        calo2pfo_set= set(self.calo2mpfo)
+        calo2pfo_set = set(self.calo2mpfo)
         pfo_set = set(self.pfo_index)
         self.not_visited_pfos = pfo_set.difference(calo2pfo_set)
-        self.not_visited_pfos_completeness = [np.count_nonzero(self.pfo_index == pfo)/self.nb_calohits for pfo in self.not_visited_pfos]
+        self.not_visited_pfos_completeness = [
+            np.count_nonzero(self.pfo_index == pfo) / self.nb_calohits
+            for pfo in self.not_visited_pfos
+        ]
         self.visited_pfos = pfo_set.intersection(calo2pfo_set)
-        self.visited_pfos_completeness = [np.count_nonzero(self.pfo_index == pfo)/self.nb_calohits for pfo in self.visited_pfos]
+        self.visited_pfos_completeness = [
+            np.count_nonzero(self.pfo_index == pfo) / self.nb_calohits
+            for pfo in self.visited_pfos
+        ]
 
     # ----------------------------------------------------------------------
     def get_all_cluster_info(self):
@@ -369,9 +375,11 @@ def get_cluster_features(cluster_hits, hits_pct, tpc_view):
     features.extend(tpc_view)
     return np.array(features)
 
+
 # ======================================================================
 
-def do_sanity_checks(U,V,W):
+
+def do_sanity_checks(U, V, W):
     """
     Performs sanity checks.
 
@@ -389,51 +397,157 @@ def do_sanity_checks(U,V,W):
     """
     import matplotlib.pyplot as plt
     from slicerl.diagnostics import norm, cmap
-    bins = np.logspace(-4,0,20)
+
+    bins = np.logspace(-4, 0, 20)
     plt.subplot(131)
     plt.title("U plane")
-    plt.hist(U.visited_pfos_completeness, bins=bins, label='visited', color='green', histtype='step', lw=0.5)
-    plt.hist(U.not_visited_pfos_completeness, bins=bins, label='not visited', color='red', histtype='step', lw=0.5)
+    plt.hist(
+        U.visited_pfos_completeness,
+        bins=bins,
+        label="visited",
+        color="green",
+        histtype="step",
+        lw=0.5,
+    )
+    plt.hist(
+        U.not_visited_pfos_completeness,
+        bins=bins,
+        label="not visited",
+        color="red",
+        histtype="step",
+        lw=0.5,
+    )
     plt.legend()
-    plt.xscale('log')
-    plt.xlabel('Pfo completeness')
+    plt.xscale("log")
+    plt.xlabel("Pfo completeness")
     plt.subplot(132)
     plt.title("V plane")
-    plt.hist(V.visited_pfos_completeness, bins=bins, label='visited', color='green', histtype='step', lw=0.5)
-    plt.hist(V.not_visited_pfos_completeness, bins=bins, label='not visited', color='red', histtype='step', lw=0.5)
-    plt.xscale('log')
-    plt.xlabel('Pfo completeness')
+    plt.hist(
+        V.visited_pfos_completeness,
+        bins=bins,
+        label="visited",
+        color="green",
+        histtype="step",
+        lw=0.5,
+    )
+    plt.hist(
+        V.not_visited_pfos_completeness,
+        bins=bins,
+        label="not visited",
+        color="red",
+        histtype="step",
+        lw=0.5,
+    )
+    plt.xscale("log")
+    plt.xlabel("Pfo completeness")
     plt.subplot(133)
     plt.title("W plane")
-    plt.hist(W.visited_pfos_completeness, bins=bins, label='visited', color='green', histtype='step', lw=0.5)
-    plt.hist(W.not_visited_pfos_completeness, bins=bins, label='not visited', color='red', histtype='step', lw=0.5)
-    plt.xscale('log')
-    plt.xlabel('Pfo completeness')
+    plt.hist(
+        W.visited_pfos_completeness,
+        bins=bins,
+        label="visited",
+        color="green",
+        histtype="step",
+        lw=0.5,
+    )
+    plt.hist(
+        W.not_visited_pfos_completeness,
+        bins=bins,
+        label="not visited",
+        color="red",
+        histtype="step",
+        lw=0.5,
+    )
+    plt.xscale("log")
+    plt.xlabel("Pfo completeness")
     plt.show()
 
     plt.subplot(331)
     plt.title("U plane")
     plt.ylabel("inputs")
-    plt.scatter(U.calohits[1]*1000, U.calohits[2]*1000, s=0.5, c=U.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        U.calohits[1] * 1000,
+        U.calohits[2] * 1000,
+        s=0.5,
+        c=U.calohits[5] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(332)
     plt.title("V plane")
-    plt.scatter(V.calohits[1]*1000, V.calohits[2]*1000, s=0.5, c=V.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        V.calohits[1] * 1000,
+        V.calohits[2] * 1000,
+        s=0.5,
+        c=V.calohits[5] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(333)
     plt.title("W plane")
-    plt.scatter(W.calohits[1]*1000, W.calohits[2]*1000, s=0.5, c=W.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        W.calohits[1] * 1000,
+        W.calohits[2] * 1000,
+        s=0.5,
+        c=W.calohits[5] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(334)
     plt.ylabel("truths")
-    plt.scatter(U.calohits[1]*1000, U.calohits[2]*1000, s=0.5, c=U.calohits[7]%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        U.calohits[1] * 1000,
+        U.calohits[2] * 1000,
+        s=0.5,
+        c=U.calohits[7] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(335)
-    plt.scatter(V.calohits[1]*1000, V.calohits[2]*1000, s=0.5, c=V.calohits[7]%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        V.calohits[1] * 1000,
+        V.calohits[2] * 1000,
+        s=0.5,
+        c=V.calohits[7] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(336)
-    plt.scatter(W.calohits[1]*1000, W.calohits[2]*1000, s=0.5, c=W.calohits[7]%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        W.calohits[1] * 1000,
+        W.calohits[2] * 1000,
+        s=0.5,
+        c=W.calohits[7] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(337)
     plt.ylabel("calo to pfos")
-    plt.scatter(U.calohits[1]*1000, U.calohits[2]*1000, s=0.5, c=U.calo2mpfo%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        U.calohits[1] * 1000,
+        U.calohits[2] * 1000,
+        s=0.5,
+        c=U.calo2mpfo % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(338)
-    plt.scatter(V.calohits[1]*1000, V.calohits[2]*1000, s=0.5, c=V.calo2mpfo%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        V.calohits[1] * 1000,
+        V.calohits[2] * 1000,
+        s=0.5,
+        c=V.calo2mpfo % 128,
+        norm=norm,
+        cmap=cmap,
+    )
     plt.subplot(339)
-    plt.scatter(W.calohits[1]*1000, W.calohits[2]*1000, s=0.5, c=W.calo2mpfo%128, norm=norm, cmap=cmap)
+    plt.scatter(
+        W.calohits[1] * 1000,
+        W.calohits[2] * 1000,
+        s=0.5,
+        c=W.calo2mpfo % 128,
+        norm=norm,
+        cmap=cmap,
+    )
 
     plt.show()
