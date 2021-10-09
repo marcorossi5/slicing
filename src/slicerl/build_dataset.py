@@ -1,9 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
-from slicerl.tools import onehot, onehot_to_indices
-from slicerl.layers import LocSE
-from slicerl.elliptic_topK import EllipticTopK
 
 import tensorflow as tf
 import numpy as np
@@ -287,7 +284,7 @@ def build_dataset_test(setup):
 def dummy_dataset(nb_feats):
     """ Return a dummy dataset to build the model first when loading. """
     B = 32
-    inputs = np.random.rand(B, nb_feats)
-    targets = np.random.rand(B)
+    inputs = [np.random.rand(B, nb_feats) for i in range(2)]
+    targets = [np.random.rand(B) for i in range(2)]
     data = (None, [inputs, targets])
-    return EventDataset(data, batch_size=B)
+    return EventDataset(data, batch_size=B, is_training=True)

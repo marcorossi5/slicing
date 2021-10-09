@@ -125,6 +125,12 @@ def main():
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--no_graphics",
+        help="DO not display figures via GUI",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
     # check that input is coherent
     if (not args.model and not args.runcard) or (args.model and args.runcard):
@@ -213,7 +219,7 @@ def main():
     from slicerl.build_model import inference
 
     test_generator = build_dataset_test(setup)
-    inference(setup, test_generator, show_graph=args.show_graph)
+    inference(setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.layers import AbstractNet
-import tensorflow as tf
+from slicerl.AbstractNet import AbstractNet
 from tensorflow.keras.layers import Dense, BatchNormalization, Dropout
 from tensorflow.keras import Input, Model
 

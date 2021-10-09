@@ -77,20 +77,15 @@ def load_network(setup, checkpoint_filepath=None):
         ],
         run_eagerly=setup.get("debug"),
     )
-    # if not setup["scan"]:
-    #     net.model().summary()
-    tf.keras.utils.plot_model(
-        net.model(),
-        to_file=f"{setup['output']}/Network.png",
-        expand_nested=True,
-        show_shapes=True,
-    )
+    if not setup["scan"]:
+        net.model().summary()
 
-    # dummy forward pass
-    dummy_generator = dummy_dataset(setup["model"]["f_dims"])
-    net.evaluate(dummy_generator.inputs, verbose=0)
 
     if checkpoint_filepath:
+        # dummy forward pass to build the layers
+        # dummy_generator = dummy_dataset(setup["model"]["f_dims"])
+        # net.evaluate(dummy_generator.inputs, verbose=0)
+
         print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath)
 
@@ -244,9 +239,7 @@ def build_and_train_model(setup, generators):
 
 
 # ----------------------------------------------------------------------
-
-
-def inference(setup, test_generator, show_graph=False):
+def inference(setup, test_generator, show_graph=False, no_graphics=False):
     tfK.clear_session()
     print("[+] done with training, load best weights")
     checkpoint_filepath = setup["output"].joinpath("network.h5")
@@ -266,8 +259,10 @@ def inference(setup, test_generator, show_graph=False):
     )
 
     test_generator.events = y_pred
-    for ev in test_generator.events:
-        do_visual_checks(ev)
+    for i, ev in enumerate(test_generator.events):
+        do_visual_checks(ev, i, setup["output"], no_graphics)
+        if i > 10:
+            break
     exit("build_model.py l. 271")
 
 
@@ -305,7 +300,7 @@ def inference(setup, test_generator, show_graph=False):
             setup["output"].joinpath("plots"),
         )
 
-def do_visual_checks(ev):
+def do_visual_checks(ev, evno, output_dir, no_graphics):
     import matplotlib.pyplot as plt
     import numpy as np
     from slicerl.diagnostics import norm, cmap
@@ -369,4 +364,8 @@ def do_visual_checks(ev):
     # plt.subplot(339)
     # plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=ev.W.calohits[5]%128, norm=norm, cmap=cmap)
 
+    if no_graphics:
+        fname = output_dir.joinpath(f"plots/visual_check_{evno}.png")
+        plt.savefig(fname, dpi=300, bbox_inches="tight")
+        plt.close()
     plt.show()
