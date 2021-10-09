@@ -7,23 +7,29 @@ from slicerl.elliptic_topK import EllipticTopK
 
 import tensorflow as tf
 import numpy as np
-import knn
+from math import ceil
 
 # ======================================================================
 class EventDataset(tf.keras.utils.Sequence):
     """ Class defining dataset. """
 
     # ----------------------------------------------------------------------
-    def __init__(self, data, shuffle=True, **kwargs):
+    def __init__(self, data, batch_size, is_training=False, shuffle=True, **kwargs):
         """
+        This generator must be used for training only.
+
         Parameters
         ----------
-            - data    : list, [inputs, targets] for RandLA-Net
+            - data    : list, network [inputs, targets]
+            - is_training: bool, wether the dataset is used for training or
+                           testing purposes
             - shuffle : bool, wether to shuffle dataset on epoch end
         """
         # needed to generate the dataset
         self.__events = data[0]
-        self.inputs, self.targets = data[1]
+        self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
+        self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
+        self.batch_size = batch_size
         self.shuffle = shuffle
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(
@@ -33,16 +39,19 @@ class EventDataset(tf.keras.utils.Sequence):
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
         if self.shuffle:
-            np.random.shuffle(self.indexes)
+            perm = np.random.permutation(len(self.inputs))
+            self.inputs = self.inputs[perm]
+            self.targets = self.targets[perm]
 
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
-        index = self.indexes[idx]
-        return self.inputs[index], self.targets[index]
+        batch_x = self.inputs[idx * self.batch_size : (idx + 1) * self.batch_size]
+        batch_y = self.targets[idx * self.batch_size : (idx + 1) * self.batch_size]
+        return batch_x, batch_y
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return len(self.inputs)
+        return ceil(len(self.inputs) / self.batch_size)
 
     # ----------------------------------------------------------------------
     def get_pc(self, index):
@@ -104,81 +113,6 @@ class EventDataset(tf.keras.utils.Sequence):
 
 
 # ======================================================================
-def rotate_pc(pc, t):
-    """
-    Augment points `pc` with plane rotations given by a list of angles `t`.
-
-    Parameters
-    ----------
-        - pc : tf.Tensor, point cloud of shape=(N,2)
-        - t  : list, list of angles in radiants of length=(B,)
-
-    Returns
-    -------
-        tf.Tensor, batch of rotated point clouds of shape=(B,N,2)
-    """
-    # rotation matrices
-    sint = np.sin(t)
-    cost = np.cos(t)
-    irots = np.array([[cost, sint], [-sint, cost]])
-    rots = np.moveaxis(irots, [0, 1, 2], [2, 1, 0])
-    return np.matmul(pc, rots)
-
-
-# ======================================================================
-def transform(pc, feats, target):
-    """
-    Augment a inputs rotating points. Targets and feats remain the same
-
-    Parameters
-    ----------
-        - pc      : tf.Tensor, point cloud of shape=(N,2)
-        - feats   : tf.Tensor, feature point cloud of shape=(N,2)
-        - target : tf.Tensor, segmented point cloud of shape=(N,)
-
-    Returns
-    -------
-        - tf.Tensor, augmented point cloud of shape=(B,N,2)
-        - tf.Tensor, repeated feature point cloud on batch axis of shape=(B,N,2)
-        - tf.Tensor, repeated segmented point cloud on batch axis of shape=(B,N)
-    """
-    # define rotating angles list
-    fracs = np.array(
-        [
-            0,
-            0.16,
-            0.25,
-            0.3,
-            0.5,
-            0.66,
-            0.75,
-            0.83,
-            1,
-            -0.16,
-            -0.25,
-            -0.3,
-            -0.5,
-            -0.66,
-            -0.75,
-            -0.83,
-        ]
-    )
-    t = np.pi * fracs
-    # random permute the angles list to ensure no bias
-    randt = np.random.permutation(t)
-    B = len(t)
-
-    # produce augmented pc
-    pc = rotate_pc(pc, randt)
-
-    # repeat feats and target along batch axis
-    feats = np.repeat(feats[None], B, axis=0)
-    target = np.repeat(target[None], B, axis=0)
-
-    return pc, feats, target
-
-
-# ======================================================================
 def split_dataset(data, split=0.5):
     """
     Parameters
@@ -195,63 +129,109 @@ def split_dataset(data, split=0.5):
     assert len(inputs) == len(
         targets
     ), f"Length of inputs and targets must match, got {len(inputs)} and {len(targets)}"
-    l = len(inputs)
-    split_idx = int(l * split)
+    nb_events = len(inputs)
+    perm = np.random.permutation(nb_events)
+    nb_split = int(split * nb_events)
 
-    val_inputs = inputs[:split_idx]
-    test_inputs = inputs[split_idx:]
+    train_inp = [inputs[i] for i in perm[:nb_split]]
+    train_trg = [targets[i] for i in perm[:nb_split]]
 
-    val_targets = targets[:split_idx]
-    test_targets = targets[split_idx:]
+    val_inp = [inputs[i] for i in perm[nb_split:]]
+    val_trg = [targets[i] for i in perm[nb_split:]]
 
-    return [val_inputs, val_targets], [test_inputs, test_targets]
+    return [train_inp, train_trg], [val_inp, val_trg]
 
 
 # ======================================================================
-def build_dataset(fn, nev=-1, min_hits=1, split=None):
+def generate_inputs_and_targets(event, is_training=False):
+    """
+    Takes an Event object and processes the 2D clusters to retrieve inputs and
+    associated target arrays. Input arrays are concatenated cluster feacture
+    vectors. Target arrays are binaries. If n is cluster number in an event, and
+    is_training is False, n*(n-1)/2 clusters pairs are produced, n*(n-1) if
+    is_training is True.
+
+    Parameters
+    ----------
+        - event: Event, the event object holding the hits information
+        - is_training: bool
+
+    Returns
+    -------
+        - np.array, inputs of shape=(nb_clusters_pairs, nb_features*2)
+        - np.array, target labels of shape=(nb_clusters_pairs)
+    """
+    #all clusters features
+    acf = np.concatenate(
+        [
+            event.U.all_cluster_features,
+            event.V.all_cluster_features,
+            event.W.all_cluster_features,
+        ],
+        axis=0,
+    )
+
+    # cluster to main pfo
+    c2mpfo = np.concatenate(
+        [
+            event.U.cluster_to_main_pfo,
+            event.V.cluster_to_main_pfo,
+            event.W.cluster_to_main_pfo,
+        ],
+        axis=0,
+    )
+
+    # create network inputs and targets
+    inputs = []
+    targets = []
+    print("All clusters number: ", event.nb_all_clusters)
+    for i in range(event.nb_all_clusters):
+        for j in range(event.nb_all_clusters):
+            if i == j:
+                continue
+            if i < j and not is_training:
+                continue
+            inps = np.concatenate([acf[i], acf[j]])
+            inputs.append(inps)
+            tgt = 1.0 if c2mpfo[i] == c2mpfo[j] else 0.0
+            targets.append(tgt)
+    return np.stack(inputs, axis=0), np.array(targets)
+
+
+# ======================================================================
+def build_dataset(fn, nev=-1, min_hits=1, split=None, is_training=False):
     """
     Parameters
     ----------
-        - fn         : list, of str events filenames
-        - nev        : int, number of events to take from each file
-        - min_hits   : int, minimum hits per slice for dataset inclusion
-        - split      : float, split percentage between train and val in events
+        - fn       : list, of str events filenames
+        - nev      : int, number of events to take from each file
+        - min_hits : int, minimum hits per slice for dataset inclusion
+        - split    : float, split percentage between train and val in events
 
     Returns
     -------
         - list, of Event instances
         - list, of inputs and targets couples:
-            inputs is list of np.arrays [1, nb_cluster, nb_cluster, 2, nb_features];
-            targets is a list of np.arrays of shape=(1,nb_cluster,nb_cluster)
+            inputs is list of np.arrays of shape=(nb_cluster_pairs, nb_features);
+            targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
     if isinstance(fn, str):
         events = load_Events_from_file(fn, nev, min_hits)
     elif isinstance(fn, list) or isinstance(fn, tuple):
         events = load_Events_from_files(fn, nev, min_hits)
     else:
-        raise NotImplementedError(
-            f"please provide string or list, not {type(fn)}"
-        )
-    inputs = [event.cluster_features[None] for event in events]
-    targets = [event.target_adj[None] for event in events]
+        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
+
+    inputs = []
+    targets = []
+    for event in events:
+        inps, tgts = generate_inputs_and_targets(event, is_training=is_training)
+        inputs.append(inps)
+        targets.append(tgts)
 
     if split:
-        nb_events = len(inputs)
-        perm = np.random.permutation(nb_events)
-        nb_split = int(split * nb_events)
-
-        train_evt = None
-        train_inp = [inputs[i] for i in perm[:nb_split]]
-        train_trg = [targets[i] for i in perm[:nb_split]]
-
-        val_evt = None
-        val_inp = [inputs[i] for i in perm[nb_split:]]
-        val_trg = [targets[i] for i in perm[nb_split:]]
-
-        return (
-            [train_evt, [train_inp, train_trg]],
-            [val_evt, [val_inp, val_trg]],
-        )
+        train_splitted, val_splitted = split_dataset([inputs, targets], split)
+        return [None, train_splitted], [None, val_splitted]
     return events, [inputs, targets]
 
 
@@ -270,15 +250,18 @@ def build_dataset_train(setup):
     nev = setup["train"]["nev"]
     min_hits = setup["train"]["min_hits"]
     split = setup["dataset"]["split"]
+    batch_size = setup["model"]["batch_size"]
 
     train, val = build_dataset(
-        fn,
-        nev=nev,
-        min_hits=min_hits,
-        split=split,
+        fn, nev=nev, min_hits=min_hits, split=split, is_training=True
     )
-    train_generator = EventDataset(train, shuffle=True)
-    val_generator = EventDataset(val) if split else None
+
+    train_generator = EventDataset(
+        train, is_training=True, batch_size=batch_size, shuffle=True
+    )
+    val_generator = (
+        EventDataset(val, is_training=True, batch_size=batch_size) if split else None
+    )
     return train_generator, val_generator
 
 
@@ -294,17 +277,17 @@ def build_dataset_test(setup):
     fn = setup["test"]["fn"]
     nev = setup["test"]["nev"]
     min_hits = setup["test"]["min_hits"]
+    batch_size = setup["model"]["batch_size"]
 
     data = build_dataset(fn, nev=nev, min_hits=min_hits)
-    return EventDataset(data)
+    return EventDataset(data, batch_size=batch_size)
 
 
 # ======================================================================
 def dummy_dataset(nb_feats):
     """ Return a dummy dataset to build the model first when loading. """
-    B = 1
-    N = 50
-    inputs = [np.random.rand(B, N, N, 2, nb_feats)]
-    targets = [np.random.rand(B, N, N)]
+    B = 32
+    inputs = np.random.rand(B, nb_feats)
+    targets = np.random.rand(B)
     data = (None, [inputs, targets])
-    return EventDataset(data)
+    return EventDataset(data, batch_size=B)

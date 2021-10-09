@@ -65,9 +65,7 @@ class WAccMetric(Metric):
         self.hits = self.add_weight(name="hits", initializer="zeros")
 
         # store the probability normalization
-        self.normalization = self.add_weight(
-            name="normalization", initializer="zeros"
-        )
+        self.normalization = self.add_weight(name="normalization", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight):
         y_pred_max = tf.argmax(y_pred, axis=-1)

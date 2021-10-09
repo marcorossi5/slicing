@@ -1,4 +1,5 @@
 from slicerl.config import NP_DTYPE_INT, EPS_TF
+from slicerl.diagnostics import print_beam_metrics
 from slicerl.tools import bfs
 
 import numpy as np
@@ -35,9 +36,7 @@ def encode(inputs, layers, loop=True):
 
     if loop:
         for layer in layers[1:]:
-            residual = layer(
-                result + tf.reduce_sum(result, axis=-1, keepdims=True)
-            )
+            residual = layer(result + tf.reduce_sum(result, axis=-1, keepdims=True))
             result = result + residual
     return result
 
@@ -220,9 +219,7 @@ class LocSE(Layer):
                 name="norm",
             )
 
-            num = tf.reduce_sum(
-                diff * current[..., 2:4], axis=-1, keepdims=True
-            )
+            num = tf.reduce_sum(diff * current[..., 2:4], axis=-1, keepdims=True)
             den = diff_norm * current_norm + EPS_TF
 
             angles = 1 - tfmath.abs(num / den)  # angle cosine
@@ -495,8 +492,8 @@ class Predictions:
             - preds  : list, each element is a np.array with shape=(N,N)
             - slices : list, of sets
         """
-        self.preds = preds
-        self.slices = slices
+        self.all_events_preds = preds
+        self.all_events_slices = slices
 
     # ----------------------------------------------------------------------
     def get_preds(self, index):
@@ -512,12 +509,12 @@ class Predictions:
         -------
             - np.array: status at index i of shape=(N,N)
         """
-        return self.preds[index]
+        return self.all_events_preds[index]
 
     # ----------------------------------------------------------------------
     def get_slices(self, index):
         """
-        Returns the slices: each slice contains the calohits indices inside the
+        Returns the slices: each slice contains the cluster indices inside the
         slice set.
 
         Parameters
@@ -528,7 +525,7 @@ class Predictions:
         -------
             - list: of set objects with calohit indices
         """
-        return self.slices[index]
+        return self.all_events_slices[index]
 
 
 # ======================================================================
@@ -543,14 +540,17 @@ class AbstractNet(Model):
         return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
     # ----------------------------------------------------------------------
-    def get_prediction(self, inputs, threshold=0.5):
+    def get_prediction(self, inputs, batch_size, threshold=0.5):
         """
         Predict over a iterable of inputs
 
         Parameters
         ----------
-            - inputs    : list, elements of shape (1,N,N,2,f_dims)
-            - threshold : float
+            - inputs: list, events clusters feature vectors, each element has
+                      shape (nb_cluster_pairs, f_dims)
+            - batch_size: int
+            - threshold: float, interpret as positive if above network
+                         prediction is threshold
 
         Returns
         -------
@@ -559,21 +559,30 @@ class AbstractNet(Model):
         preds = []
         all_slices = []
         for inp in inputs:
-            N = inp[0].shape[0]
+            # predict cluster pair connections
+            pred = self.predict(inp, batch_size, verbose=1).flatten()
 
-            # predict hits connections
-            pred = self.predict_on_batch(inp)[0]
+            nb_clusters = (1 + np.sqrt(1 + 8 * len(pred))) / 2
+            assert nb_clusters.is_integer()
+            nb_clusters = int(nb_clusters)
 
-            # stronger prediction if both directed edges are positive
-            pred = (pred + pred.T) / 2
+            adj = np.zeros([nb_clusters, nb_clusters])
+            k = 0
+            for i in range(nb_clusters):
+                for j in range(i):
+                    if i == j:
+                        continue
+                    adj[i,j] = pred[k]
+                    k += 1
 
-            preds.append(pred)
+            adj += adj.T + np.eye(nb_clusters)
+            preds.append(adj)
             # threshold to find positive and negative edges
             pred = pred > threshold
 
-            graph = [set(np.argwhere(merge)[:, 0]) for merge in pred]
+            graph = [set(np.argwhere(merge)[:, 0]) for merge in adj]
 
-            # DFS (depth first search)
+            # BFS (breadth first search)
             visited = set()  # the all visited set
             slices = []
             for node in range(len(graph)):
@@ -584,5 +593,4 @@ class AbstractNet(Model):
                 slices.append(slice)
 
             all_slices.append(slices)
-
         return Predictions(preds, all_slices)

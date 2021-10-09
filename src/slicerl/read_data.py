@@ -13,12 +13,12 @@ class Reader(object):
     """
 
     # ----------------------------------------------------------------------
-    def __init__(self, infile, nmax=-1, num_lines=6):
+    def __init__(self, infile, nmax=-1, load_results=False):
         """Initialize the reader."""
         self.infile = infile
         self.readline_fn = lambda x: np.array(next(x))[:-1].astype(np.float32)
         self.nmax = nmax
-        self.num_lines = num_lines
+        self.load_results = load_results
         self.reset()
 
     # ----------------------------------------------------------------------
@@ -46,32 +46,27 @@ class Reader(object):
     # ----------------------------------------------------------------------
     def next(self):
         return self.__next__()
-
+    
     # ----------------------------------------------------------------------
-    def next_event(self):
-        # we have hit the maximum number of events
-        if self.n == self.nmax:
-            print(f"# Exiting after having read {self.nmax} events")
-            return None
-
+    def next_plane(self):
+        """ Main function to read one plane view at a time from file."""
         try:
             c = []
             c.append(self.readline_fn(self.stream) / 100)  # energies [ADC]/100
             c.append(self.readline_fn(self.stream) / 1000.0)  # xs [10^1 m]
             c.append(self.readline_fn(self.stream) / 1000.0)  # zs [10^1 m]
-            c.append(
-                self.readline_fn(self.stream) / 1000.0
-            )  # x expected direction
-            c.append(
-                self.readline_fn(self.stream) / 1000.0
-            )  # z expected direction
+            c.append(self.readline_fn(self.stream) / 1000.0)  # x expected direction
+            c.append(self.readline_fn(self.stream) / 1000.0)  # z expected direction
             c.append(self.readline_fn(self.stream))  # cluster_idx
             c.append(self.readline_fn(self.stream))  # pndr_idx
             c.append(self.readline_fn(self.stream))  # cheating_idx (mc truth)
-            if self.num_lines == 9:
+            if self.load_results:
                 c.append(self.readline_fn(self.stream))  # slicerl_idx
             else:
                 c.append(np.full_like(c[-1], -1))
+            c.append(self.readline_fn(self.stream))  # test beam flag
+            c.append(self.readline_fn(self.stream))  # PDG
+            c.append(self.readline_fn(self.stream))  # pfo index
         except IOError:
             print(
                 "# got to end with IOError (maybe gzip structure broken?) around event",
@@ -96,9 +91,27 @@ class Reader(object):
         except StopIteration:
             print("# Exiting after having read all the events")
             return None
-
-        self.n += 1
         return np.stack(c)
+
+    # ----------------------------------------------------------------------
+    def next_event(self):
+        """ Main function to read one plane view at a time from file."""
+        # return after hitting the maximum number of events
+        if self.n == self.nmax:
+            print(f"# Exiting after having read {self.nmax} events")
+            return None
+        tpc_view_U = self.next_plane()
+        if tpc_view_U is not None:
+            tpc_view_V = self.next_plane()
+            if tpc_view_V is None:
+                raise EOFError(f"Missing TPC plane view V at event {self.n}")
+            tpc_view_W = self.next_plane()
+            if tpc_view_W is None:
+                raise EOFError(f"Missing TPC plane view W at event {self.n}")
+            self.n += 1
+            return tpc_view_U, tpc_view_V, tpc_view_W
+        return None
+
 
 
 # ======================================================================
@@ -106,8 +119,8 @@ class Image(ABC):
     """Image which transforms point-like information into pixelated 2D
     images which can be processed by convolutional neural networks."""
 
-    def __init__(self, infile, nmax, num_lines=6):
-        self.reader = Reader(infile, nmax, num_lines)
+    def __init__(self, infile, nmax, load_results=False):
+        self.reader = Reader(infile, nmax, load_results)
 
     # ----------------------------------------------------------------------
     @abstractmethod
@@ -118,9 +131,9 @@ class Image(ABC):
     def values(self):
         res = []
         while True:
-            event = self.reader.next_event()
-            if event is not None:
-                res.append(self.process(event))
+            tpc_views = self.reader.next_event()
+            if tpc_views is not None:
+                res.append(self.process(tpc_views))
             else:
                 break
         self.reader.reset()
@@ -132,31 +145,30 @@ class Events(Image):
     """Read input file with calohits and transform into python events."""
 
     # ----------------------------------------------------------------------
-    def __init__(self, infile, nmax, min_hits, max_hits, num_lines=None):
+    def __init__(self, infile, nmax, min_hits, max_hits, load_results=False):
         """
         Parameters
         ----------
-            infile    : str, input file name
-            nmax      : int, max number of events to load
-            min_hits  : int, consider slices with more than min_hits Calohits only
-            num_lines : int, number of lines stored in the file. Specifies if the
-                        file contains inference results or not.
+            infile       : str, input file name
+            nmax         : int, max number of events to load
+            min_hits     : int, consider slices with more than min_hits Calohits only
+            load_results : bool, wether to load results from a previous slicing
+                           inference or not.
         """
-        Image.__init__(self, infile, nmax, num_lines)
+        Image.__init__(self, infile, nmax, load_results)
         self.min_hits = min_hits
         self.max_hits = max_hits
         self.printouts = 10
 
     # ----------------------------------------------------------------------
-    def process(self, event):
+    def process(self, tpc_views):
         # order by increasing x
-        idx = np.argsort(event[1])
-        return Event(event[:, idx], self.min_hits, self.max_hits)
+        return Event(tpc_views, self.min_hits)
 
 
 # ======================================================================
 def load_Events_from_file(
-    filename, nev=-1, min_hits=1, max_hits=15000, num_lines=6
+    filename, nev=-1, min_hits=1, max_hits=15000, load_results=False
 ):
     """
     Utility function to load Events object from file. Return a list of Event
@@ -164,13 +176,12 @@ def load_Events_from_file(
 
     Parameters
     ----------
-        - filename  : str, file to load events from
-        - nev       : int, number of events to load
-        - min_hits  : int, consider slices with more than min_hits Calohits only
-        - max_hits  : int, max hits to be processed by network
-        - num_lines : int, number of lines stored in the file. Lines stand for:
-                      energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
-                      slicerl_idx (optional).
+        - filename     : str, file to load events from
+        - nev          : int, number of events to load
+        - min_hits     : int, consider slices with more than min_hits Calohits only
+        - max_hits     : int, max hits to be processed by network
+        - load_results : bool, wether to load results from a previous slicing
+                           inference or not.
 
     Returns
     -------
@@ -178,13 +189,13 @@ def load_Events_from_file(
             list of loaded Event object (with length equal to nev)
     """
     print(f"[+] Reading {filename}")
-    reader = Events(filename, nev, min_hits, max_hits, num_lines)
+    reader = Events(filename, nev, min_hits, max_hits, load_results)
     return reader.values()
 
 
 # ======================================================================
 def load_Events_from_files(
-    filelist, nev=-1, min_hits=1, max_hits=15000, num_lines=6
+    filelist, nev=-1, min_hits=1, max_hits=15000, load_results=False
 ):
     """
     Utility function to load Events object from file. Return a list of Event
@@ -192,13 +203,12 @@ def load_Events_from_files(
 
     Parameters
     ----------
-        - filename  : list, list of files to load events from
-        - nev       : int, number of events to load
-        - min_hits  : int, consider slices with more than min_hits Calohits only
-        - max_hits  : int, max hits to be processed by network
-        - num_lines : int, number of lines stored in the file. Lines stand for:
-                      energies, xs, zs, cluster_idx, pndr_idx, cheating_idx,
-                      slicerl_idx (optional).
+        - filename     : list, list of files to load events from
+        - nev          : int, number of events to load
+        - min_hits     : int, consider slices with more than min_hits Calohits only
+        - max_hits     : int, max hits to be processed by network
+        - load_results : bool, wether to load results from a previous slicing
+                           inference or not.
 
     Returns
     -------
@@ -208,9 +218,7 @@ def load_Events_from_files(
     events = []
     for fname in filelist:
         print(f"[+] Reading {fname}")
-        events.extend(
-            Events(fname, nev, min_hits, max_hits, num_lines).values()
-        )
+        events.extend(Events(fname, nev, min_hits, max_hits, load_results).values())
     return events
 
 

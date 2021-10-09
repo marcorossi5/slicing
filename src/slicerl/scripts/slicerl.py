@@ -110,9 +110,7 @@ def main():
     parser.add_argument(
         "--model", "-m", type=str, default=None, help="The input model."
     )
-    parser.add_argument(
-        "--output", "-o", help="Output folder", type=Path, default=None
-    )
+    parser.add_argument("--output", "-o", help="Output folder", type=Path, default=None)
     parser.add_argument(
         "runcard",
         action="store",
@@ -130,15 +128,11 @@ def main():
     args = parser.parse_args()
     # check that input is coherent
     if (not args.model and not args.runcard) or (args.model and args.runcard):
-        raise ValueError(
-            "Invalid options: requires either input runcard or model."
-        )
+        raise ValueError("Invalid options: requires either input runcard or model.")
     elif args.runcard and not args.runcard.is_file():
         raise ValueError("Invalid runcard: not a file.")
     if args.force:
-        print(
-            "WARNING: Running with --force option will overwrite existing model"
-        )
+        print("WARNING: Running with --force option will overwrite existing model")
 
     setup = {}
     if args.debug:

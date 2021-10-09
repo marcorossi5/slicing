@@ -149,9 +149,7 @@ def mse(x, y):
 def bce_loss(x, y):
     # Warning: computing log is expensive
     ratio = 0.1  # percentage of ones over zeros
-    loss = -y * np.log(x + EPS) / ratio - (1 - y) * np.log(1 - x + EPS) / (
-        1 - ratio
-    )
+    loss = -y * np.log(x + EPS) / ratio - (1 - y) * np.log(1 - x + EPS) / (1 - ratio)
     return loss.mean()
 
 

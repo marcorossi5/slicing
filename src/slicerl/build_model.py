@@ -1,11 +1,12 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.CMNet import CMNet
+from slicerl.FFNN import FFNN
 from slicerl.losses import dice_loss
 from slicerl.build_dataset import dummy_dataset
 from slicerl.diagnostics import (
     plot_plane_view,
     plot_slice_size,
     plot_multiplicity,
+    plot_test_beam_metrics,
     plot_histogram,
     plot_graph,
 )
@@ -45,7 +46,7 @@ def load_network(setup, checkpoint_filepath=None):
         "use_bias": setup["model"]["use_bias"],
         "f_dims": setup["model"]["f_dims"],
     }
-    net = CMNet(name="SEAC-Net", **net_dict)
+    net = FFNN(name="FFNN", **net_dict)
 
     lr = setup["train"]["lr"]
     if setup["train"]["optimizer"] == "Adam":
@@ -76,8 +77,8 @@ def load_network(setup, checkpoint_filepath=None):
         ],
         run_eagerly=setup.get("debug"),
     )
-    if not setup["scan"]:
-        net.model().summary()
+    # if not setup["scan"]:
+    #     net.model().summary()
     tf.keras.utils.plot_model(
         net.model(),
         to_file=f"{setup['output']}/Network.png",
@@ -87,7 +88,7 @@ def load_network(setup, checkpoint_filepath=None):
 
     # dummy forward pass
     dummy_generator = dummy_dataset(setup["model"]["f_dims"])
-    net.evaluate(dummy_generator, verbose=0)
+    net.evaluate(dummy_generator.inputs, verbose=0)
 
     if checkpoint_filepath:
         print(f"[+] Loading weights at {checkpoint_filepath}")
@@ -119,7 +120,7 @@ def trace(net, generator):
     net.fit(
         generator,
         epochs=1,
-        verbose=0,
+        verbose=1,
     )
     print("[+] Network traced ...")
     return net
@@ -146,17 +147,13 @@ def build_and_train_model(setup, generators):
         loss = setup["train"]["loss"]
         lr = setup["train"]["lr"]
         opt = setup["train"]["optimizer"]
-        print(
-            f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}"
-        )
+        print(f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}")
 
     train_generator, val_generator = generators
 
     initial_weights = setup["train"]["initial_weights"]
     if initial_weights and os.path.isfile(initial_weights):
-        print(
-            f"[+] Found Initial weights configuration at {initial_weights} ... "
-        )
+        print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
     net = load_network(setup, initial_weights)
 
     logdir = setup["output"].joinpath(f"logs/{tm()}").as_posix()
@@ -220,9 +217,10 @@ def build_and_train_model(setup, generators):
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(
-        train_generator,
+        train_generator.inputs,
+        train_generator.targets,
         epochs=setup["train"]["epochs"],
-        validation_data=val_generator,
+        validation_data=(val_generator.inputs, val_generator.targets),
         callbacks=callbacks,
         verbose=2,
     )
@@ -254,22 +252,30 @@ def inference(setup, test_generator, show_graph=False):
     checkpoint_filepath = setup["output"].joinpath("network.h5")
     net = load_network(setup, checkpoint_filepath.as_posix())
 
-    results = net.evaluate(test_generator)
-    print(
-        f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]} \t test precision: {results[2]} \t test recall: {results[3]}"
-    )
+    # TODO: this must be a generator with is_training and without the splitting
+    # but it's not mandatory
+    # results = net.evaluate(test_generator)
+    # print(
+    #     f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]} \t test precision: {results[2]} \t test recall: {results[3]}"
+    # )
 
     y_pred = net.get_prediction(
         test_generator.inputs,
-        threshold=setup["model"]["threshold"],
+        setup["model"]["test_batch_size"],
+        threshold=setup["model"]["threshold"]
     )
 
     test_generator.events = y_pred
+    for ev in test_generator.events:
+        do_visual_checks(ev)
+    exit("build_model.py l. 271")
+
 
     plot_slice_size(test_generator.events, setup["output"].joinpath("plots"))
     plot_multiplicity(test_generator.events, setup["output"].joinpath("plots"))
+    plot_test_beam_metrics(test_generator.events, setup["output"].joinpath("plots"))
 
-    n = min(10, len(test_generator))
+    n = min(30, len(test_generator))
     for i in range(n):
         pc = test_generator.get_pc(i)  # shape=(N,2)
         pc_init = test_generator.events[i].ordered_cluster_idx
@@ -298,3 +304,69 @@ def inference(setup, test_generator, show_graph=False):
             y_pred.get_status(0),
             setup["output"].joinpath("plots"),
         )
+
+def do_visual_checks(ev):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from slicerl.diagnostics import norm, cmap
+    from copy import deepcopy
+    pfoU = deepcopy(ev.U.calohits[-1])
+    pfoV = deepcopy(ev.V.calohits[-1])
+    pfoW = deepcopy(ev.W.calohits[-1])
+    def sort_fn(x):
+        all_calo = np.concatenate([ev.U.calohits[-1], ev.V.calohits[-1], ev.W.calohits[-1]])
+        return np.count_nonzero(all_calo == x)
+    sorted_pfosU = sorted(list(set(ev.U.calohits[-1])), key=sort_fn, reverse=True)
+    sorted_pfosV = sorted(list(set(ev.V.calohits[-1])), key=sort_fn, reverse=True)
+    sorted_pfosW = sorted(list(set(ev.W.calohits[-1])), key=sort_fn, reverse=True)
+    for i, idx in enumerate(sorted_pfosU):
+        pfoU[ev.U.calohits[-1] == idx] = i
+    for i, idx in enumerate(sorted_pfosV):
+        pfoV[ev.V.calohits[-1] == idx] = i
+    for i, idx in enumerate(sorted_pfosW):
+        pfoW[ev.W.calohits[-1] == idx] = i
+    
+    statusU = deepcopy(ev.U.status)
+    statusV = deepcopy(ev.V.status)
+    statusW = deepcopy(ev.W.status)
+    def sort_fn(x):
+        all_calo = np.concatenate([ev.U.status, ev.V.status, ev.W.status])
+        return np.count_nonzero(all_calo == x)
+    sorted_pfosU = sorted(list(set(ev.U.status)), key=sort_fn, reverse=True)
+    sorted_pfosV = sorted(list(set(ev.V.status)), key=sort_fn, reverse=True)
+    sorted_pfosW = sorted(list(set(ev.W.status)), key=sort_fn, reverse=True)
+    for i, idx in enumerate(sorted_pfosU):
+        statusU[ev.U.status == idx] = i
+    for i, idx in enumerate(sorted_pfosV):
+        statusV[ev.V.status == idx] = i
+    for i, idx in enumerate(sorted_pfosW):
+        statusW[ev.W.status == idx] = i
+
+    plt.subplot(231)
+    plt.title("U plane")
+    plt.ylabel("output")
+    plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=statusU%128, norm=norm, cmap=cmap)
+    plt.subplot(232)
+    plt.title("V plane")
+    plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=statusV%128, norm=norm, cmap=cmap)
+    plt.subplot(233)
+    plt.title("W plane")
+    plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=statusW%128, norm=norm, cmap=cmap)
+
+    plt.subplot(234)
+    plt.ylabel("pfos")
+    plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=pfoU%128, norm=norm, cmap=cmap)
+    plt.subplot(235)
+    plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=pfoV%128, norm=norm, cmap=cmap)
+    plt.subplot(236)
+    plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=pfoW%128, norm=norm, cmap=cmap)
+
+    # plt.subplot(337)
+    # plt.ylabel("clusters")
+    # plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=ev.U.calohits[5]%128, norm=norm, cmap=cmap)
+    # plt.subplot(338)
+    # plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=ev.V.calohits[5]%128, norm=norm, cmap=cmap)
+    # plt.subplot(339)
+    # plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=ev.W.calohits[5]%128, norm=norm, cmap=cmap)
+
+    plt.show()

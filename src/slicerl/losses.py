@@ -20,9 +20,7 @@ def dice_loss(y_true, y_pred):
     num1 = tf.math.reduce_sum((y_true * y_pred), -1) + EPS_TF
     den1 = tf.math.reduce_sum(y_true * y_true + y_pred * y_pred, -1) + EPS_TF
     num2 = tf.math.reduce_sum(iy_true * iy_pred, -1) + EPS_TF
-    den2 = (
-        tf.math.reduce_sum(iy_true * iy_true + iy_pred * iy_pred, -1) + EPS_TF
-    )
+    den2 = tf.math.reduce_sum(iy_true * iy_true + iy_pred * iy_pred, -1) + EPS_TF
     return 1 - tf.math.reduce_mean(num1 / den1 + num2 / den2)
 
 
@@ -55,9 +53,7 @@ class WeightedL1:
 
 
 # ======================================================================
-def focal_crossentropy(
-    y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False
-):
+def focal_crossentropy(y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False):
     """
     Implemention of the focal loss function from
     tfa.losses.SigmoidFocalCrossEntropy function.
@@ -83,9 +79,7 @@ def focal_crossentropy(
         same shape as `y_true`; otherwise, it is scalar.
     """
     if gamma and gamma < 0:
-        raise ValueError(
-            "Value of gamma should be greater than or equal to zero"
-        )
+        raise ValueError("Value of gamma should be greater than or equal to zero")
 
     # Get the cross_entropy for each entry
     ce = K.binary_crossentropy(y_true, y_pred, from_logits=from_logits)
@@ -170,9 +164,7 @@ class FocalCrossentropy(Loss):
             tf.Tensor, loss tensor of shape=(B,N) if `reduction` is `NONE`,
             shape=() otherwise.
         """
-        return self.xent(
-            y_true, y_pred, self.alpha, self.gamma, self.from_logits
-        )
+        return self.xent(y_true, y_pred, self.alpha, self.gamma, self.from_logits)
 
 
 # ======================================================================
@@ -251,9 +243,7 @@ class CombinedFocalLoss(Loss):
             tf.Tensor, loss tensor of shape=(B,N) if `reduction` is `NONE`,
             shape=() otherwise.
         """
-        fxe = self.xent(
-            y_true, y_pred, self.alpha, self.gamma, self.from_logits
-        )
+        fxe = self.xent(y_true, y_pred, self.alpha, self.gamma, self.from_logits)
 
         size_true = tf.reduce_sum(y_true, axis=1)
         size_pred = tf.reduce_sum(y_pred, axis=1)
@@ -285,9 +275,7 @@ def get_loss(setup, nb_classes):
         from_logits = setup.get("from_logits")
         gamma = setup.get("gamma")
         name = "focal_xent"
-        return FocalCrossentropy(
-            from_logits=from_logits, gamma=gamma, name=name
-        )
+        return FocalCrossentropy(from_logits=from_logits, gamma=gamma, name=name)
     elif setup.get("loss") == "xent_l1":
         from_logits = setup.get("from_logits")
         scale = setup.get("wgt")
@@ -321,6 +309,4 @@ def get_loss(setup, nb_classes):
             name=name,
         )
     else:
-        raise NotImplementedError(
-            f"loss named {setup.get('loss')} not implemented"
-        )
+        raise NotImplementedError(f"loss named {setup.get('loss')} not implemented")

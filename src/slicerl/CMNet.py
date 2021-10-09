@@ -1,7 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.layers import AbstractNet
 import tensorflow as tf
-from tensorflow.keras.layers import Conv1D, BatchNormalization
+from tensorflow.keras.layers import Dense, Conv1D, BatchNormalization
 
 # ======================================================================
 class CMNet(AbstractNet):
@@ -13,7 +13,7 @@ class CMNet(AbstractNet):
         f_dims=2,
         activation="relu",
         use_bias=True,
-        name="SEAC-Net",
+        name="CM-Net",
         **kwargs,
     ):
         """
@@ -141,9 +141,7 @@ class CMNet(AbstractNet):
             y_pred = self(x, training=True)  # Forward pass
             # Compute the loss value
             # (the loss function is configured in `compile()`)
-            loss = self.compiled_loss(
-                y, y_pred, regularization_losses=self.losses
-            )
+            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
 
         reset = self.cumulative_counter % self.batch_size == 0
         tf.cond(reset, self.reset_cumulator, self.increment_counter)

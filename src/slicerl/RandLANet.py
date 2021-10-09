@@ -60,9 +60,7 @@ class RandLANet(AbstractNet):
         self.fc_units = [32, 64, 128, self.nb_classes]
         self.fc_acts = [self.activation] * 3 + ["linear"]
         self.latent_f_dim = 32
-        self.enc_units = [
-            self.latent_f_dim * 2 ** i for i in range(self.nb_layers)
-        ]
+        self.enc_units = [self.latent_f_dim * 2 ** i for i in range(self.nb_layers)]
         self.enc_iunits = [8] + self.enc_units[:-1]
         self.dec_units = self.enc_units[-2::-1] + [self.fc_units[0]]
         self.fc_iunits = self.dec_units[-1:] + self.fc_units[:-1]
@@ -82,9 +80,7 @@ class RandLANet(AbstractNet):
                     name=f"fc{i+1}",
                 )
                 for i, (iunits, units, act) in enumerate(
-                    zip(
-                        self.fc_iunits[1:], self.fc_units[1:], self.fc_acts[1:]
-                    )
+                    zip(self.fc_iunits[1:], self.fc_units[1:], self.fc_acts[1:])
                 )
             ]
             self.fcs.insert(
@@ -107,9 +103,7 @@ class RandLANet(AbstractNet):
                     activation=act,
                     name=f"fc{i}",
                 )
-                for i, (units, act) in enumerate(
-                    zip(self.fc_units, self.fc_acts)
-                )
+                for i, (units, act) in enumerate(zip(self.fc_units, self.fc_acts))
             ]
         else:
             raise NotImplementedError(
@@ -148,9 +142,7 @@ class RandLANet(AbstractNet):
                 use_bias=self.use_bias,
                 name=f"DRB{i}",
             )
-            for i, (iunits, units) in enumerate(
-                zip(self.enc_iunits, self.enc_units)
-            )
+            for i, (iunits, units) in enumerate(zip(self.enc_iunits, self.enc_units))
         ]
         self.RSs = [
             RandomSample(self.scale_factor, name=f"RS{i}")
@@ -170,9 +162,7 @@ class RandLANet(AbstractNet):
                 use_bias=self.use_bias,
                 name=f"US{i}",
             )
-            for i, (iunits, units) in enumerate(
-                zip(self.dec_iunits, self.dec_units)
-            )
+            for i, (iunits, units) in enumerate(zip(self.dec_iunits, self.dec_units))
         ]
 
     # ----------------------------------------------------------------------

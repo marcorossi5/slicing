@@ -3,10 +3,6 @@ import numpy as np
 from collections import namedtuple
 from copy import deepcopy
 
-from knn import knn
-
-from numpy.linalg.linalg import LinAlgError, eig
-
 EventTuple = namedtuple(
     "EventTuple",
     [
@@ -22,18 +18,75 @@ EventTuple = namedtuple(
     ],
 )
 
-SWAP = np.array([[0, -1], [1, 0]])
+VIEW_TO_ONEHOT_IDX = {
+    "U": [1, 0, 0],
+    "V": [0, 1, 0],
+    "W": [0, 0, 1],
+}
 
+SWAP = np.array([[0, -1], [1, 0]])
 
 # ======================================================================
 class Event:
-    """Event class keeping track of calohits in a 2D plane view."""
+    """Event class wrapping different PlaneView information."""
 
     # ----------------------------------------------------------------------
-    def __init__(self, original_hits, min_hits=1, max_hits=15000):
+    def __init__(self, tpc_views, min_hits=1):
         """
         Parameters
         ----------
+            - tpc_views: tuple, three different tpc views arrays, each of
+                         shape=(12, nb_hits)
+            - min_hits : int, consider only slices with equal or more than min_hits
+        """
+        hits_U, hits_V, hits_W = tpc_views
+        self.U = PlaneView("U", hits_U, min_hits)
+        self.V = PlaneView("V", hits_V, min_hits)
+        self.W = PlaneView("W", hits_W, min_hits)
+        self.nb_all_clusters = (
+            self.U.nb_clusters + self.V.nb_clusters + self.W.nb_clusters
+        )
+        # do_sanity_checks(self.U, self.V, self.W)
+
+    # ----------------------------------------------------------------------
+    def store_preds(self, slices):
+        """
+        Store predicted slicing info in self.status.
+
+        Parameters
+        ----------
+            - slices: list, of sets containing the cluster indices that belong
+                      to the same slice
+        """
+        predU = deepcopy(self.U.ordered_cluster_idx)
+        predV = self.V.ordered_cluster_idx + self.U.nb_clusters
+        predW = self.W.ordered_cluster_idx + self.U.nb_clusters + self.V.nb_clusters
+        for slice in deepcopy(slices):
+            idx = np.min(list(slice))
+            # U plane
+            mask = np.isin(predU, list(slice))
+            predU[mask] = idx
+            # V plane
+            mask = np.isin(predV, list(slice))
+            predV[mask] = idx
+            # W plane
+            mask = np.isin(predW, list(slice))
+            predW[mask] = idx
+        self.U.status = predU
+        self.V.status = predV
+        self.W.status = predW
+
+
+# ======================================================================
+class PlaneView:
+    """PlaneView class keeping track of calohits in a 2D plane view."""
+
+    # ----------------------------------------------------------------------
+    def __init__(self, tpc_view, original_hits, min_hits=1):
+        """
+        Parameters
+        ----------
+            - tpc_view: str, TPC plane view
             - original_hits : np.array, shape=(8, num calohits), containing all the
                               event information. Each calohit is described by:
                               - energy [ADC/100]
@@ -46,23 +99,24 @@ class Event:
                               - cheating slice idx (mc truth)
                               - slicing output (array of minus ones if not loading
                                 inference results)
+                              - test beam flag
+                              - PDG
+                              - pfo index
             - min_hits : int, consider only slices with equal or more than min_hits
-            - max_hits : int, max hits to be processed by network
         """
-        # order the calohits by x and store the idx permutation
+        self.tpc_view = VIEW_TO_ONEHOT_IDX[tpc_view]
+        # order the calohits by x and store the idx permutation (this does
+        # affect the calohit ordering directly)
         self.original_calohits = original_hits
 
         calohits = deepcopy(original_hits)
         idx = np.argsort(calohits[1])
-        self.sorting_x_idx = np.repeat(
-            idx.reshape([1, -1]), calohits.shape[0], axis=0
-        )
+        self.sorting_x_idx = np.repeat(idx.reshape([1, -1]), calohits.shape[0], axis=0)
         calohits = np.take_along_axis(calohits, self.sorting_x_idx, axis=1)
 
+        # filter calohits belonging to cluster with size < min_hits
         if min_hits > 1:
-            filter_fn = (
-                lambda x: np.count_nonzero(calohits[5] == x[5]) > min_hits
-            )
+            filter_fn = lambda x: np.count_nonzero(calohits[5] == x[5]) > min_hits
             calohits = np.stack(list(filter(filter_fn, list(calohits.T))), -1)
         self.calohits = calohits
 
@@ -76,12 +130,12 @@ class Event:
         ), f"found calohit z coordinate range: [{calohits[2].min()}, {calohits[2].max()}]"
 
         # build the mc slice size ordering
+        # change the slice idx sorting by decreasing size (this does not affect
+        # the calohit ordering)
         self.mc_idx = calohits[7]
         self.ordered_mc_idx = deepcopy(calohits[7])
         sort_fn = lambda x: np.count_nonzero(calohits[7] == x)
-        self.sorted_mc_idx = sorted(
-            list(set(calohits[7])), key=sort_fn, reverse=True
-        )
+        self.sorted_mc_idx = sorted(list(set(calohits[7])), key=sort_fn, reverse=True)
         for i, idx in enumerate(self.sorted_mc_idx):
             self.ordered_mc_idx[calohits[7] == idx] = i
 
@@ -89,9 +143,7 @@ class Event:
         self.pndr_idx = calohits[6]
         self.ordered_pndr_idx = deepcopy(calohits[6])
         sort_fn = lambda x: np.count_nonzero(calohits[6] == x)
-        self.sorted_pndr_idx = sorted(
-            list(set(calohits[6])), key=sort_fn, reverse=True
-        )
+        self.sorted_pndr_idx = sorted(list(set(calohits[6])), key=sort_fn, reverse=True)
         for i, idx in enumerate(self.sorted_pndr_idx):
             self.ordered_pndr_idx[calohits[6] == idx] = i
 
@@ -110,160 +162,62 @@ class Event:
 
         # point cloud to be passed to the agent:
         # (energy, x, z, x_dir, z_dir, pfo cluster idx)
-        self.point_cloud = np.concatenate(
-            [calohits[:5], [self.ordered_cluster_idx]]
-        )
+        self.point_cloud = np.concatenate([calohits[:5], [self.ordered_cluster_idx]])
         self.status = calohits[8]
-        self.num_calohits = len(self.status)
+        self.nb_calohits = len(self.status)
 
-        self.cluster_features = self.get_cluster_features()
-        self.target_adj = self.get_cluster_target()
+        self.test_beam = self.calohits[9]  # test beam flag array
+        self.PDG = self.calohits[10]  # parent mc particle PDG array
+        self.pfo_index = self.calohits[11]  # parent pfo index attribute
 
-        """
-        import matplotlib.pyplot as plt
-        from slicerl.diagnostics import cmap, norm
-        from slicerl.tools import bfs
+        (
+            self.all_cluster_features,
+            self.cluster_to_main_pfo,
+        ) = self.get_all_cluster_info()
 
-        pred = deepcopy(self.ordered_cluster_idx)
-
-        graph = [
-                set(np.argwhere(merge==1)[:,0])
-                for merge in adj
-            ]
-        # DFS (depth first search)
-        visited = set()  # the all visited set
-        slices = []
-        for node in range(len(graph)):
-            if node in visited:
-                continue
-            slice = set()  # the current slice only
-            bfs(slice, visited, node, graph)
-            slices.append(slice)
-        
-        for slice in deepcopy(slices):
-            idx = np.min(list(slice))
-            slice.remove(idx)
-            for cluster in slice:
-                pred[pred == cluster] = idx
-        
-        print("Initial clusters: ", len(set(self.ordered_cluster_idx)))
-        print("Predicted slices: ", len(set(pred)))
-        print("mc slices: ", len(set(self.ordered_mc_idx)))
-        print("-------------------------")
-        
-        fig = plt.figure()
-        ax0 = fig.add_subplot(131)
-        ax0.scatter(self.point_cloud[1], self.point_cloud[2], s=3, cmap=cmap, norm=norm, c=self.ordered_cluster_idx%128)
-        
-        ax1 = fig.add_subplot(132)
-        ax1.scatter(self.point_cloud[1], self.point_cloud[2], s=3, cmap=cmap, norm=norm, c=pred%128)
-
-        ax2 = fig.add_subplot(133)
-        ax2.scatter(self.point_cloud[1], self.point_cloud[2], s=3, cmap=cmap, norm=norm, c=self.ordered_mc_idx%128)
-
-        #for x, z, i1, p, i2 in zip(self.point_cloud[1], self.point_cloud[2], self.ordered_cluster_idx, pred, self.ordered_mc_idx):
-        #    ax0.annotate(f"{int(i1):d}", (x,z), fontsize=3)
-        #    # ax1.annotate(f"{int(p):d}", (x,z), fontsize=3)
-        #    # ax2.annotate(f"{int(i2):d}", (x,z), fontsize=3)
-
-
-        plt.show()        
-
-        # sorted_slices = sorted(slices, key=len, reverse=True)
-        # all_slices.append(sorted_slices)
-        # state = np.zeros(N)
-        # for i, slice in enumerate(sorted_slices):
-        #     state[np.array(list(slice), dtype=NP_DTYPE_INT)] = i
-        # status.append(state)
-        """
+        # look at the do_checks function docstring
+        self.calo2mpfo = self.cluster_to_main_pfo[self.ordered_cluster_idx.astype(int)]
+        calo2pfo_set= set(self.calo2mpfo)
+        pfo_set = set(self.pfo_index)
+        self.not_visited_pfos = pfo_set.difference(calo2pfo_set)
+        self.not_visited_pfos_completeness = [np.count_nonzero(self.pfo_index == pfo)/self.nb_calohits for pfo in self.not_visited_pfos]
+        self.visited_pfos = pfo_set.intersection(calo2pfo_set)
+        self.visited_pfos_completeness = [np.count_nonzero(self.pfo_index == pfo)/self.nb_calohits for pfo in self.visited_pfos]
 
     # ----------------------------------------------------------------------
-    def get_cluster_features(self):
+    def get_all_cluster_info(self):
         """
-        Compute the adjecency matrix for the all clusters features.
+        Compute the cluster vector information for all clusters in the plane view.
+        Matches each cluster to the predominant pfo in the event.
 
         Returns
         -------
-            - np.array, of shape=(nb_clusters, nb_clusters, 2, nb_features)
+            - np.array, cluster features of shape=(nb_clusters, nb_features)
+            - np.array, main pfo index of shape=(nb_clusters)
         """
         all_features = []
-        for idx in self.cluster_set:
-            features = []
-            mask = self.ordered_cluster_idx == idx
+        # cluster to main pfo
+        c2mpfo = []
 
-            pc = self.point_cloud[1:3, mask]
-            mux, muz = pc.mean(1)
+        for idx in sorted(list(self.cluster_set)):
+            # extract cluster
+            m = self.ordered_cluster_idx == idx
+            cluster_hits = self.point_cloud[:, m]
+            hits_pct = np.count_nonzero(m) / len(self.ordered_cluster_idx)
+            all_features.append(
+                get_cluster_features(cluster_hits, hits_pct, self.tpc_view)
+            )
 
-            # standardize
-            std = pc.std(1, keepdims=True)
-            # if there's no variance on some axis, just keep it as it is
-            std[std == 0] = 1
-            std_pc = (pc - pc.mean(1, keepdims=True)) / std
-
-            # correlation matrix
-            cov = np.cov(std_pc)
-            # cov = np.corrcoef(std_pc) # raises
-            evalues, evectors = np.linalg.eig(cov)
-            pct = evalues[0] / evalues.sum()
-            # eigenvectors are evector[:,i]
-
-            # rotate the standardized cluster
-            rot_pc = np.matmul(evectors, std_pc)
-
-            # compute the cluster delimiter points
-            # the box is ok along the first PCA component, not on the second one
-            dists = (rot_pc[:, None] * evectors[..., None]).sum(0)
-            p0, p1 = np.argmin(dists, axis=1)
-            p2, p3 = np.argmax(dists, axis=1)
-            delimiters = pc[:, [p0, p1, p2, p3]]
-
-            idx = knn(delimiters.T, delimiters.T, 2)[:, 1]
-
-            # build the cluster feature vector
-            features.append(
-                np.count_nonzero(mask) / len(self.ordered_cluster_idx)
-            )  # cluster hits percentage (0)
-            features.extend([mux, muz])  # cluster mean x and z (1:3)
-            features.append(
-                self.point_cloud[3, mask][0]
-            )  # expected direction x (3)
-            features.append(
-                self.point_cloud[4, mask][0]
-            )  # expected direction z (4)
-            features.extend(evalues.flatten().tolist())  # eigenvalues (5:7)
-            features.extend(evectors.flatten().tolist())  # eigenvectors (7:11)
-            features.append(pct)  # eigenvalues percentage (11)
-            features.extend(
-                [cov[0, 0], cov[1, 0], cov[1, 1]]
-            )  # covariance matrix (12:15)
-            features.extend(
-                delimiters.flatten().tolist()
-            )  # delimiters (15:23)
-            features.append(
-                self.point_cloud[0, mask].mean()
-            )  # cluster hits mean energy (23)
-            features.append(
-                self.point_cloud[0, mask].std()
-            )  # cluster hits energy standard deviation (24)
-
-            all_features.append(np.array(features))
-        all_features = np.stack(all_features, axis=0)
-        rows = np.repeat(all_features[:, None], self.nb_clusters, axis=1)
-        cols = np.repeat(all_features[None], self.nb_clusters, axis=0)
-        adj = np.stack([rows, cols], axis=-2)
-        N = adj.shape[0]
-        first_d = adj[..., :1, 15:23].reshape(N, N, 1, 2, 4)
-        second_d = adj[..., 1:, 15:23].reshape(N, N, 1, 2, 4)
-        mins = np.full_like(adj[..., :1], np.inf)
-        for d in np.moveaxis(second_d, -1, 0):
-            dists = np.sqrt(((first_d - d[..., None]) ** 2).sum(-2))
-            dists = np.min(dists, axis=-1)[..., None]
-            mins = np.fmin(mins, dists)
-        return np.concatenate([adj, mins], axis=-1)
+            # select the main pfo for cluster
+            sort_fn = lambda x: np.count_nonzero(self.pfo_index[m] == x)
+            c2mpfo.append(
+                sorted(list(set(self.pfo_index[m])), key=sort_fn, reverse=True)[0]
+            )
+        return np.stack(all_features, axis=0), np.array(c2mpfo)
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return self.num_calohits
+        return self.nb_calohits
 
     # ----------------------------------------------------------------------
     def state(self):
@@ -277,46 +231,9 @@ class Event:
         return self.cluster_features
 
     # ----------------------------------------------------------------------
-    def get_cluster_target(self):
-        """
-        Return the perfect target state for supervised learning. Describes the
-        clusters adjecency matrix.
-
-        Returns
-        -------
-            - array of shape=(nb_clusters, nb_clusters)
-        """
-        adj = np.eye(self.nb_clusters)
-        for i in range(self.nb_clusters):
-            for j in range(i):
-                mask_0 = self.ordered_cluster_idx == i
-                mask_1 = self.ordered_cluster_idx == j
-                mask = np.logical_or(mask_0, mask_1)
-                mc_masked = self.ordered_mc_idx[mask]
-                mc_set = set(mc_masked)
-
-                if len(mc_set) == 1:
-                    adj[i, j] = 1
-                else:
-                    pct = [
-                        np.count_nonzero(mc_masked == idx) for idx in mc_set
-                    ]
-                    pct.sort(reverse=True)
-                    pct = np.array(pct)
-
-                    if pct[1] < 5 and pct[0] / pct.sum() > 0.9:
-                        adj[i, j] = 1
-                    else:
-                        adj[i, j] = 0
-
-        return adj + adj.T - np.eye(self.nb_clusters)
-
-    # ----------------------------------------------------------------------
     def original_order_status(self):
         status = np.zeros_like(self.status)
-        return np.put_along_axis(
-            status, self.sorting_x_idx, self.status, axis=1
-        )
+        return np.put_along_axis(status, self.sorting_x_idx, self.status, axis=1)
 
     # ----------------------------------------------------------------------
     def store_preds(self, slices):
@@ -363,9 +280,7 @@ class Event:
                 array,  # (E, x, z, pfo cluster idx)
                 [self.pndr_idx],  # size pndr idx (original order)
                 [self.mc_idx],  # size mc idx   (original order)
-                [
-                    self.original_order_status()
-                ],  # status vector (original order)
+                [self.original_order_status()],  # status vector (original order)
             ]
         )
 
@@ -394,4 +309,131 @@ class Event:
             fname.write(b"\n")
 
 
-# TODO: think about normalizing the cluster_idx and status inputs to the actor model
+# ----------------------------------------------------------------------
+def get_cluster_features(cluster_hits, hits_pct, tpc_view):
+    """Compute the cluster feature vector, given a single cluster
+
+    Parameters
+    ----------
+        - cluster_hits: np.array, of shape=(11, nb_cluster_hits)
+        - hits_pct: float, percentage of hits contained by this cluster over
+                    the total in the plane view
+        - tpc_view: list, one-hot list to match U/V/W planes
+
+    Return
+    ------
+        - np.array, cluster feature vector of shape=(nb_features,)
+    """
+    features = []
+
+    pc = cluster_hits[1:3]
+    mux, muz = pc.mean(1)
+
+    # standardize
+    std = pc.std(1, keepdims=True)
+    # if there's no variance on some axis, just keep it as it is
+    std[std == 0] = 1
+    std_pc = (pc - pc.mean(1, keepdims=True)) / std
+
+    # correlation matrix
+    cov = np.cov(std_pc)
+    # cov = np.corrcoef(std_pc) # raises
+    evalues, evectors = np.linalg.eig(cov)
+    pct = evalues[0] / evalues.sum()
+    # eigenvectors are evector[:,i]
+
+    # rotate the standardized cluster
+    rot_pc = np.matmul(evectors, std_pc)
+
+    # compute the cluster delimiter points
+    # the box is ok along the first PCA component, not on the second one
+    dists = (rot_pc[:, None] * evectors[..., None]).sum(0)
+    p0, p1 = np.argmin(dists, axis=1)
+    p2, p3 = np.argmax(dists, axis=1)
+    delimiters = pc[:, [p0, p1, p2, p3]]
+
+    # build the cluster feature vector
+    features.append(hits_pct)  # cluster hits percentage (0)
+    features.extend([mux, muz])  # cluster mean x and z (1:3)
+    features.append(cluster_hits[3, 0])  # expected direction x (3)
+    features.append(cluster_hits[4, 0])  # expected direction z (4)
+    features.extend(evalues.flatten().tolist())  # eigenvalues (5:7)
+    features.extend(evectors.flatten().tolist())  # eigenvectors (7:11)
+    features.append(pct)  # eigenvalues percentage (11)
+    features.extend([cov[0, 0], cov[1, 0], cov[1, 1]])  # covariance matrix (12:15)
+    features.extend(delimiters.flatten().tolist())  # delimiters (15:23)
+    features.append(cluster_hits[0].mean())  # cluster hits mean energy (23)
+    features.append(
+        cluster_hits[0].std()
+    )  # cluster hits energy standard deviation (24)
+    features.extend(tpc_view)
+    return np.array(features)
+
+# ======================================================================
+
+def do_sanity_checks(U,V,W):
+    """
+    Performs sanity checks.
+
+    Note
+    ----
+        clusters and pfos are two different calohit partitions. clusters
+        operate at PlaneView level, while pfos are event-wide.
+        Since 2D clustering is not a perfect algorithm, there could be
+        discrepancies between the two set partitions. We must ensure that the
+        discrepancies are tiny and do not spoil the slicing algorithm performance.
+        Check then the pfos that are left aside when assigning the main pfo to
+        a cluster, have in fact small contribution (completeness) in the
+        overall event (i.e., the percentage of the calohits relative to these
+        pfos is small).
+    """
+    import matplotlib.pyplot as plt
+    from slicerl.diagnostics import norm, cmap
+    bins = np.logspace(-4,0,20)
+    plt.subplot(131)
+    plt.title("U plane")
+    plt.hist(U.visited_pfos_completeness, bins=bins, label='visited', color='green', histtype='step', lw=0.5)
+    plt.hist(U.not_visited_pfos_completeness, bins=bins, label='not visited', color='red', histtype='step', lw=0.5)
+    plt.legend()
+    plt.xscale('log')
+    plt.xlabel('Pfo completeness')
+    plt.subplot(132)
+    plt.title("V plane")
+    plt.hist(V.visited_pfos_completeness, bins=bins, label='visited', color='green', histtype='step', lw=0.5)
+    plt.hist(V.not_visited_pfos_completeness, bins=bins, label='not visited', color='red', histtype='step', lw=0.5)
+    plt.xscale('log')
+    plt.xlabel('Pfo completeness')
+    plt.subplot(133)
+    plt.title("W plane")
+    plt.hist(W.visited_pfos_completeness, bins=bins, label='visited', color='green', histtype='step', lw=0.5)
+    plt.hist(W.not_visited_pfos_completeness, bins=bins, label='not visited', color='red', histtype='step', lw=0.5)
+    plt.xscale('log')
+    plt.xlabel('Pfo completeness')
+    plt.show()
+
+    plt.subplot(331)
+    plt.title("U plane")
+    plt.ylabel("inputs")
+    plt.scatter(U.calohits[1]*1000, U.calohits[2]*1000, s=0.5, c=U.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.subplot(332)
+    plt.title("V plane")
+    plt.scatter(V.calohits[1]*1000, V.calohits[2]*1000, s=0.5, c=V.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.subplot(333)
+    plt.title("W plane")
+    plt.scatter(W.calohits[1]*1000, W.calohits[2]*1000, s=0.5, c=W.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.subplot(334)
+    plt.ylabel("truths")
+    plt.scatter(U.calohits[1]*1000, U.calohits[2]*1000, s=0.5, c=U.calohits[7]%128, norm=norm, cmap=cmap)
+    plt.subplot(335)
+    plt.scatter(V.calohits[1]*1000, V.calohits[2]*1000, s=0.5, c=V.calohits[7]%128, norm=norm, cmap=cmap)
+    plt.subplot(336)
+    plt.scatter(W.calohits[1]*1000, W.calohits[2]*1000, s=0.5, c=W.calohits[7]%128, norm=norm, cmap=cmap)
+    plt.subplot(337)
+    plt.ylabel("calo to pfos")
+    plt.scatter(U.calohits[1]*1000, U.calohits[2]*1000, s=0.5, c=U.calo2mpfo%128, norm=norm, cmap=cmap)
+    plt.subplot(338)
+    plt.scatter(V.calohits[1]*1000, V.calohits[2]*1000, s=0.5, c=V.calo2mpfo%128, norm=norm, cmap=cmap)
+    plt.subplot(339)
+    plt.scatter(W.calohits[1]*1000, W.calohits[2]*1000, s=0.5, c=W.calo2mpfo%128, norm=norm, cmap=cmap)
+
+    plt.show()

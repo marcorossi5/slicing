@@ -115,9 +115,7 @@ def plot_hyperopt(trials_fname):
     df, bestdf = build_dataframe(trials, bestid)
 
     # plot scans
-    plot_scans(
-        df, bestdf, trials, bestid, trials_fname.with_name("hopt_scan.png")
-    )
+    plot_scans(df, bestdf, trials, bestid, trials_fname.with_name("hopt_scan.png"))
 
     # plot correlation matrix
     plot_correlations(df, trials_fname.with_name("hopt_corr.png"))
