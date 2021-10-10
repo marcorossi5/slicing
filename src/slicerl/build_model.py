@@ -82,8 +82,8 @@ def load_network(setup, checkpoint_filepath=None):
 
     if checkpoint_filepath:
         # dummy forward pass to build the layers
-        # dummy_generator = dummy_dataset(setup["model"]["f_dims"])
-        # net.evaluate(dummy_generator.inputs, verbose=0)
+        dummy_generator = dummy_dataset(setup["model"]["f_dims"])
+        net.evaluate(dummy_generator.inputs, verbose=0)
 
         print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath)
@@ -325,6 +325,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     for i, idx in enumerate(sorted_pfosW):
         pfoW[ev.W.calohits[-1] == idx] = i
 
+    #----------------------------------------------
     statusU = deepcopy(ev.U.status)
     statusV = deepcopy(ev.V.status)
     statusW = deepcopy(ev.W.status)
@@ -333,17 +334,17 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         all_calo = np.concatenate([ev.U.status, ev.V.status, ev.W.status])
         return np.count_nonzero(all_calo == x)
 
-    sorted_pfosU = sorted(list(set(ev.U.status)), key=sort_fn, reverse=True)
-    sorted_pfosV = sorted(list(set(ev.V.status)), key=sort_fn, reverse=True)
-    sorted_pfosW = sorted(list(set(ev.W.status)), key=sort_fn, reverse=True)
-    for i, idx in enumerate(sorted_pfosU):
+    sorted_statusU = sorted(list(set(ev.U.status)), key=sort_fn, reverse=True)
+    sorted_statusV = sorted(list(set(ev.V.status)), key=sort_fn, reverse=True)
+    sorted_statusW = sorted(list(set(ev.W.status)), key=sort_fn, reverse=True)
+    for i, idx in enumerate(sorted_statusU):
         statusU[ev.U.status == idx] = i
-    for i, idx in enumerate(sorted_pfosV):
+    for i, idx in enumerate(sorted_statusV):
         statusV[ev.V.status == idx] = i
-    for i, idx in enumerate(sorted_pfosW):
+    for i, idx in enumerate(sorted_statusW):
         statusW[ev.W.status == idx] = i
 
-    plt.subplot(231)
+    plt.subplot(331)
     plt.title("U plane")
     plt.ylabel("output")
     plt.scatter(
@@ -354,7 +355,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(232)
+    plt.subplot(332)
     plt.title("V plane")
     plt.scatter(
         ev.V.calohits[1] * 1000,
@@ -364,7 +365,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(233)
+    plt.subplot(333)
     plt.title("W plane")
     plt.scatter(
         ev.W.calohits[1] * 1000,
@@ -375,7 +376,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         cmap=cmap,
     )
 
-    plt.subplot(234)
+    plt.subplot(334)
     plt.ylabel("pfos")
     plt.scatter(
         ev.U.calohits[1] * 1000,
@@ -385,7 +386,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(235)
+    plt.subplot(335)
     plt.scatter(
         ev.V.calohits[1] * 1000,
         ev.V.calohits[2] * 1000,
@@ -394,7 +395,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(236)
+    plt.subplot(336)
     plt.scatter(
         ev.W.calohits[1] * 1000,
         ev.W.calohits[2] * 1000,
@@ -404,13 +405,13 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         cmap=cmap,
     )
 
-    # plt.subplot(337)
-    # plt.ylabel("clusters")
-    # plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=ev.U.calohits[5]%128, norm=norm, cmap=cmap)
-    # plt.subplot(338)
-    # plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=ev.V.calohits[5]%128, norm=norm, cmap=cmap)
-    # plt.subplot(339)
-    # plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=ev.W.calohits[5]%128, norm=norm, cmap=cmap)
+    plt.subplot(337)
+    plt.ylabel("Test beam")
+    plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=ev.U.calohits[9], norm=norm, cmap=cmap)
+    plt.subplot(338)
+    plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=ev.V.calohits[9], norm=norm, cmap=cmap)
+    plt.subplot(339)
+    plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=ev.W.calohits[9], norm=norm, cmap=cmap)
 
     if no_graphics:
         fname = output_dir.joinpath(f"plots/visual_check_{evno}.png")

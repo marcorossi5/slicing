@@ -101,9 +101,9 @@ class AbstractNet(Model):
             adj += adj.T + np.eye(nb_clusters)
             preds.append(adj)
             # threshold to find positive and negative edges
-            pred = pred > threshold
+            pred = adj > threshold
 
-            graph = [set(np.argwhere(merge)[:, 0]) for merge in adj]
+            graph = [set(np.argwhere(merge)[:, 0]) for merge in pred]
 
             # BFS (breadth first search)
             visited = set()  # the all visited set
@@ -114,6 +114,31 @@ class AbstractNet(Model):
                 slice = set()  # the current slice only
                 bfs(slice, visited, node, graph)
                 slices.append(slice)
-
+            
             all_slices.append(slices)
+
+            # print_prediction(adj, all_slices)
+
         return Predictions(preds, all_slices)
+
+def print_prediction(adj, slices):
+    """Prints to std output the adj matrix and all the slices."""
+    import sys
+    nb_clusters = len(adj)
+    print(f"Number of clusters: {nb_clusters}")
+    adj_mod = np.concatenate([np.arange(nb_clusters).reshape(1,-1), adj], axis=0)
+    extra_line = np.concatenate([[-1], np.arange(nb_clusters)])
+    adj_mod = np.concatenate([extra_line.reshape(-1,1), adj_mod], axis=1)
+    
+    lw = 400
+    np.set_printoptions(precision=2, suppress=True, threshold=sys.maxsize, linewidth=lw)
+    print(adj_mod)
+
+    pred = (adj > 0.5).astype(int)
+    print(pred)
+    edges = np.argwhere(pred)
+    m = edges[:,0] > edges[:,1]
+    print(edges[m])
+
+    for slice in slices:
+        print(slice)
