@@ -2,6 +2,89 @@
 from slicerl.AbstractNet import AbstractNet
 from tensorflow.keras.layers import Dense, BatchNormalization, Dropout, Concatenate
 from tensorflow.keras import Input, Model
+from tensorflow.keras.layers import Layer
+
+
+# ======================================================================
+class Head(Layer):
+    """ Class defining Spatial Encoding Attention Convolutional Layer. """
+
+    # ----------------------------------------------------------------------
+    def __init__(
+        self,
+        filters,
+        nb_head,
+        dropout,
+        activation="relu",
+        name="head",
+        **kwargs,
+    ):
+        """
+        Parameters
+        ----------
+            - dh              : int, number of hidden feature dimensions
+            - do              : int, number of output dimensions
+            - ds              : int, number of spatial encoding output dimensions
+            - K               : int, number of nearest neighbors
+            - dims            : int, point cloud spatial dimensions
+            - f_dims          : int, point cloud feature dimensions
+            - locse_nb_layers : int, number of hidden layers in LocSE block
+            - activation      : str, MLP layer activation
+            - use_bias        : bool, wether to use bias in MLPs
+        """
+        super(Head, self).__init__(name=name, **kwargs)
+        self.filters = filters
+        self.nb_head = nb_head
+        self.dropout = dropout
+        self.activation = activation
+        self.lyrs = []
+        
+    # ----------------------------------------------------------------------
+    def build(self, input_shape):
+        """
+        Note: the MLP kernel has size 1. This means that point features are
+              not mixed across neighbours.
+        """
+        for i, filters in enumerate(self.filters[1:]):
+            ishape = input_shape if i == 0 else (self.filters[i],)
+            l = Dense(filters, activation=self.activation, input_shape=ishape, name=f"dense_{self.nb_head}_{i}")
+            self.lyrs.append(l)
+            if i%3 == 0:
+                l = BatchNormalization(input_shape=(None, filters), name=f"bn_{self.nb_head}_{i}")
+                self.lyrs.append(l)
+                l = Dropout(self.dropout, input_shape=(filters,), name=f"do_{self.nb_head}_{i}")
+                self.lyrs.append(l)
+
+    # ----------------------------------------------------------------------
+    def call(self, inputs):
+        """
+        Layer forward pass.
+
+        Parameters
+        ----------
+            - inputs : list of tf.Tensors, tensors describing spatial and
+                       feature point cloud of shapes=[(B,N,dims), (B,N,f_dims)]
+
+        Returns
+        -------
+            tf.Tensor of shape=(B,N,K,do)
+        """
+        x = inputs
+        for layer in self.lyrs:
+            x = layer(x)
+        return x
+
+    # ----------------------------------------------------------------------
+    def get_config(self):
+        config = super(Head, self).get_config()
+        config.update(
+            {
+                "nb_head": self.nb_head,
+                "dropout": self.dropout,
+                "activation": self.activation,
+            }
+        )
+        return config
 
 # ======================================================================
 class FFNN(AbstractNet):
@@ -33,7 +116,7 @@ class FFNN(AbstractNet):
         self.dropout = 0.2
 
         # store some useful parameters
-        self.input_shapes = [
+        self.filters = [
             self.f_dims,
             self.f_dims * 2,
             self.f_dims * 3,
@@ -52,23 +135,14 @@ class FFNN(AbstractNet):
             1
         ]
 
+        self.nb_heads = 3
         self.heads = []
-        for head in self.heads:
-            for i, filters in enumerate(self.input_shapes[1:]):
-                l = Dense(filters, activation=self.activation, name=f"dense_{i}")
-                l.build(input_shape=(self.input_shapes[i],))
-                head.append(l)
-                if i%3 == 0:
-                    l = BatchNormalization(name=f"bn_{i}")
-                    l.build(input_shape=(None, filters))
-                    head.append(l)
-                    l = Dropout(self.dropout, name=f"do_{i}")
-                    l.build(input_shape=(filters,))
-                    head.append(l)
+        for ih in range(self.nb_heads):
+            self.heads.append(Head(self.filters, ih, self.dropout, activation=self.activation, name=f"head_{ih}"))
 
         self.concat = Concatenate(axis=-1, name='cat')
         self.final_dense = Dense(1, activation="sigmoid", name="final")
-        self.final_dense.build(input_shape=(len(self.heads)*self.input_shapes[-1],))
+        self.final_dense.build(input_shape=(len(self.heads)*self.filters[-1],))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -83,11 +157,8 @@ class FFNN(AbstractNet):
         """
         results = []
         for head in self.heads:
-            x = inputs
-            for layer in head:
-                x = layer(x)
-            results.append(x)
-        
+            results.append(head(inputs))
+
         return self.final_dense(self.concat(results))
 
     # ----------------------------------------------------------------------
