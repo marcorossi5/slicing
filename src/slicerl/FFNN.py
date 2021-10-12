@@ -1,6 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.AbstractNet import AbstractNet
-from tensorflow.keras.layers import Dense, BatchNormalization, Dropout
+from tensorflow.keras.layers import Dense, BatchNormalization, Dropout, Concatenate
 from tensorflow.keras import Input, Model
 
 # ======================================================================
@@ -36,27 +36,39 @@ class FFNN(AbstractNet):
         self.input_shapes = [
             self.f_dims,
             self.f_dims * 2,
+            self.f_dims * 3,
             self.f_dims * 4,
+            self.f_dims * 5,
+            self.f_dims * 6,
+            self.f_dims * 7,
             self.f_dims * 8,
+            self.f_dims * 7,
+            self.f_dims * 6,
+            self.f_dims * 5,
+            self.f_dims * 4,
+            self.f_dims * 3,
+            self.f_dims * 2,
             128,
+            1
         ]
 
-        self.fcs = []
-        for i, filters in enumerate(self.input_shapes[1:]):
-            l = Dense(filters, activation=self.activation, name=f"dense_{i}")
-            l.build(input_shape=(self.input_shapes[i],))
-            self.fcs.append(l)
+        self.heads = []
+        for head in self.heads:
+            for i, filters in enumerate(self.input_shapes[1:]):
+                l = Dense(filters, activation=self.activation, name=f"dense_{i}")
+                l.build(input_shape=(self.input_shapes[i],))
+                head.append(l)
+                if i%3 == 0:
+                    l = BatchNormalization(name=f"bn_{i}")
+                    l.build(input_shape=(None, filters))
+                    head.append(l)
+                    l = Dropout(self.dropout, name=f"do_{i}")
+                    l.build(input_shape=(filters,))
+                    head.append(l)
 
-            l = BatchNormalization(name=f"bn_{i}")
-            l.build(input_shape=(None, filters))
-            self.fcs.append(l)
-
-            l = Dropout(self.dropout, name=f"do_{i}")
-            l.build(input_shape=(filters,))
-            self.fcs.append(l)
-
+        self.concat = Concatenate(axis=-1, name='cat')
         self.final_dense = Dense(1, activation="sigmoid", name="final")
-        self.final_dense.build(input_shape=(self.input_shapes[-1],))
+        self.final_dense.build(input_shape=(len(self.heads)*self.input_shapes[-1],))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -69,10 +81,14 @@ class FFNN(AbstractNet):
         -------
             tf.Tensor, output tensor of shape=(B,N,nb_classes)
         """
-        inputs
-        for layer in self.fcs:
-            inputs = layer(inputs)
-        return self.final_dense(inputs)
+        results = []
+        for head in self.heads:
+            x = inputs
+            for layer in head:
+                x = layer(x)
+            results.append(x)
+        
+        return self.final_dense(self.concat(results))
 
     # ----------------------------------------------------------------------
     def model(self):
