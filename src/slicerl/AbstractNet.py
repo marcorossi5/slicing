@@ -133,7 +133,7 @@ class AbstractNet(Model):
 
             all_slices.append(slices)
 
-            print_prediction(adj, all_slices)
+            # print_prediction(adj, all_slices)
 
         return Predictions(y_pred, preds, all_slices)
 
