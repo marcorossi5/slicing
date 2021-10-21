@@ -253,6 +253,7 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
 
     y_pred = net.get_prediction(
         test_generator.inputs,
+        test_generator.nb_clusters_list,
         setup["model"]["test_batch_size"],
         threshold=setup["model"]["threshold"],
     )
@@ -262,8 +263,7 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
         do_visual_checks(ev, i, setup["output"], no_graphics)
         if i > 10:
             break
-    exit("build_model.py l. 271")
-
+    """
     plot_slice_size(test_generator.events, setup["output"].joinpath("plots"))
     plot_multiplicity(test_generator.events, setup["output"].joinpath("plots"))
     plot_test_beam_metrics(test_generator.events, setup["output"].joinpath("plots"))
@@ -284,11 +284,13 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
             i,
             setup["output"].joinpath("plots"),
         )
+    """
 
     # plot histogram of the network decisions
     hist_true = [trg.flatten() for trg in test_generator.targets]
-    hist_pred = [pred.flatten() for pred in y_pred.preds]
+    hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
     plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
+    exit("build_model.py l.297")
 
     if show_graph:
         plot_graph(
@@ -325,7 +327,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     for i, idx in enumerate(sorted_pfosW):
         pfoW[ev.W.calohits[-1] == idx] = i
 
-    #----------------------------------------------
+    # ----------------------------------------------
     statusU = deepcopy(ev.U.status)
     statusV = deepcopy(ev.V.status)
     statusW = deepcopy(ev.W.status)
@@ -344,7 +346,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     for i, idx in enumerate(sorted_statusW):
         statusW[ev.W.status == idx] = i
 
-    plt.subplot(331)
+    plt.figure(figsize=(6.4 * 3, 4.8 * 4))
+    plt.subplot(431)
     plt.title("U plane")
     plt.ylabel("output")
     plt.scatter(
@@ -355,7 +358,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(332)
+    plt.subplot(432)
     plt.title("V plane")
     plt.scatter(
         ev.V.calohits[1] * 1000,
@@ -365,7 +368,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(333)
+    plt.subplot(433)
     plt.title("W plane")
     plt.scatter(
         ev.W.calohits[1] * 1000,
@@ -376,7 +379,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         cmap=cmap,
     )
 
-    plt.subplot(334)
+    plt.subplot(434)
     plt.ylabel("pfos")
     plt.scatter(
         ev.U.calohits[1] * 1000,
@@ -386,7 +389,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(335)
+    plt.subplot(435)
     plt.scatter(
         ev.V.calohits[1] * 1000,
         ev.V.calohits[2] * 1000,
@@ -395,7 +398,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(336)
+    plt.subplot(436)
     plt.scatter(
         ev.W.calohits[1] * 1000,
         ev.W.calohits[2] * 1000,
@@ -405,13 +408,63 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         cmap=cmap,
     )
 
-    plt.subplot(337)
+    plt.subplot(437)
     plt.ylabel("Test beam")
-    plt.scatter(ev.U.calohits[1]*1000, ev.U.calohits[2]*1000, s=0.5, c=ev.U.calohits[9], norm=norm, cmap=cmap)
-    plt.subplot(338)
-    plt.scatter(ev.V.calohits[1]*1000, ev.V.calohits[2]*1000, s=0.5, c=ev.V.calohits[9], norm=norm, cmap=cmap)
-    plt.subplot(339)
-    plt.scatter(ev.W.calohits[1]*1000, ev.W.calohits[2]*1000, s=0.5, c=ev.W.calohits[9], norm=norm, cmap=cmap)
+    plt.scatter(
+        ev.U.calohits[1] * 1000,
+        ev.U.calohits[2] * 1000,
+        s=0.5,
+        c=ev.U.calohits[9],
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.subplot(438)
+    plt.scatter(
+        ev.V.calohits[1] * 1000,
+        ev.V.calohits[2] * 1000,
+        s=0.5,
+        c=ev.V.calohits[9],
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.subplot(439)
+    plt.scatter(
+        ev.W.calohits[1] * 1000,
+        ev.W.calohits[2] * 1000,
+        s=0.5,
+        c=ev.W.calohits[9],
+        norm=norm,
+        cmap=cmap,
+    )
+
+    plt.subplot(4, 3, 10)
+    plt.ylabel("Input clusters")
+    plt.scatter(
+        ev.U.calohits[1] * 1000,
+        ev.U.calohits[2] * 1000,
+        s=0.5,
+        c=ev.U.calohits[5] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.subplot(4, 3, 11)
+    plt.scatter(
+        ev.V.calohits[1] * 1000,
+        ev.V.calohits[2] * 1000,
+        s=0.5,
+        c=ev.V.calohits[5] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.subplot(4, 3, 12)
+    plt.scatter(
+        ev.W.calohits[1] * 1000,
+        ev.W.calohits[2] * 1000,
+        s=0.5,
+        c=ev.W.calohits[5] % 128,
+        norm=norm,
+        cmap=cmap,
+    )
 
     if no_graphics:
         fname = output_dir.joinpath(f"plots/visual_check_{evno}.png")

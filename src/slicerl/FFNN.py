@@ -38,7 +38,7 @@ class Head(Layer):
         self.dropout = dropout
         self.activation = activation
         self.lyrs = []
-        
+
     # ----------------------------------------------------------------------
     def build(self, input_shape):
         """
@@ -47,12 +47,21 @@ class Head(Layer):
         """
         for i, filters in enumerate(self.filters[1:]):
             ishape = input_shape if i == 0 else (self.filters[i],)
-            l = Dense(filters, activation=self.activation, input_shape=ishape, name=f"dense_{self.nb_head}_{i}")
+            l = Dense(
+                filters,
+                activation=self.activation,
+                input_shape=ishape,
+                name=f"dense_{self.nb_head}_{i}",
+            )
             self.lyrs.append(l)
-            if i%3 == 0:
-                l = BatchNormalization(input_shape=(None, filters), name=f"bn_{self.nb_head}_{i}")
+            if i % 3 == 0:
+                l = BatchNormalization(
+                    input_shape=(None, filters), name=f"bn_{self.nb_head}_{i}"
+                )
                 self.lyrs.append(l)
-                l = Dropout(self.dropout, input_shape=(filters,), name=f"do_{self.nb_head}_{i}")
+                l = Dropout(
+                    self.dropout, input_shape=(filters,), name=f"do_{self.nb_head}_{i}"
+                )
                 self.lyrs.append(l)
 
     # ----------------------------------------------------------------------
@@ -85,6 +94,7 @@ class Head(Layer):
             }
         )
         return config
+
 
 # ======================================================================
 class FFNN(AbstractNet):
@@ -132,17 +142,25 @@ class FFNN(AbstractNet):
             self.f_dims * 3,
             self.f_dims * 2,
             128,
-            1
+            1,
         ]
 
         self.nb_heads = 3
         self.heads = []
         for ih in range(self.nb_heads):
-            self.heads.append(Head(self.filters, ih, self.dropout, activation=self.activation, name=f"head_{ih}"))
+            self.heads.append(
+                Head(
+                    self.filters,
+                    ih,
+                    self.dropout,
+                    activation=self.activation,
+                    name=f"head_{ih}",
+                )
+            )
 
-        self.concat = Concatenate(axis=-1, name='cat')
+        self.concat = Concatenate(axis=-1, name="cat")
         self.final_dense = Dense(1, activation="sigmoid", name="final")
-        self.final_dense.build(input_shape=(len(self.heads)*self.filters[-1],))
+        self.final_dense.build(input_shape=(len(self.heads) * self.filters[-1],))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):

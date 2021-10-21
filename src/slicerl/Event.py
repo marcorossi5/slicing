@@ -43,9 +43,12 @@ class Event:
         self.U = PlaneView("U", hits_U, min_hits)
         self.V = PlaneView("V", hits_V, min_hits)
         self.W = PlaneView("W", hits_W, min_hits)
-        self.nb_all_clusters = (
-            self.U.nb_clusters + self.V.nb_clusters + self.W.nb_clusters
+        self.nb_plane_clusters = (
+            self.U.nb_clusters,
+            self.V.nb_clusters,
+            self.W.nb_clusters,
         )
+        self.nb_all_clusters = sum(self.nb_plane_clusters)
         # do_sanity_checks(self.U, self.V, self.W)
 
     # ----------------------------------------------------------------------

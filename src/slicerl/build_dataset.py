@@ -24,6 +24,12 @@ class EventDataset(tf.keras.utils.Sequence):
         """
         # needed to generate the dataset
         self.__events = data[0]
+        self.nb_clusters_list = (
+            [ev.nb_plane_clusters for ev in self.__events]
+            if self.__events is not None
+            else None
+        )
+
         self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
         self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
         self.batch_size = batch_size
@@ -68,6 +74,13 @@ class EventDataset(tf.keras.utils.Sequence):
         else:
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
+
+        nb_positive = np.count_nonzero(self.bal_targets)
+        nb_all = len(self.bal_targets)
+        balancing = nb_positive / nb_all
+        print("After balancing")
+        print(f"Training points: {nb_all} of which positives: {nb_positive}")
+        print(f"Percentage of positives: {balancing}")
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -217,19 +230,20 @@ def generate_inputs_and_targets(event, is_training=False):
     # create network inputs and targets
     inputs = []
     targets = []
-    for i in range(event.nb_all_clusters):
-        for j in range(event.nb_all_clusters):
-            if i == j:
-                continue
-            if i < j and not is_training:
-                continue
-            inps = np.concatenate([acf[i], acf[j]])
-            inputs.append(inps)
-            tgt = 1.0 if c2mpfo[i] == c2mpfo[j] else 0.0
-            targets.append(tgt)
+    ped = 0
+    for nb_cluster in event.nb_plane_clusters:
+        for i in range(nb_cluster):
+            for j in range(nb_cluster):
+                if i == j:
+                    continue
+                if i < j and not is_training:
+                    continue
+                inps = np.concatenate([acf[ped + i], acf[ped + j]])
+                inputs.append(inps)
+                tgt = 1.0 if c2mpfo[ped + i] == c2mpfo[ped + j] else 0.0
+                targets.append(tgt)
+        ped += nb_cluster
     return np.stack(inputs, axis=0), np.array(targets)
-
-    # TODO: if is_training, filter away the zeros and balance the dataset
 
 
 # ======================================================================
