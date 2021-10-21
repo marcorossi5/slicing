@@ -211,10 +211,9 @@ def build_and_train_model(setup, generators):
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(
-        train_generator.inputs,
-        train_generator.targets,
+        train_generator,
         epochs=setup["train"]["epochs"],
-        validation_data=(val_generator.inputs, val_generator.targets),
+        validation_data=val_generator,
         callbacks=callbacks,
         verbose=2,
     )
