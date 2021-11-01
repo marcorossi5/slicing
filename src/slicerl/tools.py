@@ -222,20 +222,20 @@ def dfs(visited, node, graph):
 
 
 # ----------------------------------------------------------------------
-def bfs(slice, visited, root, graph):
+def bfs(sl, visited, root, graph):
     """
     Breadth First Search graph traversing. Fills in the visited set with the
     node indices reachable from root node.
 
     Parameters
     ----------
-        - slice   : set, of points in the same slice
-        - visited : set, of already visited nodes
-        - root    : int, index of root search node
-        - graph   : list, of same slice neighbours indices
+        - sl: set, of points in the same slice
+        - visited: set, of already visited nodes
+        - root: int, index of root search node
+        - graph: list, of same slice neighbours indices
     """
     queue = deque([root])
-    slice.add(root)
+    sl.add(root)
     visited.add(root)
 
     while queue:
@@ -247,7 +247,7 @@ def bfs(slice, visited, root, graph):
         # If not visited, mark it as visited, and
         # enqueue it
         for neighbour in graph[node]:
-            if (neighbour not in visited) and (neighbour not in slice):
-                slice.add(neighbour)
+            if (neighbour not in visited) and (neighbour not in sl):
+                sl.add(neighbour)
                 visited.add(neighbour)
                 queue.append(neighbour)

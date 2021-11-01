@@ -1,29 +1,34 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.layers import AbstractNet
+from numpy.lib.arraysetops import isin
+from slicerl.AbstractNet import AbstractNet
+from slicerl.layers import Attention
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Conv1D, BatchNormalization
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Concatenate, Input
+from tensorflow.keras.activations import sigmoid
 
 # ======================================================================
-class CMNet(AbstractNet):
-    """ Class deifining CM-Net: Cluster merging network. """
-
+class CMANet(AbstractNet):
+    """ Class deifining Cluster Merging with Attention Network. """
     def __init__(
         self,
-        batch_size=1,
-        f_dims=2,
+        batch_size=32,
+        f_dims=6,
         activation="relu",
         use_bias=True,
-        name="CM-Net",
+        name="CMANet",
         **kwargs,
     ):
         """
         Parameters
         ----------
-            - f_dims     : int, point cloud feature dimensions
-            - activation : str, default layer activation
-            - use_bias   : bool, wether to use bias or not
+            - batch_size: int, batch size
+            - f_dims: int, point cloud feature dimensions
+            - activation: str, default layer activation
+            - use_bias: bool, wether to use bias or not
         """
-        super(CMNet, self).__init__(f_dims=f_dims, name=name, **kwargs)
+        super(CMANet, self).__init__(f_dims=f_dims, name=name, **kwargs)
 
         # store args
         self.batch_size = int(batch_size)
@@ -34,40 +39,29 @@ class CMNet(AbstractNet):
         # self.cumulative_gradients = None
         self.cumulative_counter = tf.constant(0)
 
-        # store some useful parameters
-        self.nb_filters = [32, 64, 128, 256, 128, 64, 32, 16, 8]
-        kernel_sizes = [2] + [1] * (len(self.nb_filters) - 1)
-        self.convs = [
-            Conv1D(
-                filters,
-                kernel_size,
+        # attention layers
+        self.att_filters = [8, 16, 32]
+        self.atts = [Attention(f,f, name=f"att_{i}") for i, f in enumerate(self.att_filters)]
+
+        # MLPs
+        self.fc_filters = [8, 4, 2]
+        self.fcs = [
+            Dense(
+                f,
                 # kernel_constraint=MaxNorm(axis=[0, 1]),
                 activation=self.activation,
                 use_bias=self.use_bias,
-                name=f"conv_{i}",
+                name=f"fc_{i}",
             )
-            for i, (filters, kernel_size) in enumerate(
-                zip(self.nb_filters, kernel_sizes)
-            )
+            for i, f in enumerate(self.fc_filters)
         ]
 
-        self.bns = (
-            [None] * 2
-            + [BatchNormalization(name="bn_0")]
-            + [None] * 2
-            + [BatchNormalization(name="bn_1")]
-            + [None] * 2
-            + [BatchNormalization(name="bn_2")]
-        )
+        self.cat = Concatenate(axis=-1, name='cat')
 
-        self.final_conv = Conv1D(
-            1,
-            1,
-            # kernel_constraint=MaxNorm(axis=[0, 1]),
-            activation="sigmoid",
-            use_bias=self.use_bias,
-            name=f"final_conv",
-        )
+        self.final_fc = Dense(1,
+                use_bias=self.use_bias,
+                name=f"fc_final"
+                )
         self.build_weights()
         self.cumulative_gradients = [
             tf.Variable(tf.zeros_like(this_var), trainable=False)
@@ -78,15 +72,15 @@ class CMNet(AbstractNet):
     # ----------------------------------------------------------------------
     def build_weights(self):
         """ Explicitly build the weights."""
-        input_shapes = [self.f_dims] + self.nb_filters[:-1]
-        for conv, input_shape in zip(self.convs, input_shapes):
-            conv.build((input_shape,))
+        input_shapes = [self.f_dims] + self.att_filters[:-1]
+        for att, input_shape in zip(self.atts, input_shapes):
+            att.build((None, None, input_shape))
 
-        self.final_conv.build((self.nb_filters[-1],))
-
-        for bn, input_shape in zip(self.bns, self.nb_filters):
-            if bn is not None:
-                bn.build((None, None, None, None, input_shape))
+        input_shapes = [self.att_filters[-1]*3] + self.fc_filters[:-1]
+        for fc, input_shape in zip(self.fcs, input_shapes):
+            fc.build((None, input_shape))
+        
+        self.final_fc.build((self.fc_filters[-1],))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -100,12 +94,20 @@ class CMNet(AbstractNet):
         -------
             tf.Tensor, output tensor of shape=(B,N,nb_classes)
         """
-        x = inputs
-        for conv, bn in zip(self.convs, self.bns):
-            x = conv(x)
-            if bn is not None:
-                x = bn(x)
-        return tf.squeeze(self.final_conv(x), [-2, -1])
+        for att in self.atts:
+            inputs = att(inputs)
+
+        global_max = tf.math.reduce_max(inputs, axis=-2, name='max')
+        global_min = tf.math.reduce_min(inputs, axis=-2, name='min')
+        global_avg = tf.math.reduce_mean(inputs, axis=-2, name='avg')
+        # global_std = tf.math.reduce_std(inputs, axis=-2, name='std') raises NaN
+        x = self.cat([global_max, global_min, global_avg])
+
+        for fc in self.fcs:
+            x = fc(x)
+        
+        act = tf.squeeze(self.final_fc(x), axis=-1)
+        return sigmoid(act)
 
     # ----------------------------------------------------------------------
     def reset_cumulator(self):
@@ -167,3 +169,30 @@ class CMNet(AbstractNet):
         self.compiled_metrics.update_state(y, y_pred)
         # Return a dict mapping metric names to current value
         return {m.name: m.result() for m in self.metrics}
+    
+    # ----------------------------------------------------------------------
+    def model(self):
+        inputs = Input(shape=(None, self.f_dims), name="pc")
+        return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
+
+    # ----------------------------------------------------------------------
+    def predict(self, x, batch_size, **kwargs):
+        """
+        Overrides the predict method of mother class. CMANet accepts only
+        tensors of shape (1,N,C) as inputs. This method allows to pass a numpy array of
+        tensors
+        """
+        from tqdm import tqdm
+        if isinstance(x, np.ndarray):
+            if len(x.shape) == 3:
+                return super(CMANet, self).predict(x, batch_size, **kwargs)
+            elif len(x.shape) == 1:
+                out = []
+                for i in tqdm(x):
+                    inputs = np.expand_dims(i, 0)
+                    out.append(super(CMANet, self).predict(inputs, batch_size, **kwargs))
+                print(out, type(out))
+                exit()
+                return out
+
+

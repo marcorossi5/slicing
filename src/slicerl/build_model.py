@@ -1,7 +1,8 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.FFNN import FFNN
+from slicerl.CMANet import CMANet
 from slicerl.losses import dice_loss
-from slicerl.build_dataset import dummy_dataset
+from slicerl.build_dataset import dummy_dataset, load_events, get_generator
 from slicerl.diagnostics import (
     plot_plane_view,
     plot_slice_size,
@@ -14,6 +15,7 @@ from slicerl.diagnostics import (
 import os
 from copy import deepcopy
 from time import time as tm
+import numpy as np
 
 import tensorflow as tf
 import tensorflow.keras.backend as tfK
@@ -39,24 +41,29 @@ def load_network(setup, checkpoint_filepath=None):
 
     Returns
     -------
-        - SeacNet
+        - AbstractNet derived class
     """
     net_dict = {
         "batch_size": setup["model"]["batch_size"],
         "use_bias": setup["model"]["use_bias"],
         "f_dims": setup["model"]["f_dims"],
     }
-    net = FFNN(name="FFNN", **net_dict)
+    if setup["model"]["net_type"] == "FF":
+        net = FFNN(name="FFNN", **net_dict)
+    elif setup["model"]["net_type"] == "CMA":
+        net = CMANet(name="CMANet", **net_dict)
+    else:
+        raise ValueError(f"Unrecognised network: got {setup['model']['net_type']}")
 
     lr = setup["train"]["lr"]
     if setup["train"]["optimizer"] == "Adam":
-        opt = Adam(lr=lr)
+        opt = Adam(learning_rate=lr)
     elif setup["train"]["optimizer"] == "SGD":
-        opt = SGD(lr=lr)
+        opt = SGD(learning_rate=lr)
     elif setup["train"]["optimizer"] == "RMSprop":
-        opt = RMSprop(lr=lr)
+        opt = RMSprop(learning_rate=lr)
     elif setup["train"]["optimizer"] == "Adagrad":
-        opt = Adagrad(lr=lr)
+        opt = Adagrad(learning_rate=lr)
 
     if setup["train"]["loss"] == "xent":
         loss = tf.keras.losses.BinaryCrossentropy(name="xent")
@@ -82,12 +89,11 @@ def load_network(setup, checkpoint_filepath=None):
 
     if checkpoint_filepath:
         # dummy forward pass to build the layers
-        dummy_generator = dummy_dataset(setup["model"]["f_dims"])
+        dummy_generator = dummy_dataset(setup["model"]["net_type"], setup["model"]["f_dims"])
         net.evaluate(dummy_generator.inputs, verbose=0)
 
         print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath)
-
     return net
 
 
@@ -237,7 +243,7 @@ def build_and_train_model(setup, generators):
 
 
 # ----------------------------------------------------------------------
-def inference(setup, test_generator, show_graph=False, no_graphics=False):
+def inference(setup, show_graph=False, no_graphics=False):
     tfK.clear_session()
     print("[+] done with training, load best weights")
     checkpoint_filepath = setup["output"].joinpath("network.h5")
@@ -250,14 +256,31 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
     #     f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]} \t test precision: {results[2]} \t test recall: {results[3]}"
     # )
 
-    y_pred = net.get_prediction(
-        test_generator.inputs,
-        test_generator.nb_clusters_list,
+    min_hits = setup["test"]["min_hits"]
+    cthreshold = setup["test"]["cthreshold"]
+    events = load_events(setup["test"]["fn"], setup["test"]["nev"], min_hits)
+    test_generator = get_generator(
+        events,
+        setup["model"]["net_type"],
         setup["model"]["test_batch_size"],
-        threshold=setup["model"]["threshold"],
+        min_hits=min_hits,
+        cthreshold=cthreshold,
     )
 
+    # collect statistics
+    hist_true = []
+    hist_pred = []
+    test_batch_size = 1 if setup["model"]["net_type"] == "CMA" else setup["model"]["test_batch_size"]
+    y_pred = net.get_prediction(
+        test_generator,
+        test_batch_size,
+        threshold=setup["model"]["threshold"],
+    )
     test_generator.events = y_pred
+
+    hist_true.append([trg.flatten() for trg in test_generator.targets])
+    hist_pred.append([pred.flatten() for pred in y_pred.all_y_pred])
+
     for i, ev in enumerate(test_generator.events):
         do_visual_checks(ev, i, setup["output"], no_graphics)
         if i > 10:
@@ -286,9 +309,11 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
     """
 
     # plot histogram of the network decisions
-    hist_true = [trg.flatten() for trg in test_generator.targets]
-    hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
-    plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
+    # hist_true = [trg.flatten() for trg in test_generator.targets]
+    # hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
+    for htrue, hpred in zip(hist_true, hist_pred):
+        plot_histogram(htrue, hpred, setup["output"].joinpath("plots"))
+
     exit("build_model.py l.297")
 
     if show_graph:
@@ -345,8 +370,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     for i, idx in enumerate(sorted_statusW):
         statusW[ev.W.status == idx] = i
 
-    plt.figure(figsize=(6.4 * 3, 4.8 * 4))
-    plt.subplot(431)
+    plt.figure(figsize=(6.4 * 3, 4.8 * 5))
+    plt.subplot(531)
     plt.title("U plane")
     plt.ylabel("output")
     plt.scatter(
@@ -357,7 +382,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(432)
+    plt.tick_params(axis="both", labelleft=True, labelbottom=False)
+    plt.subplot(532)
     plt.title("V plane")
     plt.scatter(
         ev.V.calohits[1] * 1000,
@@ -367,7 +393,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(433)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(533)
     plt.title("W plane")
     plt.scatter(
         ev.W.calohits[1] * 1000,
@@ -377,8 +404,39 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-
-    plt.subplot(434)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(534)
+    plt.ylabel("Pandora")
+    plt.scatter(
+        ev.U.calohits[1] * 1000,
+        ev.U.calohits[2] * 1000,
+        s=0.5,
+        c=ev.U.ordered_pndr_idx,
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(535)
+    plt.scatter(
+        ev.V.calohits[1] * 1000,
+        ev.V.calohits[2] * 1000,
+        s=0.5,
+        c=ev.V.ordered_pndr_idx,
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(536)
+    plt.scatter(
+        ev.W.calohits[1] * 1000,
+        ev.W.calohits[2] * 1000,
+        s=0.5,
+        c=ev.W.ordered_pndr_idx,
+        norm=norm,
+        cmap=cmap,
+    )
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(537)
     plt.ylabel("pfos")
     plt.scatter(
         ev.U.calohits[1] * 1000,
@@ -388,7 +446,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(435)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(538)
     plt.scatter(
         ev.V.calohits[1] * 1000,
         ev.V.calohits[2] * 1000,
@@ -397,7 +456,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(436)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(539)
     plt.scatter(
         ev.W.calohits[1] * 1000,
         ev.W.calohits[2] * 1000,
@@ -406,8 +466,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-
-    plt.subplot(437)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(5, 3, 10)
     plt.ylabel("Test beam")
     plt.scatter(
         ev.U.calohits[1] * 1000,
@@ -417,7 +477,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(438)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(5, 3, 11)
     plt.scatter(
         ev.V.calohits[1] * 1000,
         ev.V.calohits[2] * 1000,
@@ -426,7 +487,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(439)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(5, 3, 12)
     plt.scatter(
         ev.W.calohits[1] * 1000,
         ev.W.calohits[2] * 1000,
@@ -435,8 +497,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-
-    plt.subplot(4, 3, 10)
+    plt.tick_params(axis="both", labelbottom=False)
+    plt.subplot(5, 3, 13)
     plt.ylabel("Input clusters")
     plt.scatter(
         ev.U.calohits[1] * 1000,
@@ -446,7 +508,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(4, 3, 11)
+    plt.tick_params(axis="both", labelbottom=True)
+    plt.subplot(5, 3, 14)
     plt.scatter(
         ev.V.calohits[1] * 1000,
         ev.V.calohits[2] * 1000,
@@ -455,7 +518,8 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
-    plt.subplot(4, 3, 12)
+    plt.tick_params(axis="both", labelbottom=True)
+    plt.subplot(5, 3, 15)
     plt.scatter(
         ev.W.calohits[1] * 1000,
         ev.W.calohits[2] * 1000,
@@ -464,6 +528,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         norm=norm,
         cmap=cmap,
     )
+    plt.tick_params(axis="both", labelbottom=True)
 
     if no_graphics:
         fname = output_dir.joinpath(f"plots/visual_check_{evno}.png")

@@ -57,13 +57,14 @@ class Reader(object):
             c.append(self.readline_fn(self.stream) / 1000.0)  # zs [10^1 m]
             c.append(self.readline_fn(self.stream) / 1000.0)  # x expected direction
             c.append(self.readline_fn(self.stream) / 1000.0)  # z expected direction
-            c.append(self.readline_fn(self.stream))  # cluster_idx
+            cluster_idx = self.readline_fn(self.stream)
+            c.append(cluster_idx)  # cluster_idx
             c.append(self.readline_fn(self.stream))  # pndr_idx
             c.append(self.readline_fn(self.stream))  # cheating_idx (mc truth)
             if self.load_results:
                 c.append(self.readline_fn(self.stream))  # slicerl_idx
             else:
-                c.append(np.full_like(c[-1], -1))
+                c.append(cluster_idx)
             c.append(self.readline_fn(self.stream))  # test beam flag
             c.append(self.readline_fn(self.stream))  # PDG
             c.append(self.readline_fn(self.stream))  # pfo index
@@ -144,7 +145,7 @@ class Events(Image):
     """Read input file with calohits and transform into python events."""
 
     # ----------------------------------------------------------------------
-    def __init__(self, infile, nmax, min_hits, max_hits, load_results=False):
+    def __init__(self, infile, nmax, min_hits, load_results=False):
         """
         Parameters
         ----------
@@ -156,7 +157,6 @@ class Events(Image):
         """
         Image.__init__(self, infile, nmax, load_results)
         self.min_hits = min_hits
-        self.max_hits = max_hits
         self.printouts = 10
 
     # ----------------------------------------------------------------------
@@ -166,9 +166,7 @@ class Events(Image):
 
 
 # ======================================================================
-def load_Events_from_file(
-    filename, nev=-1, min_hits=1, max_hits=15000, load_results=False
-):
+def load_Events_from_file(filename, nev=-1, min_hits=1, load_results=False):
     """
     Utility function to load Events object from file. Return a list of Event
     objects.
@@ -178,7 +176,6 @@ def load_Events_from_file(
         - filename     : str, file to load events from
         - nev          : int, number of events to load
         - min_hits     : int, consider slices with more than min_hits Calohits only
-        - max_hits     : int, max hits to be processed by network
         - load_results : bool, wether to load results from a previous slicing
                            inference or not.
 
@@ -188,14 +185,12 @@ def load_Events_from_file(
             list of loaded Event object (with length equal to nev)
     """
     print(f"[+] Reading {filename}")
-    reader = Events(filename, nev, min_hits, max_hits, load_results)
+    reader = Events(filename, nev, min_hits, load_results)
     return reader.values()
 
 
 # ======================================================================
-def load_Events_from_files(
-    filelist, nev=-1, min_hits=1, max_hits=15000, load_results=False
-):
+def load_Events_from_files(filelist, nev=-1, min_hits=1, load_results=False):
     """
     Utility function to load Events object from file. Return a list of Event
     objects.
@@ -205,7 +200,6 @@ def load_Events_from_files(
         - filename     : list, list of files to load events from
         - nev          : int, number of events to load
         - min_hits     : int, consider slices with more than min_hits Calohits only
-        - max_hits     : int, max hits to be processed by network
         - load_results : bool, wether to load results from a previous slicing
                            inference or not.
 
@@ -217,7 +211,7 @@ def load_Events_from_files(
     events = []
     for fname in filelist:
         print(f"[+] Reading {fname}")
-        events.extend(Events(fname, nev, min_hits, max_hits, load_results).values())
+        events.extend(Events(fname, nev, min_hits, load_results).values())
     return events
 
 
