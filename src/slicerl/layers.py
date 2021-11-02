@@ -1,10 +1,12 @@
 # This file is part of SliceRL by M. Rossi
 # Inlcudes the implementation of the AttentionLayer
+from typing_extensions import Concatenate
 import tensorflow as tf
 from tensorflow import matmul
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Permute
+from tensorflow.keras.layers import Layer, Dense, Permute, TimeDistributed, Concatenate
 from tensorflow.keras.activations import softmax
+from slicerl.config import float_me
 
 # ======================================================================
 class Attention(Model):
@@ -12,8 +14,8 @@ class Attention(Model):
     # ----------------------------------------------------------------------
     def __init__(
         self,
+        iunits,
         units,
-        h_hunits,
         activation="relu",
         use_bias=True,
         **kwargs,
@@ -21,42 +23,35 @@ class Attention(Model):
         """
         Parameters
         ----------
+            - iunits: int, input channels
             - units: int, output channels
-            - h_units: int, hidden channels
             - activation: str, MLP layer activation
             - use_bias: bool, wether to use bias in MLPs
         """
         super(Attention, self).__init__(**kwargs)
         self.units = units
-        self.h_units = h_hunits
+        self.iunits = iunits
+        self.sqrtdk = tf.math.sqrt(float_me(iunits))
         self.activation = activation
         self.use_bias = use_bias
         self.fc_query = Dense(
-            self.h_units,
+            self.units,
             activation=self.activation,
             use_bias=self.use_bias,
             name="fc_query",
         )
         self.fc_key = Dense(
-            self.h_units,
+            self.units,
             activation=self.activation,
             use_bias=self.use_bias,
             name="fc_key",
         )
         self.fc_value = Dense(
-            self.h_units,
+            self.units,
             activation=self.activation,
             use_bias=self.use_bias,
             name="fc_value",
         )
-        self.fc_mixing = Dense(
-            self.units,
-            activation=self.activation,
-            use_bias=self.use_bias,
-            name="fc_mixing",
-        )
-
-        self.perm = Permute((2,1))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -72,12 +67,14 @@ class Attention(Model):
         -------
             - tf.Tensor of shape=(B,N,Cout)
         """
-        query = self.fc_query(inputs)
-        key = self.fc_key(inputs)
-        value = self.fc_query(inputs)
-        kq = softmax(matmul(key, query, transpose_b=True), axis=-1)
-        attention = self.perm(matmul(value, kq, transpose_a=True))
-        return self.fc_mixing(attention)
+        Q = self.fc_query(inputs)
+        K = self.fc_key(inputs)
+        V = self.fc_query(inputs)
+        kq = Q*K/tf.math.sqrt(self.sqrtdk)
+        
+        weights = tf.exp(kq) / tf.reduce_sum(tf.exp(kq), axis=-1, keepdims=True)
+
+        return V*weights
 
     # ----------------------------------------------------------------------
     def get_config(self):
@@ -85,9 +82,20 @@ class Attention(Model):
         config.update(
             {
                 "units": self.units,
-                "h_units": self.h_units,
                 "activation": self.activation,
                 "use_bias": self.use_bias,
             }
         )
         return config
+
+# ======================================================================
+class GlobalFeatureExtractor(Layer):
+    def __init__(self, **kwargs):
+        super(GlobalFeatureExtractor, self).__init__(**kwargs)
+        self.cat = Concatenate(axis=-1, name='cat')
+    
+    def __call__(self, inputs):
+        global_max = tf.math.reduce_max(inputs, axis=-2, name='max')
+        global_min = tf.math.reduce_min(inputs, axis=-2, name='min')
+        global_avg = tf.math.reduce_mean(inputs, axis=-2, name='avg')
+        return self.cat([global_max, global_min, global_avg])

@@ -84,47 +84,16 @@ def load_network(setup, checkpoint_filepath=None):
         ],
         run_eagerly=setup.get("debug"),
     )
-    if not setup["scan"]:
-        net.model().summary()
+    # dummy forward pass to build the layers
+    dummy_generator = dummy_dataset(setup["model"]["net_type"], setup["model"]["f_dims"])
+    net.evaluate(dummy_generator.bal_inputs, verbose=0)
+    # if not setup["scan"]:
+    #     net.summary()
 
     if checkpoint_filepath:
-        # dummy forward pass to build the layers
-        dummy_generator = dummy_dataset(setup["model"]["net_type"], setup["model"]["f_dims"])
-        net.evaluate(dummy_generator.inputs, verbose=0)
-
         print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath)
     return net
-
-
-# ======================================================================
-def trace(net, generator):
-    """
-    Network first training epoch could last proportionally to the dataset size.
-    Build the network graph trace to speed up the incoming real computation with
-    a dummy backward pass.
-
-    Parameters
-    ----------
-        - net: AbstractNet, network to trace
-        - generator: EventDataset, iterable dataset to train
-
-    Returns
-    -------
-        - AbstractNet, traced network
-    """
-    print("[+] Ahead of time tracing ...")
-    # reduce generator to minimum
-    generator = deepcopy(generator)
-    generator.__len__ = 1
-    net.fit(
-        generator,
-        epochs=1,
-        verbose=1,
-    )
-    print("[+] Network traced ...")
-    return net
-    # TODO: fix this to use dummy dataset instead of modifying generator length
 
 
 # ======================================================================
@@ -142,6 +111,7 @@ def build_and_train_model(setup, generators):
         network model if scan is False, else dict with loss and status keys.
     """
     tfK.clear_session()
+
     if setup["scan"]:
         batch_size = setup["model"]["batch_size"]
         loss = setup["train"]["loss"]
@@ -195,31 +165,17 @@ def build_and_train_model(setup, generators):
             write_graph=False,
             write_images=True,
             histogram_freq=setup["train"]["hist_freq"],
-            profile_batch=5,
+            profile_batch=0,
         )
 
     callbacks.append(tboard)
 
-    # net = trace(net, train_generator)
-
-    # # warmup
-    # original_lr = net.optimizer.learning_rate
-    # tfK.set_value(net.optimizer.learning_rate, original_lr*50)
-    # print(f"[+] Warmup 2 epochs ...")
-    # r = net.fit(
-    #     train_generator,
-    #     epochs=2,
-    #     validation_data=val_generator,
-    #     callbacks=callbacks,
-    #     verbose=2,
-    # )
-    # tfK.set_value(net.optimizer.learning_rate, original_lr)
-
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(
-        train_generator,
+        train_generator.bal_inputs,
+        train_generator.bal_targets,
         epochs=setup["train"]["epochs"],
-        validation_data=val_generator,
+        validation_data=(val_generator.bal_inputs, val_generator.bal_targets),
         callbacks=callbacks,
         verbose=2,
     )

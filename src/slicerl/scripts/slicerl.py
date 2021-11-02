@@ -140,10 +140,14 @@ def main():
     if args.force:
         print("WARNING: Running with --force option will overwrite existing model")
 
+    import warnings
+    warnings.filterwarnings('ignore')
+
     setup = {}
     if args.debug:
         print("[+] Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
+        tf.data.experimental.enable_debug_mode()
         setup["debug"] = True
 
     if args.runcard:

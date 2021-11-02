@@ -1,11 +1,12 @@
 # This file is part of SliceRL by M. Rossi
 from numpy.lib.arraysetops import isin
 from slicerl.AbstractNet import AbstractNet
-from slicerl.layers import Attention
+from slicerl.layers import Attention, GlobalFeatureExtractor
+from slicerl.config import TF_DTYPE
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Concatenate, Input
+from tensorflow.keras import Input, Model
+from tensorflow.keras.layers import Dense, Concatenate, TimeDistributed, InputLayer
 from tensorflow.keras.activations import sigmoid
 
 # ======================================================================
@@ -39,12 +40,16 @@ class CMANet(AbstractNet):
         # self.cumulative_gradients = None
         self.cumulative_counter = tf.constant(0)
 
+        # input layer
+        self.input_layer = InputLayer(type_spec=tf.RaggedTensorSpec(shape=(None, None, self.f_dims), dtype=TF_DTYPE), name="pc")
+
         # attention layers
-        self.att_filters = [8, 16, 32]
-        self.atts = [Attention(f,f, name=f"att_{i}") for i, f in enumerate(self.att_filters)]
+        self.att_filters = [8, 16, 32, 64, 128]
+        ifilters = [self.f_dims] + self.att_filters[:-1]
+        self.atts = [Attention(i, f, name=f"att_{i}") for i, (i, f) in enumerate(zip(ifilters, self.att_filters))]
 
         # MLPs
-        self.fc_filters = [8, 4, 2]
+        self.fc_filters = [128, 64, 32, 16, 8, 4, 2]
         self.fcs = [
             Dense(
                 f,
@@ -56,18 +61,13 @@ class CMANet(AbstractNet):
             for i, f in enumerate(self.fc_filters)
         ]
 
-        self.cat = Concatenate(axis=-1, name='cat')
+        self.gfe = GlobalFeatureExtractor(name='feat_extractor')
 
         self.final_fc = Dense(1,
                 use_bias=self.use_bias,
                 name=f"fc_final"
                 )
         self.build_weights()
-        self.cumulative_gradients = [
-            tf.Variable(tf.zeros_like(this_var), trainable=False)
-            for this_var in self.trainable_variables
-        ]
-        self.cumulative_counter = tf.Variable(tf.constant(0), trainable=False)
 
     # ----------------------------------------------------------------------
     def build_weights(self):
@@ -94,14 +94,11 @@ class CMANet(AbstractNet):
         -------
             tf.Tensor, output tensor of shape=(B,N,nb_classes)
         """
+        x = self.input_layer(inputs)
         for att in self.atts:
-            inputs = att(inputs)
+            x = att(x)
 
-        global_max = tf.math.reduce_max(inputs, axis=-2, name='max')
-        global_min = tf.math.reduce_min(inputs, axis=-2, name='min')
-        global_avg = tf.math.reduce_mean(inputs, axis=-2, name='avg')
-        # global_std = tf.math.reduce_std(inputs, axis=-2, name='std') raises NaN
-        x = self.cat([global_max, global_min, global_avg])
+        x = self.gfe(x)
 
         for fc in self.fcs:
             x = fc(x)
@@ -110,89 +107,18 @@ class CMANet(AbstractNet):
         return sigmoid(act)
 
     # ----------------------------------------------------------------------
-    def reset_cumulator(self):
-        """
-        Reset counter and gradients cumulator gradients.
-        """
-
-        for i in range(len(self.cumulative_gradients)):
-            self.cumulative_gradients[i].assign(
-                tf.zeros_like(self.trainable_variables[i])
-            )
-        self.cumulative_counter.assign(tf.constant(1))
-
-    # ----------------------------------------------------------------------
-    def increment_counter(self):
-        """
-        Reset counter and gradients cumulator gradients.
-        """
-        self.cumulative_counter.assign_add(tf.constant(1))
-
-    # ----------------------------------------------------------------------
-    def train_step(self, data):
-        """
-        The network accumulates the gradients according to batch size, to allow
-        gradient averaging over multiple inputs. The aim is to reduce the loss
-        function fluctuations.
-        """
-        # Unpack the data. Its structure depends on your model and
-        # on what you pass to `fit()`.
-        x, y = data
-
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)  # Forward pass
-            # Compute the loss value
-            # (the loss function is configured in `compile()`)
-            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
-
-        reset = self.cumulative_counter % self.batch_size == 0
-        tf.cond(reset, self.reset_cumulator, self.increment_counter)
-
-        # Compute gradients
-        trainable_vars = self.trainable_variables
-
-        gradients = tape.gradient(loss, trainable_vars)
-        for i, grad in enumerate(gradients):
-            self.cumulative_gradients[i].assign_add(grad / self.batch_size)
-
-        # Update weights
-        reset = self.cumulative_counter % self.batch_size == 0
-        tf.cond(
-            reset,
-            lambda: self.optimizer.apply_gradients(
-                zip(self.cumulative_gradients, trainable_vars)
-            ),
-            lambda: False,
-        )
-
-        # Update metrics (includes the metric that tracks the loss)
-        self.compiled_metrics.update_state(y, y_pred)
-        # Return a dict mapping metric names to current value
-        return {m.name: m.result() for m in self.metrics}
-    
-    # ----------------------------------------------------------------------
     def model(self):
         inputs = Input(shape=(None, self.f_dims), name="pc")
         return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
-    # ----------------------------------------------------------------------
-    def predict(self, x, batch_size, **kwargs):
-        """
-        Overrides the predict method of mother class. CMANet accepts only
-        tensors of shape (1,N,C) as inputs. This method allows to pass a numpy array of
-        tensors
-        """
-        from tqdm import tqdm
-        if isinstance(x, np.ndarray):
-            if len(x.shape) == 3:
-                return super(CMANet, self).predict(x, batch_size, **kwargs)
-            elif len(x.shape) == 1:
-                out = []
-                for i in tqdm(x):
-                    inputs = np.expand_dims(i, 0)
-                    out.append(super(CMANet, self).predict(inputs, batch_size, **kwargs))
-                print(out, type(out))
-                exit()
-                return out
 
-
+from tensorflow.keras import Sequential
+def get_dummy_net():
+    model = Sequential([
+        Input(shape=[None, 6], dtype=TF_DTYPE, ragged=True),
+        Attention(8,8, name="att"),
+        GlobalFeatureExtractor(name="extractor"),
+        Dense(1, name="dense")
+    ])
+    model.compile(loss='binary_crossentropy', optimizer='rmsprop')
+    return model

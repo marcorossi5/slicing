@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+from threading import Event
 from slicerl.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 
@@ -18,7 +19,7 @@ class EventDataset(tf.keras.utils.Sequence):
         cthresholds=None,
         is_training=False,
         shuffle=False,
-        verbose=1
+        verbose=0
     ):
         """
         This generator must be used for training only.
@@ -53,13 +54,13 @@ class EventDataset(tf.keras.utils.Sequence):
             self.targets
         ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
         if is_training:
+            nb_positive = np.count_nonzero(self.targets)
+            nb_all = len(self.targets)
+            balancing = nb_positive / nb_all
             if verbose == 1:
-                nb_positive = np.count_nonzero(self.targets)
-                nb_all = len(self.targets)
-                balancing = nb_positive / nb_all
                 print(f"Training points: {nb_all} of which positives: {nb_positive}")
                 print(f"Percentage of positives: {balancing}")
-                self.balance_dataset(balancing)
+            self.balance_dataset(balancing)
         else:
             self.evt_counter = 0
             self.bal_inputs = self.inputs
@@ -112,7 +113,7 @@ class EventDataset(tf.keras.utils.Sequence):
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return ceil(len(self.bal_inputs) / self.batch_size)
+        return ceil(self.bal_inputs.shape[0] / self.batch_size)
 
     # ----------------------------------------------------------------------
     @property
@@ -176,25 +177,22 @@ class EventDataset(tf.keras.utils.Sequence):
 # ======================================================================
 class EventDatasetCMA(EventDataset):
     # ----------------------------------------------------------------------
-    def __init__(self,
-        data,
-        batch_size,
-        cthresholds=None,
-        is_training=False,
-        shuffle=False,
-    ):
-        super(EventDatasetCMA, self).__init__(data, batch_size, cthresholds, is_training, shuffle)
-        assert self.batch_size == 1, "CMANet must have unit batch size"
+    def __init__(self, *args, **kwargs):
+        super(EventDatasetCMA, self).__init__(*args, **kwargs)
+        nb_c = [inp.shape[0] for inp in self.bal_inputs]
+        values = np.concatenate(self.bal_inputs.tolist())
+        self.bal_inputs = tf.RaggedTensor.from_row_splits(values, np.cumsum([0] + nb_c))
+        self.bal_targets = tf.constant(self.bal_targets)
     
     # ----------------------------------------------------------------------
-    def __getitem__(self, idx):
-        if self.is_training:
-            batch_x = np.expand_dims(self.bal_inputs[idx], 0)
-            batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
-            return batch_x, batch_y
-        batch_x = np.expand_dims(self.bal_inputs[self.evt_counter][idx], 0)
-        batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
-        return batch_x, batch_y
+    # def __getitem__(self, idx):
+    #     if self.is_training:
+    #         batch_x = np.expand_dims(self.bal_inputs[idx], 0)
+    #         batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
+    #         return batch_x, batch_y
+    #     batch_x = np.expand_dims(self.bal_inputs[self.evt_counter][idx], 0)
+    #     batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
+    #     return batch_x, batch_y
 
 
 # ======================================================================
@@ -438,13 +436,7 @@ def get_generator(
     -------
         - EventDataset, object for inference
     """
-    if net == "FF":
-        gen_wrapper = EventDataset
-    elif net == "CMA":
-        batch_size = 1
-        gen_wrapper = EventDatasetCMA
-    else:
-        raise ValueError(f"Unrecognised network: got {net}")
+    gen_wrapper = EventDatasetCMA if net == "CMA" else EventDataset
     
     kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
     inputs = []
@@ -550,13 +542,23 @@ def dummy_dataset(net, nb_feats):
     -------
         - EventDataset, dummy generator
     """
-    # TODO: check this function, insert net?
-    B = 32 if net == "FF" else 1
-    input_shape = (B, nb_feats) if net == "FF" else (B, 50, nb_feats)
-    inputs = [np.random.rand(*input_shape) for i in range(2)]
-    targets = [np.random.rand(B) for i in range(2)]
+    B = 32
+    gen_wrapper = EventDataset if net == "FF" else EventDatasetCMA
+    if net == "CMA":
+        nb_nodes = [np.random.randint(5, 15) for i in range(2*B)]
+        ev0 = [np.random.rand(c, nb_feats) for c in nb_nodes[:B]]
+        ev0 = np.array(ev0, dtype=object)
+        ev1 = [np.random.rand(c, nb_feats) for c in nb_nodes[B:]]
+        ev1 = np.array(ev0, dtype=object)
+        inputs = [ev0, ev1]
+        targets = [np.random.randint(0,2, size=(1,)) for i in range(2*B)]
+    elif net == "FF":
+        inputs = [np.random.rand(1, nb_feats) for i in range(B)]
+        targets = [np.random.randint(0,2, size=(1,)) for i in range(B)]
+    else:
+        raise ValueError(f"Unrecognised network: got {net}")
     data = (None, [inputs, targets])
-    return EventDataset(data, batch_size=B, is_training=True, verbose=0)
+    return gen_wrapper(data, batch_size=B, is_training=True, verbose=0)
 
 
 # ======================================================================
