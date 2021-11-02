@@ -1,6 +1,5 @@
 # This file is part of SliceRL by M. Rossi
 # Inlcudes the implementation of the AttentionLayer
-from typing_extensions import Concatenate
 import tensorflow as tf
 from tensorflow import matmul
 from tensorflow.keras.models import Model
