@@ -8,6 +8,8 @@ import tensorflow as tf
 from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
 import pickle, pprint
+import warnings
+
 
 # ----------------------------------------------------------------------
 def config_tf(setup):
@@ -140,8 +142,7 @@ def main():
     if args.force:
         print("WARNING: Running with --force option will overwrite existing model")
 
-    import warnings
-    warnings.filterwarnings('ignore')
+    warnings.filterwarnings("ignore")
 
     setup = {}
     if args.debug:

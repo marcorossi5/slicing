@@ -1,6 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 from threading import Event
-from slicerl.config import NP_DTYPE
+from slicerl.config import NP_DTYPE, float_me
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 
 import tensorflow as tf
@@ -19,7 +19,7 @@ class EventDataset(tf.keras.utils.Sequence):
         cthresholds=None,
         is_training=False,
         shuffle=False,
-        verbose=0
+        verbose=0,
     ):
         """
         This generator must be used for training only.
@@ -60,14 +60,14 @@ class EventDataset(tf.keras.utils.Sequence):
             if verbose == 1:
                 print(f"Training points: {nb_all} of which positives: {nb_positive}")
                 print(f"Percentage of positives: {balancing}")
-            self.balance_dataset(balancing)
+            self.balance_dataset(balancing, verbose)
         else:
             self.evt_counter = 0
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
 
     # ----------------------------------------------------------------------
-    def balance_dataset(self, balancing):
+    def balance_dataset(self, balancing, verbose):
         """
         Balances the dataset discarding part of the negative samples to match
         the size of the positive ones. This happens if the ratio of positve
@@ -76,6 +76,7 @@ class EventDataset(tf.keras.utils.Sequence):
         Parameters
         ----------
             - balancing: float, percentage of positive samples over the total
+            - verbose: int, print balancing stats
         """
         if balancing < 0.2:
             m_positives = self.targets.astype(bool)
@@ -91,12 +92,13 @@ class EventDataset(tf.keras.utils.Sequence):
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
 
-        nb_positive = np.count_nonzero(self.bal_targets)
-        nb_all = len(self.bal_targets)
-        balancing = nb_positive / nb_all
-        print("After balancing")
-        print(f"Training points: {nb_all} of which positives: {nb_positive}")
-        print(f"Percentage of positives: {balancing}")
+        if verbose:
+            nb_positive = np.count_nonzero(self.bal_targets)
+            nb_all = len(self.bal_targets)
+            balancing = nb_positive / nb_all
+            print("After balancing")
+            print(f"Training points: {nb_all} of which positives: {nb_positive}")
+            print(f"Percentage of positives: {balancing}")
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -179,11 +181,12 @@ class EventDatasetCMA(EventDataset):
     # ----------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(EventDatasetCMA, self).__init__(*args, **kwargs)
-        nb_c = [inp.shape[0] for inp in self.bal_inputs]
-        values = np.concatenate(self.bal_inputs.tolist())
-        self.bal_inputs = tf.RaggedTensor.from_row_splits(values, np.cumsum([0] + nb_c))
-        self.bal_targets = tf.constant(self.bal_targets)
-    
+        if self.is_training:
+            self.bal_inputs = numpy_to_ragged_tensor(self.bal_inputs)
+            self.bal_targets = float_me(self.bal_targets)
+        else:
+            self.bal_inputs = [numpy_to_ragged_tensor(inps) for inps in self.bal_inputs]
+
     # ----------------------------------------------------------------------
     # def __getitem__(self, idx):
     #     if self.is_training:
@@ -193,6 +196,27 @@ class EventDatasetCMA(EventDataset):
     #     batch_x = np.expand_dims(self.bal_inputs[self.evt_counter][idx], 0)
     #     batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
     #     return batch_x, batch_y
+
+
+# ======================================================================
+def numpy_to_ragged_tensor(inputs):
+    """
+    Transforms an np.array of objects of shape [(None), nb_feats] to a
+    tf.RaggedTensor of shape [cluster pairs, (nb_hits), nb_feats] describing an
+    input of the CMANet.
+
+    Parameters
+    ----------
+        - inputs: np.array, inputs of shape (cluster pairs,), each of shape
+                  [(None), nb_feats]
+
+    Returns
+    -------
+        - tf.RaggedTensor, of shape=[cluster pairs, (nb_hits), nb_feats]
+    """
+    nb_c = [inp.shape[0] for inp in inputs]
+    values = np.concatenate(inputs.tolist())
+    return tf.RaggedTensor.from_row_splits(values, np.cumsum([0] + nb_c))
 
 
 # ======================================================================
@@ -319,6 +343,7 @@ def generate_inputs_and_targets_ff(event, is_training=False, min_hits=1):
         ped += nb_cluster
     return np.stack(inputs, axis=0), np.array(targets)
 
+
 # ======================================================================
 def generate_inputs_and_targets_cma(event, is_training=False, min_hits=1):
     """
@@ -372,9 +397,9 @@ def generate_inputs_and_targets_cma(event, is_training=False, min_hits=1):
                 if np.ceil(nb_hits1) < min_hits or np.ceil(nb_hits2) < min_hits:
                     continue
                 # get inputs
-                extra_f = np.zeros([acf[ped + i].shape[0],1])
+                extra_f = np.zeros([acf[ped + i].shape[0], 1])
                 c1 = np.concatenate([acf[ped + i], extra_f], axis=-1)
-                extra_f = np.ones([acf[ped + j].shape[0],1])
+                extra_f = np.ones([acf[ped + j].shape[0], 1])
                 c2 = np.concatenate([acf[ped + j], extra_f], axis=-1)
                 inps = np.concatenate([c1, c2])
                 inputs.append(inps)
@@ -383,6 +408,7 @@ def generate_inputs_and_targets_cma(event, is_training=False, min_hits=1):
                 targets.append(tgt)
         ped += nb_cluster
     return np.array(inputs, dtype=object), np.array(targets)
+
 
 # ======================================================================
 def load_events(fn, nev, min_hits):
@@ -437,7 +463,7 @@ def get_generator(
         - EventDataset, object for inference
     """
     gen_wrapper = EventDatasetCMA if net == "CMA" else EventDataset
-    
+
     kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
     inputs = []
     targets = []
@@ -463,7 +489,9 @@ def get_generator(
 
 
 # ======================================================================
-def build_dataset(fn, net, batch_size, nev=-1, min_hits=1, split=None, is_training=False):
+def build_dataset(
+    fn, net, batch_size, nev=-1, min_hits=1, split=None, is_training=False
+):
     """
     Loads first the events from file, then generates the dataset to be fed into
     FFNN.
@@ -484,7 +512,9 @@ def build_dataset(fn, net, batch_size, nev=-1, min_hits=1, split=None, is_traini
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
     events = load_events(fn, nev, min_hits)
-    return get_generator(events, net, batch_size, split=split, is_training=is_training, min_hits=min_hits)
+    return get_generator(
+        events, net, batch_size, split=split, is_training=is_training, min_hits=min_hits
+    )
 
 
 # ======================================================================
@@ -532,12 +562,12 @@ def build_dataset_test(setup, min_hits=None):
 def dummy_dataset(net, nb_feats):
     """
     Return a dummy dataset to build the model first when loading.
-    
+
     Parameters
     ----------
         - net: str, network FF or CMA
         - nb_feats: int, number of feats dimension
-    
+
     Returns
     -------
         - EventDataset, dummy generator
@@ -545,16 +575,16 @@ def dummy_dataset(net, nb_feats):
     B = 32
     gen_wrapper = EventDataset if net == "FF" else EventDatasetCMA
     if net == "CMA":
-        nb_nodes = [np.random.randint(5, 15) for i in range(2*B)]
+        nb_nodes = [np.random.randint(5, 15) for i in range(2 * B)]
         ev0 = [np.random.rand(c, nb_feats) for c in nb_nodes[:B]]
         ev0 = np.array(ev0, dtype=object)
         ev1 = [np.random.rand(c, nb_feats) for c in nb_nodes[B:]]
         ev1 = np.array(ev0, dtype=object)
         inputs = [ev0, ev1]
-        targets = [np.random.randint(0,2, size=(1,)) for i in range(2*B)]
+        targets = [np.random.randint(0, 2, size=(1,)) for i in range(2 * B)]
     elif net == "FF":
         inputs = [np.random.rand(1, nb_feats) for i in range(B)]
-        targets = [np.random.randint(0,2, size=(1,)) for i in range(B)]
+        targets = [np.random.randint(0, 2, size=(1,)) for i in range(B)]
     else:
         raise ValueError(f"Unrecognised network: got {net}")
     data = (None, [inputs, targets])

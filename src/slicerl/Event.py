@@ -262,7 +262,7 @@ class PlaneView:
         Looks at the status attribute to build the FFNN input and target
         information. Stores the needed information in all_cluster_features and
         cluster_to_main_pfo attributes.
-        
+
         Parameters
         ----------
             - net: str, networl FF or CMA
@@ -270,8 +270,14 @@ class PlaneView:
         pc = np.concatenate([self.point_cloud, [self.status]])
         self.cluster_set = set(self.status)
         self.nb_clusters = len(self.cluster_set)
-        self.all_cluster_features = get_all_cluster_info(pc, self.cluster_set, self.tpc_view) if net == "FF" else None
-        self.cluster_to_main_pfo = get_cluster_to_main_pfo(self.status, self.cluster_set, self.pfo_index)
+        self.all_cluster_features = (
+            get_all_cluster_info(pc, self.cluster_set, self.tpc_view)
+            if net == "FF"
+            else None
+        )
+        self.cluster_to_main_pfo = get_cluster_to_main_pfo(
+            self.status, self.cluster_set, self.pfo_index
+        )
 
     # ----------------------------------------------------------------------
     def calohits_to_array(self):
@@ -333,7 +339,7 @@ class PlaneView:
 def get_all_cluster_info(pc, cluster_set, tpc_view):
     """
     Compute the cluster vector information for all clusters in the plane view.
-    
+
     Parameters
     ----------
         - pc: np.array, of shape (6, nb_hits). pc[-1] must contain the ordered
@@ -369,7 +375,7 @@ def get_cluster_to_main_pfo(cluster_idx, cluster_set, pfo_index):
         - cluster_set: set, of all cluster indices
         - pfo_index: np.array, mapping of calohit to pfo index of
                      shape=(nb_hits,)
-    
+
     Returns
     -------
         - np.array, main pfo index of shape=(nb_clusters)

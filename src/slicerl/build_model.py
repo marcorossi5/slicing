@@ -1,6 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.FFNN import FFNN
-from slicerl.CMANet import CMANet
+from slicerl.CMANet import CMANet, get_dummy_net
 from slicerl.losses import dice_loss
 from slicerl.build_dataset import dummy_dataset, load_events, get_generator
 from slicerl.diagnostics import (
@@ -85,10 +85,13 @@ def load_network(setup, checkpoint_filepath=None):
         run_eagerly=setup.get("debug"),
     )
     # dummy forward pass to build the layers
-    dummy_generator = dummy_dataset(setup["model"]["net_type"], setup["model"]["f_dims"])
+    dummy_generator = dummy_dataset(
+        setup["model"]["net_type"], setup["model"]["f_dims"]
+    )
     net.evaluate(dummy_generator.bal_inputs, verbose=0)
     # if not setup["scan"]:
     #     net.summary()
+    #     tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
     if checkpoint_filepath:
         print(f"[+] Loading weights at {checkpoint_filepath}")
@@ -111,7 +114,6 @@ def build_and_train_model(setup, generators):
         network model if scan is False, else dict with loss and status keys.
     """
     tfK.clear_session()
-
     if setup["scan"]:
         batch_size = setup["model"]["batch_size"]
         loss = setup["train"]["loss"]
@@ -174,6 +176,7 @@ def build_and_train_model(setup, generators):
     r = net.fit(
         train_generator.bal_inputs,
         train_generator.bal_targets,
+        batch_size=setup["model"]["batch_size"],
         epochs=setup["train"]["epochs"],
         validation_data=(val_generator.bal_inputs, val_generator.bal_targets),
         callbacks=callbacks,
@@ -226,10 +229,9 @@ def inference(setup, show_graph=False, no_graphics=False):
     # collect statistics
     hist_true = []
     hist_pred = []
-    test_batch_size = 1 if setup["model"]["net_type"] == "CMA" else setup["model"]["test_batch_size"]
     y_pred = net.get_prediction(
         test_generator,
-        test_batch_size,
+        setup["model"]["test_batch_size"],
         threshold=setup["model"]["threshold"],
     )
     test_generator.events = y_pred

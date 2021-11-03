@@ -12,6 +12,7 @@ from tensorflow.keras.activations import sigmoid
 # ======================================================================
 class CMANet(AbstractNet):
     """ Class deifining Cluster Merging with Attention Network. """
+
     def __init__(
         self,
         batch_size=32,
@@ -41,12 +42,20 @@ class CMANet(AbstractNet):
         self.cumulative_counter = tf.constant(0)
 
         # input layer
-        self.input_layer = InputLayer(type_spec=tf.RaggedTensorSpec(shape=(None, None, self.f_dims), dtype=TF_DTYPE), name="pc")
+        self.input_layer = InputLayer(
+            type_spec=tf.RaggedTensorSpec(
+                shape=(None, None, self.f_dims), dtype=TF_DTYPE
+            ),
+            name="pc",
+        )
 
         # attention layers
         self.att_filters = [8, 16, 32, 64, 128]
         ifilters = [self.f_dims] + self.att_filters[:-1]
-        self.atts = [Attention(i, f, name=f"att_{i}") for i, (i, f) in enumerate(zip(ifilters, self.att_filters))]
+        self.atts = [
+            Attention(i, f, name=f"att_{i}")
+            for i, (i, f) in enumerate(zip(ifilters, self.att_filters))
+        ]
 
         # MLPs
         self.fc_filters = [128, 64, 32, 16, 8, 4, 2]
@@ -61,13 +70,10 @@ class CMANet(AbstractNet):
             for i, f in enumerate(self.fc_filters)
         ]
 
-        self.gfe = GlobalFeatureExtractor(name='feat_extractor')
+        self.gfe = GlobalFeatureExtractor(name="feat_extractor")
 
-        self.final_fc = Dense(1,
-                use_bias=self.use_bias,
-                name=f"fc_final"
-                )
-        self.build_weights()
+        self.final_fc = Dense(1, use_bias=self.use_bias, name=f"fc_final")
+        # self.build_weights()
 
     # ----------------------------------------------------------------------
     def build_weights(self):
@@ -76,10 +82,12 @@ class CMANet(AbstractNet):
         for att, input_shape in zip(self.atts, input_shapes):
             att.build((None, None, input_shape))
 
-        input_shapes = [self.att_filters[-1]*3] + self.fc_filters[:-1]
+        self.gfe.build((None, None, self.att_filters[-1]))
+
+        input_shapes = [self.att_filters[-1] * 3] + self.fc_filters[:-1]
         for fc, input_shape in zip(self.fcs, input_shapes):
             fc.build((None, input_shape))
-        
+
         self.final_fc.build((self.fc_filters[-1],))
 
     # ----------------------------------------------------------------------
@@ -102,23 +110,29 @@ class CMANet(AbstractNet):
 
         for fc in self.fcs:
             x = fc(x)
-        
+
         act = tf.squeeze(self.final_fc(x), axis=-1)
         return sigmoid(act)
 
     # ----------------------------------------------------------------------
     def model(self):
-        inputs = Input(shape=(None, self.f_dims), name="pc")
+        inputs = Input(shape=(None, self.f_dims), name="input")
         return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
 
 from tensorflow.keras import Sequential
+
+
 def get_dummy_net():
-    model = Sequential([
-        Input(shape=[None, 6], dtype=TF_DTYPE, ragged=True),
-        Attention(8,8, name="att"),
-        GlobalFeatureExtractor(name="extractor"),
-        Dense(1, name="dense")
-    ])
-    model.compile(loss='binary_crossentropy', optimizer='rmsprop')
+    model = Sequential(
+        [
+            Input(shape=[None, 6], dtype=TF_DTYPE, ragged=True),
+            Attention(6, 6, name="att_0"),
+            Attention(8, 8, name="att_1"),
+            GlobalFeatureExtractor(name="extractor"),
+            Dense(4, name="dense_0"),
+            Dense(1, name="dense_1"),
+        ]
+    )
+    model.compile(loss="binary_crossentropy", optimizer="rmsprop")
     return model
