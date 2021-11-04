@@ -64,84 +64,74 @@ class AbstractNet(Model):
         inputs = Input(shape=(None, None, 2, self.f_dims), name="pc")
         return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
-    # ----------------------------------------------------------------------
-    def get_prediction(self, test_generator, batch_size, threshold=0.5):
-        """
-        Predict over a iterable of inputs
 
-        Parameters
-        ----------
-            - test_generator: EventDataset, generator for inference
-            - batch_size: int
-            - threshold: float, interpret as positive if above network
-                         prediction is threshold
-
-        Returns
-        -------
-            Predictions object
-        """
-        inputs = test_generator.bal_inputs
-        nb_clusters_list = test_generator.nb_clusters_list
-        y_pred = []
-        preds = []
-        all_slices = []
-        if nb_clusters_list is None:
-            raise ValueError(
-                "Total number of cluster is unknown, did you forget to pass a valid generator for inference?"
-            )
-        for inp, nb_planes_clusters, cthreshold in zip(
-            inputs, nb_clusters_list, test_generator.cthresholds
-        ):
-            # predict cluster pair connections
-            pred = self.predict(inp, batch_size, verbose=1).flatten()
-            y_pred.append(pred)
-
-            # nb_clusters = (1 + np.sqrt(1 + 8 * len(pred))) / 2
-            nb_clusters = sum(nb_planes_clusters)
-            # assert nb_clusters.is_integer()
-            # nb_clusters = int(nb_clusters)
-
-            adj = np.zeros([nb_clusters, nb_clusters])
-            # build a block diagonal matrix
-            k = 0
-            ped = 0
-            import sys
-
-            np.set_printoptions(linewidth=700, precision=1, threshold=sys.maxsize)
-            for nb_plane_clusters, cts in zip(nb_planes_clusters, cthreshold):
-                for i in range(nb_plane_clusters):
-                    for j in range(i):
-                        if i == j:
-                            continue
-                        adj[ped + i, ped + j] = pred[k]
-                        k += 1
-                # prevent large cluster mixing due to small clusters connections
-                clear_plane_large_small_interactions(adj, ped, nb_plane_clusters, cts)
-                clear_plane_small_small_interactions(adj, ped, nb_plane_clusters, cts)
-                ped += nb_plane_clusters
-            adj += adj.T + np.eye(nb_clusters)
-            preds.append(adj)
-
-            # threshold to find positive and negative edges
-            pred = adj > threshold
-
-            graph = [set(np.argwhere(merge)[:, 0]) for merge in pred]
-
-            # BFS (breadth first search)
-            visited = set()  # the all visited set
-            slices = []
-            for node in range(len(graph)):
-                if node in visited:
-                    continue
-                sl = set()  # the current sl only
-                bfs(sl, visited, node, graph)
-                slices.append(sl)
-
-            all_slices.append(slices)
-
-            # print_prediction(adj, all_slices)
-
-        return Predictions(y_pred, preds, all_slices)
+# ======================================================================
+def predict(model, test_generator, batch_size, threshold=0.5):
+    """
+    Predict over a iterable of inputs
+    Parameters
+    ----------
+        - test_generator: EventDataset, generator for inference
+        - batch_size: int
+        - threshold: float, interpret as positive if above network
+                     prediction is threshold
+    Returns
+    -------
+        Predictions object
+    """
+    inputs = test_generator.bal_inputs
+    nb_clusters_list = test_generator.nb_clusters_list
+    y_pred = []
+    preds = []
+    all_slices = []
+    if nb_clusters_list is None:
+        raise ValueError(
+            "Total number of cluster is unknown, did you forget to pass a valid generator for inference?"
+        )
+    for inp, nb_planes_clusters, cthreshold in zip(
+        inputs, nb_clusters_list, test_generator.cthresholds
+    ):
+        # predict cluster pair connections
+        pred = model.predict(inp, batch_size, verbose=1).flatten()
+        y_pred.append(pred)
+        # nb_clusters = (1 + np.sqrt(1 + 8 * len(pred))) / 2
+        nb_clusters = sum(nb_planes_clusters)
+        # assert nb_clusters.is_integer()
+        # nb_clusters = int(nb_clusters)
+        adj = np.zeros([nb_clusters, nb_clusters])
+        # build a block diagonal matrix
+        k = 0
+        ped = 0
+        import sys
+        np.set_printoptions(linewidth=700, precision=1, threshold=sys.maxsize)
+        for nb_plane_clusters, cts in zip(nb_planes_clusters, cthreshold):
+            for i in range(nb_plane_clusters):
+                for j in range(i):
+                    if i == j:
+                        continue
+                    adj[ped + i, ped + j] = pred[k]
+                    k += 1
+            # prevent large cluster mixing due to small clusters connections
+            clear_plane_large_small_interactions(adj, ped, nb_plane_clusters, cts)
+            clear_plane_small_small_interactions(adj, ped, nb_plane_clusters, cts)
+            ped += nb_plane_clusters
+        adj += adj.T + np.eye(nb_clusters)
+        preds.append(adj)
+        # threshold to find positive and negative edges
+        pred = adj > threshold
+        graph = [set(np.argwhere(merge)[:, 0]) for merge in pred]
+        # BFS (breadth first search)
+        visited = set()  # the all visited set
+        slices = []
+        for node in range(len(graph)):
+            if node in visited:
+                continue
+            sl = set()  # the current sl only
+            bfs(sl, visited, node, graph)
+            slices.append(sl)
+        all_slices.append(slices)
+        # print_prediction(adj, all_slices)
+    return Predictions(y_pred, preds, all_slices)
 
 
 # ======================================================================

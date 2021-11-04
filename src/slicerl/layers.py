@@ -3,11 +3,17 @@
 import tensorflow as tf
 from tensorflow import matmul
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Layer, Dense, Concatenate
+from tensorflow.keras.layers import Layer, Dense, Concatenate, TimeDistributed
 from slicerl.config import float_me, int_me, TF_DTYPE, TF_DTYPE_INT
 
+
+def RaggedDense(*args, name=None, **kwargs):
+    """ Utility function to work with tf.RaggedTensor inputs. """
+    return TimeDistributed(Dense(name=name, *args, **kwargs), name=f"R{name}")
+
+
 # ======================================================================
-class Attention(Model):
+class Attention(Layer):
     """ Class defining Attention Layer. """
 
     # ----------------------------------------------------------------------
@@ -33,19 +39,19 @@ class Attention(Model):
         self.sqrtdk = tf.math.sqrt(float_me(iunits))
         self.activation = activation
         self.use_bias = use_bias
-        self.fc_query = Dense(
+        self.fc_query = RaggedDense(
             self.units,
             activation=self.activation,
             use_bias=self.use_bias,
             name="fc_query",
         )
-        self.fc_key = Dense(
+        self.fc_key = RaggedDense(
             self.units,
             activation=self.activation,
             use_bias=self.use_bias,
             name="fc_key",
         )
-        self.fc_value = Dense(
+        self.fc_value = RaggedDense(
             self.units,
             activation=self.activation,
             use_bias=self.use_bias,
@@ -87,15 +93,16 @@ class Attention(Model):
 
 # ======================================================================
 class GlobalFeatureExtractor(Layer):
-    def __init__(self, **kwargs):
-        super(GlobalFeatureExtractor, self).__init__(**kwargs)
-        self.cat = Concatenate(axis=-1, name="cat")
+    def __init__(self, name=None, **kwargs):
+        super(GlobalFeatureExtractor, self).__init__(name=name, **kwargs)
+        # self.cat = Concatenate(axis=-1, name="cat")
 
     def __call__(self, inputs):
-        global_max = tf.math.reduce_max(inputs, axis=-2, name="max")
-        global_min = tf.math.reduce_min(inputs, axis=-2, name="min")
-        global_avg = tf.math.reduce_mean(inputs, axis=-2, name="avg")
-        return self.cat([global_max, global_min, global_avg])
+        # global_max = tf.math.reduce_max(inputs, axis=-2, name="max")
+        # global_min = tf.math.reduce_min(inputs, axis=-2, name="min")
+        global_avg = tf.math.reduce_mean(inputs, axis=-2, name="avg", keepdims=True)
+        return global_avg
+        # return self.cat([global_max, global_min, global_avg])
 
 
 # ======================================================================

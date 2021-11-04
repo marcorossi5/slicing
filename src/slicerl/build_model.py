@@ -1,6 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.FFNN import FFNN
-from slicerl.CMANet import CMANet, get_dummy_net
+from slicerl.CMANet import CMANet, get_cma_model
+from slicerl.AbstractNet import predict
 from slicerl.losses import dice_loss
 from slicerl.build_dataset import dummy_dataset, load_events, get_generator
 from slicerl.diagnostics import (
@@ -51,7 +52,8 @@ def load_network(setup, checkpoint_filepath=None):
     if setup["model"]["net_type"] == "FF":
         net = FFNN(name="FFNN", **net_dict)
     elif setup["model"]["net_type"] == "CMA":
-        net = CMANet(name="CMANet", **net_dict)
+        # net = CMANet(name="CMANet", **net_dict)
+        net = get_cma_model(name="CMANet", **net_dict)
     else:
         raise ValueError(f"Unrecognised network: got {setup['model']['net_type']}")
 
@@ -85,12 +87,12 @@ def load_network(setup, checkpoint_filepath=None):
         run_eagerly=setup.get("debug"),
     )
     # dummy forward pass to build the layers
-    dummy_generator = dummy_dataset(
-        setup["model"]["net_type"], setup["model"]["f_dims"]
-    )
-    net.evaluate(dummy_generator.bal_inputs, verbose=0)
-    # if not setup["scan"]:
-    #     net.summary()
+    # dummy_generator = dummy_dataset(
+    #     setup["model"]["net_type"], setup["model"]["f_dims"]
+    # )
+    # net.evaluate(dummy_generator.bal_inputs, verbose=1)
+    if not setup["scan"]:
+        net.summary()
     #     tf.keras.utils.plot_model(net.model(), to_file=f"{setup['output']}/Network.png", expand_nested=True, show_shapes=True)
 
     if checkpoint_filepath:
@@ -229,7 +231,8 @@ def inference(setup, show_graph=False, no_graphics=False):
     # collect statistics
     hist_true = []
     hist_pred = []
-    y_pred = net.get_prediction(
+    y_pred = predict(
+        net,
         test_generator,
         setup["model"]["test_batch_size"],
         threshold=setup["model"]["threshold"],

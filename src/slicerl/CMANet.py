@@ -1,12 +1,12 @@
 # This file is part of SliceRL by M. Rossi
 from numpy.lib.arraysetops import isin
 from slicerl.AbstractNet import AbstractNet
-from slicerl.layers import Attention, GlobalFeatureExtractor
+from slicerl.layers import Attention, GlobalFeatureExtractor, RaggedDense
 from slicerl.config import TF_DTYPE
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Input, Model
-from tensorflow.keras.layers import Dense, Concatenate, TimeDistributed, InputLayer
+from tensorflow.keras.layers import Dense, Concatenate, TimeDistributed, InputLayer, Flatten
 from tensorflow.keras.activations import sigmoid
 
 # ======================================================================
@@ -84,7 +84,8 @@ class CMANet(AbstractNet):
 
         self.gfe.build((None, None, self.att_filters[-1]))
 
-        input_shapes = [self.att_filters[-1] * 3] + self.fc_filters[:-1]
+        input_shapes = [self.att_filters[-1]] + self.fc_filters[:-1]
+        # input_shapes = [self.att_filters[-1] * 3] + self.fc_filters[:-1]
         for fc, input_shape in zip(self.fcs, input_shapes):
             fc.build((None, input_shape))
 
@@ -121,18 +122,34 @@ class CMANet(AbstractNet):
 
 
 from tensorflow.keras import Sequential
-
-
-def get_dummy_net():
+def get_cma_model(
+    f_dims=6,
+    activation="relu",
+    use_bias=True,
+    name="CMANet",
+    **kwargs
+):
     model = Sequential(
         [
-            Input(shape=[None, 6], dtype=TF_DTYPE, ragged=True),
-            Attention(6, 6, name="att_0"),
-            Attention(8, 8, name="att_1"),
+            Input(shape=[None, f_dims], dtype=TF_DTYPE, ragged=True, name='pc'),
+            Attention(8, 8, name="a_0"),
+            Attention(16, 16, name="a_1"),
+            Attention(32, 32, name="a_2"),
+            Attention(64, 64, name="a_3"),
+            Attention(128, 128, name="a_4"),            
             GlobalFeatureExtractor(name="extractor"),
-            Dense(4, name="dense_0"),
-            Dense(1, name="dense_1"),
-        ]
+            RaggedDense(64, activation=activation, use_bias=use_bias, name="d_1"),
+            RaggedDense(32, activation=activation, use_bias=use_bias, name="d_2"),
+            RaggedDense(16, activation=activation, use_bias=use_bias, name="d_3"),
+            RaggedDense(8, activation=activation, use_bias=use_bias, name="d_4"),
+            RaggedDense(4, activation=activation, use_bias=use_bias, name="d_5"),
+            RaggedDense(2, activation=activation, use_bias=use_bias, name="d_6"),
+            RaggedDense(1, activation="softmax", use_bias=use_bias, name="d_7"),
+            Flatten(name="flat")
+        ],
+        name=name
     )
-    model.compile(loss="binary_crossentropy", optimizer="rmsprop")
     return model
+
+[8, 16, 32, 64, 128]
+[128, 64, 32, 16, 8, 4, 2]

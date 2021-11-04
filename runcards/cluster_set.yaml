@@ -35,8 +35,8 @@ train:
   nev: 5
   min_hits: 10
   hist_freq: 10
-  loss: dice # xent | hinge | dice
-  epochs: 3
+  loss: xent # xent | hinge | dice
+  epochs: 1
   lr: 0.005636993511552649
   min_lr: 0.00001
   patience: 15
