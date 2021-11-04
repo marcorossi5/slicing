@@ -11,7 +11,7 @@ from slicerl.diagnostics import (
     plot_histogram,
     plot_graph,
 )
-
+from slicerl.callbacks import ExtendedTensorBoard
 import os
 from copy import deepcopy
 from time import time as tm
@@ -84,6 +84,7 @@ def load_network(setup, checkpoint_filepath=None):
         ],
         run_eagerly=setup.get("debug"),
     )
+
     if not setup["scan"]:
         net.model().summary()
 
@@ -190,7 +191,8 @@ def build_and_train_model(setup, generators):
     if setup["scan"]:
         tboard = TensorBoard(log_dir=logdir, profile_batch=0)
     else:
-        tboard = TensorBoard(
+        tboard = ExtendedTensorBoard(
+            *train_generator[0],
             log_dir=logdir,
             write_graph=False,
             write_images=True,

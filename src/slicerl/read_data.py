@@ -55,8 +55,8 @@ class Reader(object):
             c.append(self.readline_fn(self.stream) / 100)  # energies [ADC]/100
             c.append(self.readline_fn(self.stream) / 1000.0)  # xs [10^1 m]
             c.append(self.readline_fn(self.stream) / 1000.0)  # zs [10^1 m]
-            c.append(self.readline_fn(self.stream) / 1000.0)  # x expected direction
-            c.append(self.readline_fn(self.stream) / 1000.0)  # z expected direction
+            c.append(self.readline_fn(self.stream))  # x expected direction
+            c.append(self.readline_fn(self.stream))  # z expected direction
             cluster_idx = self.readline_fn(self.stream)
             c.append(cluster_idx)  # cluster_idx
             c.append(self.readline_fn(self.stream))  # pndr_idx

@@ -1,5 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 from numpy.lib.arraysetops import isin
+from tensorflow.python.ops.gen_math_ops import cumulative_logsumexp
 from slicerl.AbstractNet import AbstractNet
 from slicerl.layers import Attention
 import numpy as np
@@ -40,11 +41,11 @@ class CMANet(AbstractNet):
         self.cumulative_counter = tf.constant(0)
 
         # attention layers
-        self.att_filters = [8, 16, 32]
+        self.att_filters = [32, 64]
         self.atts = [Attention(f,f, name=f"att_{i}") for i, f in enumerate(self.att_filters)]
-
+        
         # MLPs
-        self.fc_filters = [8, 4, 2]
+        self.fc_filters = [32, 16, 8, 4, 2]
         self.fcs = [
             Dense(
                 f,
@@ -63,6 +64,7 @@ class CMANet(AbstractNet):
                 name=f"fc_final"
                 )
         self.build_weights()
+
         self.cumulative_gradients = [
             tf.Variable(tf.zeros_like(this_var), trainable=False)
             for this_var in self.trainable_variables
@@ -73,14 +75,18 @@ class CMANet(AbstractNet):
     def build_weights(self):
         """ Explicitly build the weights."""
         input_shapes = [self.f_dims] + self.att_filters[:-1]
+
         for att, input_shape in zip(self.atts, input_shapes):
             att.build((None, None, input_shape))
+        
 
         input_shapes = [self.att_filters[-1]*3] + self.fc_filters[:-1]
         for fc, input_shape in zip(self.fcs, input_shapes):
-            fc.build((None, input_shape))
-        
-        self.final_fc.build((self.fc_filters[-1],))
+            with tf.name_scope(fc.name):
+                fc.build((None, input_shape))
+
+        with tf.name_scope(self.final_fc.name):   
+            self.final_fc.build((self.fc_filters[-1],))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -165,6 +171,13 @@ class CMANet(AbstractNet):
             lambda: False,
         )
 
+        # tf.cond(
+        #     reset,
+        #     lambda: check_grads(zip(self.cumulative_gradients, trainable_vars)),
+        #     lambda: False,
+        # )
+        
+
         # Update metrics (includes the metric that tracks the loss)
         self.compiled_metrics.update_state(y, y_pred)
         # Return a dict mapping metric names to current value
@@ -175,24 +188,8 @@ class CMANet(AbstractNet):
         inputs = Input(shape=(None, self.f_dims), name="pc")
         return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
-    # ----------------------------------------------------------------------
-    def predict(self, x, batch_size, **kwargs):
-        """
-        Overrides the predict method of mother class. CMANet accepts only
-        tensors of shape (1,N,C) as inputs. This method allows to pass a numpy array of
-        tensors
-        """
-        from tqdm import tqdm
-        if isinstance(x, np.ndarray):
-            if len(x.shape) == 3:
-                return super(CMANet, self).predict(x, batch_size, **kwargs)
-            elif len(x.shape) == 1:
-                out = []
-                for i in tqdm(x):
-                    inputs = np.expand_dims(i, 0)
-                    out.append(super(CMANet, self).predict(inputs, batch_size, **kwargs))
-                print(out, type(out))
-                exit()
-                return out
-
-
+def check_grads(iterable):
+    for grad, vars in iterable:
+        tf.print(vars.name, tf.reduce_min(grad), tf.reduce_mean(grad), tf.reduce_max(grad))
+    tf.print("----------------------------------------------")    
+    return True

@@ -34,10 +34,10 @@ train:
     # - data/prod4_train/prod4_7GeV_run20915159_100evts.csv.gz
   nev: 5
   min_hits: 10
-  hist_freq: 10
-  loss: dice # xent | hinge | dice
-  epochs: 3
-  lr: 0.005636993511552649
+  hist_freq: 1
+  loss: xent # xent | hinge | dice
+  epochs: 50
+  lr: 0.01
   min_lr: 0.00001
   patience: 15
   es_patience: 50

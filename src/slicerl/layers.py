@@ -3,11 +3,11 @@
 import tensorflow as tf
 from tensorflow import matmul
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Permute
+from tensorflow.keras.layers import Dense, Permute, Layer
 from tensorflow.keras.activations import softmax
 
 # ======================================================================
-class Attention(Model):
+class Attention(Layer):
     """ Class defining Attention Layer. """
     # ----------------------------------------------------------------------
     def __init__(
@@ -16,6 +16,7 @@ class Attention(Model):
         h_hunits,
         activation="relu",
         use_bias=True,
+        name=None,
         **kwargs,
     ):
         """
@@ -26,20 +27,20 @@ class Attention(Model):
             - activation: str, MLP layer activation
             - use_bias: bool, wether to use bias in MLPs
         """
-        super(Attention, self).__init__(**kwargs)
+        super(Attention, self).__init__(name=name, **kwargs)
         self.units = units
         self.h_units = h_hunits
         self.activation = activation
         self.use_bias = use_bias
         self.fc_query = Dense(
             self.h_units,
-            activation=self.activation,
+            activation="tanh",
             use_bias=self.use_bias,
             name="fc_query",
         )
         self.fc_key = Dense(
             self.h_units,
-            activation=self.activation,
+            activation="tanh",
             use_bias=self.use_bias,
             name="fc_key",
         )
@@ -49,14 +50,14 @@ class Attention(Model):
             use_bias=self.use_bias,
             name="fc_value",
         )
-        self.fc_mixing = Dense(
-            self.units,
-            activation=self.activation,
-            use_bias=self.use_bias,
-            name="fc_mixing",
-        )
 
-        self.perm = Permute((2,1))
+    def build(self, input_shape):
+        with tf.name_scope("fc_query"):
+            self.fc_key.build(input_shape)
+        with tf.name_scope("fc_key"):
+            self.fc_query.build(input_shape)
+        with tf.name_scope("fc_value"):
+            self.fc_value.build(input_shape)
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -74,11 +75,13 @@ class Attention(Model):
         """
         query = self.fc_query(inputs)
         key = self.fc_key(inputs)
-        value = self.fc_query(inputs)
+        value = self.fc_value(inputs)
         qk = softmax(matmul(query, key, transpose_b=True), axis=-1)
+        # qk = qk / tf.reduce_max(qk, axis=-1, keepdims=True)
+        # tf.print("QK.t", tf.reduce_min(qk), tf.reduce_mean(qk), tf.reduce_max(qk))
         attention = matmul(qk, value)
+        # tf.print(self.name, "Inputs: ", tf.reduce_min(inputs), tf.reduce_max(inputs), "att: ", tf.reduce_min(attention), tf.reduce_max(attention))
         return attention
-        return self.fc_mixing(attention)
 
     # ----------------------------------------------------------------------
     def get_config(self):

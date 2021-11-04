@@ -80,7 +80,7 @@ class AbstractNet(Model):
         -------
             Predictions object
         """
-        inputs = test_generator.inputs
+        inputs = test_generator.bal_inputs
         nb_clusters_list = test_generator.nb_clusters_list
         y_pred = []
         preds = []
@@ -93,7 +93,12 @@ class AbstractNet(Model):
             inputs, nb_clusters_list, test_generator.cthresholds
         ):
             # predict cluster pair connections
-            pred = self.predict(inp, batch_size, verbose=0).flatten()
+            out = []
+            from tqdm import tqdm
+            for i in tqdm(inp):
+                ii = np.expand_dims(i,0)
+                out.append(self.predict(ii, batch_size, verbose=0).flatten())
+            pred = np.concatenate(out)
             y_pred.append(pred)
 
             # nb_clusters = (1 + np.sqrt(1 + 8 * len(pred))) / 2
