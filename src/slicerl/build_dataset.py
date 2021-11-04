@@ -18,7 +18,7 @@ class EventDataset(tf.keras.utils.Sequence):
         cthresholds=None,
         is_training=False,
         shuffle=False,
-        verbose=1
+        verbose=0
     ):
         """
         This generator must be used for training only.
@@ -53,20 +53,20 @@ class EventDataset(tf.keras.utils.Sequence):
             self.targets
         ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
         if is_training:
-            if verbose == 1:
-                nb_positive = np.count_nonzero(self.targets)
-                nb_all = len(self.targets)
-                balancing = nb_positive / nb_all
+            nb_positive = np.count_nonzero(self.targets)
+            nb_all = len(self.targets)
+            balancing = nb_positive / nb_all
+            if verbose:
                 print(f"Training points: {nb_all} of which positives: {nb_positive}")
                 print(f"Percentage of positives: {balancing}")
-                self.balance_dataset(balancing)
+            self.balance_dataset(balancing, verbose)
         else:
             self.evt_counter = 0
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
 
     # ----------------------------------------------------------------------
-    def balance_dataset(self, balancing):
+    def balance_dataset(self, balancing, verbose):
         """
         Balances the dataset discarding part of the negative samples to match
         the size of the positive ones. This happens if the ratio of positve
@@ -75,6 +75,7 @@ class EventDataset(tf.keras.utils.Sequence):
         Parameters
         ----------
             - balancing: float, percentage of positive samples over the total
+            - verbose: int, print balancing stats
         """
         if balancing < 0.2:
             m_positives = self.targets.astype(bool)
@@ -90,12 +91,13 @@ class EventDataset(tf.keras.utils.Sequence):
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
 
-        nb_positive = np.count_nonzero(self.bal_targets)
-        nb_all = len(self.bal_targets)
-        balancing = nb_positive / nb_all
-        print("After balancing")
-        print(f"Training points: {nb_all} of which positives: {nb_positive}")
-        print(f"Percentage of positives: {balancing}")
+        if verbose:
+            nb_positive = np.count_nonzero(self.bal_targets)
+            nb_all = len(self.bal_targets)
+            balancing = nb_positive / nb_all
+            print("After balancing")
+            print(f"Training points: {nb_all} of which positives: {nb_positive}")
+            print(f"Percentage of positives: {balancing}")
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -182,19 +184,16 @@ class EventDatasetCMA(EventDataset):
         cthresholds=None,
         is_training=False,
         shuffle=False,
+        **kwargs
     ):
-        super(EventDatasetCMA, self).__init__(data, batch_size, cthresholds, is_training, shuffle)
+        super(EventDatasetCMA, self).__init__(data, batch_size, cthresholds, is_training, shuffle, **kwargs)
         assert self.batch_size == 1, "CMANet must have unit batch size"
     
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
-        if self.is_training:
-            batch_x = np.expand_dims(self.bal_inputs[idx], 0)
-            batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
-            return batch_x, batch_y
-        batch_x = np.expand_dims(self.bal_inputs[self.evt_counter][idx], 0)
-        batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
-        return batch_x, batch_y
+        batch_x = self.bal_inputs[idx] if self.is_training else self.bal_inputs[self.evt_counter][idx]
+        batch_y = self.bal_targets[idx : idx + 1]
+        return np.expand_dims(batch_x, 0), batch_y
 
 
 # ======================================================================
@@ -416,7 +415,7 @@ def load_events(fn, nev, min_hits):
 
 # ======================================================================
 def get_generator(
-    events, net, batch_size, split=False, is_training=False, min_hits=1, cthreshold=None
+    events, net, batch_size, split=False, is_training=False, min_hits=1, cthreshold=None, verbose=0
 ):
     """
     Wrapper function to obtain an event dataset ready for inference directly
@@ -446,7 +445,7 @@ def get_generator(
     else:
         raise ValueError(f"Unrecognised network: got {net}")
     
-    kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
+    kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False, "verbose": verbose}
     inputs = []
     targets = []
     cthresholds = []
@@ -471,7 +470,7 @@ def get_generator(
 
 
 # ======================================================================
-def build_dataset(fn, net, batch_size, nev=-1, min_hits=1, split=None, is_training=False):
+def build_dataset(fn, net, batch_size, nev=-1, min_hits=1, split=None, is_training=False, verbose=0):
     """
     Loads first the events from file, then generates the dataset to be fed into
     FFNN.
@@ -492,7 +491,7 @@ def build_dataset(fn, net, batch_size, nev=-1, min_hits=1, split=None, is_traini
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
     events = load_events(fn, nev, min_hits)
-    return get_generator(events, net, batch_size, split=split, is_training=is_training, min_hits=min_hits)
+    return get_generator(events, net, batch_size, split=split, is_training=is_training, min_hits=min_hits, verbose=verbose)
 
 
 # ======================================================================
@@ -513,7 +512,7 @@ def build_dataset_train(setup):
     batch_size = setup["model"]["batch_size"]
     net = setup["model"]["net_type"]
     train_gen, val_gen = build_dataset(
-        fn, net, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True
+        fn, net, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True, verbose=1
     )
     return train_gen, val_gen
 

@@ -75,8 +75,9 @@ class Attention(Model):
         query = self.fc_query(inputs)
         key = self.fc_key(inputs)
         value = self.fc_query(inputs)
-        kq = softmax(matmul(key, query, transpose_b=True), axis=-1)
-        attention = self.perm(matmul(value, kq, transpose_a=True))
+        qk = softmax(matmul(query, key, transpose_b=True), axis=-1)
+        attention = matmul(qk, value)
+        return attention
         return self.fc_mixing(attention)
 
     # ----------------------------------------------------------------------
