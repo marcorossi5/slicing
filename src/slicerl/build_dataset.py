@@ -192,8 +192,11 @@ class EventDatasetCMA(EventDataset):
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
         batch_x = self.bal_inputs[idx] if self.is_training else self.bal_inputs[self.evt_counter][idx]
+        mask = batch_x[:,-1] == 1
+        cluster_0 = batch_x[~mask,:-1]
+        cluster_1 = batch_x[mask,:-1]
         batch_y = self.bal_targets[idx : idx + 1]
-        return np.expand_dims(batch_x, 0), batch_y
+        return [cluster_0[np.newaxis], cluster_1[np.newaxis]], batch_y
 
 
 # ======================================================================
@@ -550,12 +553,14 @@ def dummy_dataset(net, nb_feats):
         - EventDataset, dummy generator
     """
     # TODO: check this function, insert net?
-    B = 32 if net == "FF" else 1
-    input_shape = (B, nb_feats) if net == "FF" else (B, 50, nb_feats)
-    inputs = [np.random.rand(*input_shape) for i in range(2)]
+    B = 1 if net == "CMA" else 32
+    gen_wrapper = EventDatasetCMA if net == "CMA" else EventDataset 
+
+    input_shape = (B, nb_feats) if net == "FF" else (B, 50, nb_feats + 1)
+    inputs = [np.random.randint(0,2, size=input_shape) for i in range(2)]
     targets = [np.random.rand(B) for i in range(2)]
     data = (None, [inputs, targets])
-    return EventDataset(data, batch_size=B, is_training=True, verbose=0)
+    return gen_wrapper(data, batch_size=B, is_training=True, verbose=0)
 
 
 # ======================================================================

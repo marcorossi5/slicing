@@ -97,7 +97,10 @@ class AbstractNet(Model):
             from tqdm import tqdm
             for i in tqdm(inp):
                 ii = np.expand_dims(i,0)
-                out.append(self.predict(ii, batch_size, verbose=0).flatten())
+                mask = ii[0,:,-1] == 0
+                c0 = ii[:,mask,:-1]
+                c1 = ii[:,~mask,:-1]
+                out.append(self.predict([c0,c1], batch_size, verbose=0).flatten())
             pred = np.concatenate(out)
             y_pred.append(pred)
 

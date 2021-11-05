@@ -3,7 +3,7 @@
 import tensorflow as tf
 from tensorflow import matmul
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Dense, Permute, Layer
+from tensorflow.keras.layers import Dense, Concatenate, Layer
 from tensorflow.keras.activations import softmax
 
 # ======================================================================
@@ -95,3 +95,16 @@ class Attention(Layer):
             }
         )
         return config
+
+# ======================================================================
+class GlobalFeatureExtractor(Layer):
+    def __init__(self, name=None, **kwargs):
+        super(GlobalFeatureExtractor, self).__init__(name=name, **kwargs)
+        self.cat = Concatenate(axis=-1, name="cat")
+
+    def __call__(self, inputs):
+        global_max = tf.math.reduce_max(inputs, axis=-2, name="max", keepdims=True)
+        global_min = tf.math.reduce_min(inputs, axis=-2, name="min", keepdims=True)
+        global_avg = tf.math.reduce_mean(inputs, axis=-2, name="avg", keepdims=True)
+        # return global_avg
+        return self.cat([global_max, global_min, global_avg])

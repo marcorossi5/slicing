@@ -6,7 +6,7 @@ model:
   net_type: CMA # FF | CMA
   batch_size: 32
   test_batch_size: 32
-  f_dims: 6 # 56 | 6
+  f_dims: 5 # 56 | 6
   use_bias: true
   threshold: 0.5
 test:
@@ -25,8 +25,8 @@ test:
       - 20
 train:
   fn:
-    - data/prod4_train/prova.csv.gz
-    # - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz
+    # - data/prod4_train/prova.csv.gz
+    - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz
     # - data/prod4_train/prod4_0.5GeV_run4714428_100evts.csv.gz
     # - data/prod4_train/prod4_1GeV_run18800650_0006_100evts.csv.gz
     # - data/prod4_train/prod4_2GeV_run44833767_100evts.csv.gz
@@ -37,7 +37,7 @@ train:
   hist_freq: 1
   loss: xent # xent | hinge | dice
   epochs: 50
-  lr: 0.01
+  lr: 0.001
   min_lr: 0.00001
   patience: 15
   es_patience: 50

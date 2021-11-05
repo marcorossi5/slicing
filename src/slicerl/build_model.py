@@ -85,47 +85,17 @@ def load_network(setup, checkpoint_filepath=None):
         run_eagerly=setup.get("debug"),
     )
 
-    if not setup["scan"]:
-        net.model().summary()
+    # if not setup["scan"]:
+    #     net.model().summary()
 
     if checkpoint_filepath:
         # dummy forward pass to build the layers
         dummy_generator = dummy_dataset(setup["model"]["net_type"], setup["model"]["f_dims"])
-        net.evaluate(dummy_generator.inputs, verbose=0)
+        net.evaluate(dummy_generator[0][0], verbose=0)
 
         print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath)
     return net
-
-
-# ======================================================================
-def trace(net, generator):
-    """
-    Network first training epoch could last proportionally to the dataset size.
-    Build the network graph trace to speed up the incoming real computation with
-    a dummy backward pass.
-
-    Parameters
-    ----------
-        - net: AbstractNet, network to trace
-        - generator: EventDataset, iterable dataset to train
-
-    Returns
-    -------
-        - AbstractNet, traced network
-    """
-    print("[+] Ahead of time tracing ...")
-    # reduce generator to minimum
-    generator = deepcopy(generator)
-    generator.__len__ = 1
-    net.fit(
-        generator,
-        epochs=1,
-        verbose=1,
-    )
-    print("[+] Network traced ...")
-    return net
-    # TODO: fix this to use dummy dataset instead of modifying generator length
 
 
 # ======================================================================
@@ -191,8 +161,7 @@ def build_and_train_model(setup, generators):
     if setup["scan"]:
         tboard = TensorBoard(log_dir=logdir, profile_batch=0)
     else:
-        tboard = ExtendedTensorBoard(
-            *train_generator[0],
+        tboard = TensorBoard(
             log_dir=logdir,
             write_graph=False,
             write_images=True,
@@ -202,20 +171,31 @@ def build_and_train_model(setup, generators):
 
     callbacks.append(tboard)
 
-    # net = trace(net, train_generator)
-
-    # # warmup
-    # original_lr = net.optimizer.learning_rate
-    # tfK.set_value(net.optimizer.learning_rate, original_lr*50)
-    # print(f"[+] Warmup 2 epochs ...")
-    # r = net.fit(
-    #     train_generator,
-    #     epochs=2,
-    #     validation_data=val_generator,
-    #     callbacks=callbacks,
-    #     verbose=2,
-    # )
-    # tfK.set_value(net.optimizer.learning_rate, original_lr)
+    """
+    truths = train_generator.targets.astype(bool)
+    out = np.stack([inp[[0,-1],3:5] for inp in train_generator.inputs])
+    sdots = np.abs(out.prod(1).sum(-1))
+    import matplotlib.pyplot as plt
+    bins = np.linspace(0, 1, 101)
+    trues = sdots[truths]
+    falses = sdots[~truths]
+    t = 0.75
+    tp = np.count_nonzero(trues > t)
+    tn = np.count_nonzero(falses < t)
+    fn = np.count_nonzero(trues < t)
+    fp = np.count_nonzero(falses > t)
+    acc = (tp + tn) / (tp + tn + fp + fn)
+    prec = tp / (tp + fp)
+    rec = tp / (tp + fn)
+    print(f"acc: {acc}, prec: {prec}, rec: {rec}")
+    
+    strue, _ = np.histogram(trues, bins)
+    sfalse, _ = np.histogram(falses, bins)
+    plt.hist(bins[:-1], bins, weights=strue, color="green", histtype='step')
+    plt.hist(bins[:-1], bins, weights=sfalse, color="red", histtype='step')
+    plt.yscale('log')
+    plt.show()
+    """
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
     r = net.fit(

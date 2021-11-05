@@ -2,7 +2,7 @@
 from numpy.lib.arraysetops import isin
 from tensorflow.python.ops.gen_math_ops import cumulative_logsumexp
 from slicerl.AbstractNet import AbstractNet
-from slicerl.layers import Attention
+from slicerl.layers import Attention, GlobalFeatureExtractor
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
@@ -41,7 +41,7 @@ class CMANet(AbstractNet):
         self.cumulative_counter = tf.constant(0)
 
         # attention layers
-        self.att_filters = [32, 64]
+        self.att_filters = [64]
         self.atts = [Attention(f,f, name=f"att_{i}") for i, f in enumerate(self.att_filters)]
         
         # MLPs
@@ -57,7 +57,8 @@ class CMANet(AbstractNet):
             for i, f in enumerate(self.fc_filters)
         ]
 
-        self.cat = Concatenate(axis=-1, name='cat')
+        self.gfe = GlobalFeatureExtractor(name="feat_extractor")
+        self.cat = Concatenate(axis=-1, name="cat")
 
         self.final_fc = Dense(1,
                 use_bias=self.use_bias,
@@ -78,9 +79,8 @@ class CMANet(AbstractNet):
 
         for att, input_shape in zip(self.atts, input_shapes):
             att.build((None, None, input_shape))
-        
 
-        input_shapes = [self.att_filters[-1]*3] + self.fc_filters[:-1]
+        input_shapes = [self.att_filters[-1]*3*2] + self.fc_filters[:-1]
         for fc, input_shape in zip(self.fcs, input_shapes):
             with tf.name_scope(fc.name):
                 fc.build((None, input_shape))
@@ -100,14 +100,11 @@ class CMANet(AbstractNet):
         -------
             tf.Tensor, output tensor of shape=(B,N,nb_classes)
         """
+        c0, c1 = inputs
         for att in self.atts:
-            inputs = att(inputs)
-
-        global_max = tf.math.reduce_max(inputs, axis=-2, name='max')
-        global_min = tf.math.reduce_min(inputs, axis=-2, name='min')
-        global_avg = tf.math.reduce_mean(inputs, axis=-2, name='avg')
-        # global_std = tf.math.reduce_std(inputs, axis=-2, name='std') raises NaN
-        x = self.cat([global_max, global_min, global_avg])
+            c0 = att(c0)
+            c1 = att(c1)
+        x = self.cat([self.gfe(c0), self.gfe(c1)])
 
         for fc in self.fcs:
             x = fc(x)
