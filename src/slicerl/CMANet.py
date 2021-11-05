@@ -66,7 +66,7 @@ class CMANet(AbstractNet):
         self.build_weights()
 
         self.cumulative_gradients = [
-            tf.Variable(tf.zeros_like(this_var), trainable=False)
+            tf.Variable(tf.zeros_like(this_var), trainable=False, name=this_var.name.split(":")[0] + "_cum")
             for this_var in self.trainable_variables
         ]
         self.cumulative_counter = tf.Variable(tf.constant(0), trainable=False)
