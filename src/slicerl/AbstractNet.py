@@ -39,12 +39,12 @@ class Predictions:
     # ----------------------------------------------------------------------
     def get_slices(self, index):
         """
-        Returns the slices: each slice contains the cluster indices inside the
-        slice set.
+        Returns the slices: each sl contains the cluster indices inside the
+        sl set.
 
         Parameters
         ----------
-            - index : int, index in slice list
+            - index : int, index in sl list
 
         Returns
         -------
@@ -65,17 +65,13 @@ class AbstractNet(Model):
         return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
     # ----------------------------------------------------------------------
-    def get_prediction(self, inputs, nb_clusters_list, batch_size, threshold=0.5):
+    def get_prediction(self, test_generator, batch_size, threshold=0.5):
         """
         Predict over a iterable of inputs
 
         Parameters
         ----------
-            - inputs: list, events clusters feature vectors, each element has
-                      shape (nb_cluster_pairs, f_dims)
-            - nb_clusters_list: list, of tuples for each event containining the
-                                number of clusters for each plane view. Needed
-                                to build the block diagonal adjecency matrix.
+            - test_generator: EventDataset, generator for inference
             - batch_size: int
             - threshold: float, interpret as positive if above network
                          prediction is threshold
@@ -84,6 +80,8 @@ class AbstractNet(Model):
         -------
             Predictions object
         """
+        inputs = test_generator.inputs
+        nb_clusters_list = test_generator.nb_clusters_list
         y_pred = []
         preds = []
         all_slices = []
@@ -91,7 +89,8 @@ class AbstractNet(Model):
             raise ValueError(
                 "Total number of cluster is unknown, did you forget to pass a valid generator for inference?"
             )
-        for inp, nb_planes_clusters in zip(inputs, nb_clusters_list):
+        zipped = zip(inputs, nb_clusters_list, test_generator.cthresholds)
+        for inp, nb_planes_clusters, cthreshold in zipped:
             # predict cluster pair connections
             pred = self.predict(inp, batch_size, verbose=1).flatten()
             y_pred.append(pred)
@@ -105,17 +104,23 @@ class AbstractNet(Model):
             # build a block diagonal matrix
             k = 0
             ped = 0
-            for nb_plane_clusters in nb_planes_clusters:
+            import sys
+
+            np.set_printoptions(linewidth=700, precision=1, threshold=sys.maxsize)
+            for nb_plane_clusters, cts in zip(nb_planes_clusters, cthreshold):
                 for i in range(nb_plane_clusters):
                     for j in range(i):
                         if i == j:
                             continue
                         adj[ped + i, ped + j] = pred[k]
                         k += 1
+                # prevent large cluster mixing due to small clusters connections
+                clear_plane_large_small_interactions(adj, ped, nb_plane_clusters, cts)
+                clear_plane_small_small_interactions(adj, ped, nb_plane_clusters, cts)
                 ped += nb_plane_clusters
-
             adj += adj.T + np.eye(nb_clusters)
             preds.append(adj)
+
             # threshold to find positive and negative edges
             pred = adj > threshold
 
@@ -127,17 +132,17 @@ class AbstractNet(Model):
             for node in range(len(graph)):
                 if node in visited:
                     continue
-                slice = set()  # the current slice only
-                bfs(slice, visited, node, graph)
-                slices.append(slice)
+                sl = set()  # the current sl only
+                bfs(sl, visited, node, graph)
+                slices.append(sl)
 
             all_slices.append(slices)
 
             # print_prediction(adj, all_slices)
-
         return Predictions(y_pred, preds, all_slices)
 
 
+# ======================================================================
 def print_prediction(adj, slices):
     """Prints to std output the adj matrix and all the slices."""
     import sys
@@ -159,5 +164,49 @@ def print_prediction(adj, slices):
     m = edges[:, 0] > edges[:, 1]
     # print(edges[m])
 
-    for slice in slices:
-        print(slice)
+    for sl in slices:
+        print(sl)
+
+
+# ======================================================================
+def clear_plane_large_small_interactions(adj, ped, nb_clusters, cts):
+    """
+    Modifies the adjecency matrix to allow at maximum one interaction with large
+    clusters for small size ones. This prevents clusters that has low size to
+    cause merging of higher order clusters. This is done on a plane view basis.
+    In place operation.
+
+    Parameters
+    ----------
+        - adj: np.array, adjecency matrix of shape=(nb_all_clusters, nb_all_clusters)
+        - ped: int, start index of the plane submatrix
+        - nb_clusters: int, number of clusters in plane view
+        - cts: list, starting indices of the different cluster size levels
+    """
+    bins = list(ped + np.array(cts + [nb_clusters]))
+    for ct1, ct2 in zip(bins, bins[1:]):
+        block = np.s_[ct1:ct2, ped:ct1]
+        m = np.amax(adj[block], axis=-1, keepdims=True)
+        mask = (adj[block] == m).astype(float)
+        adj[block] = mask * m
+
+
+# ======================================================================
+def clear_plane_small_small_interactions(adj, ped, nb_clusters, cts):
+    """
+    Modifies the adjecency matrix to disallow small to small clusters
+    interactions. As a result, one small cluster can be linked to a big cluster
+    only. This is done on a plane view basis. In place operation.
+
+    Parameters
+    ----------
+        - adj: np.array, adjecency matrix of shape=(nb_all_clusters, nb_all_clusters)
+        - ped: int, start index of the plane submatrix
+        - nb_clusters: int, number of clusters in plane view
+        - cts: list, starting indices of the different cluster size levels
+    """
+    istart = ped + cts[-1]
+    iend = ped + nb_clusters
+    nb_small_clusters = nb_clusters - cts[-1]
+    block = np.s_[istart:iend, istart:iend]
+    adj[block] = np.zeros([nb_small_clusters, nb_small_clusters])

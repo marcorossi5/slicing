@@ -43,12 +43,9 @@ class Event:
         self.U = PlaneView("U", hits_U, min_hits)
         self.V = PlaneView("V", hits_V, min_hits)
         self.W = PlaneView("W", hits_W, min_hits)
-        self.nb_plane_clusters = (
-            self.U.nb_clusters,
-            self.V.nb_clusters,
-            self.W.nb_clusters,
-        )
-        self.nb_all_clusters = sum(self.nb_plane_clusters)
+        self.planes = [self.U, self.V, self.W]
+        self.nb_plane_hits = (len(self.U), len(self.V), len(self.W))
+
         # do_sanity_checks(self.U, self.V, self.W)
 
     # ----------------------------------------------------------------------
@@ -61,23 +58,34 @@ class Event:
             - slices: list, of sets containing the cluster indices that belong
                       to the same slice
         """
-        predU = deepcopy(self.U.ordered_cluster_idx)
-        predV = self.V.ordered_cluster_idx + self.U.nb_clusters
-        predW = self.W.ordered_cluster_idx + self.U.nb_clusters + self.V.nb_clusters
-        for slice in deepcopy(slices):
-            idx = np.min(list(slice))
+        predU = deepcopy(self.U.status)
+        predV = deepcopy(self.V.status) + self.U.nb_clusters
+        predW = deepcopy(self.W.status) + self.U.nb_clusters + self.V.nb_clusters
+        for sl in deepcopy(slices):
+            idx = np.min(list(sl))
             # U plane
-            mask = np.isin(predU, list(slice))
+            mask = np.isin(predU, list(sl))
             predU[mask] = idx
             # V plane
-            mask = np.isin(predV, list(slice))
+            mask = np.isin(predV, list(sl))
             predV[mask] = idx
             # W plane
-            mask = np.isin(predW, list(slice))
+            mask = np.isin(predW, list(sl))
             predW[mask] = idx
         self.U.status = predU
         self.V.status = predV
         self.W.status = predW
+
+    # ----------------------------------------------------------------------
+    def refine(self):
+        for plane in self.planes:
+            plane.refine()
+        self.nb_plane_clusters = (
+            self.U.nb_clusters,
+            self.V.nb_clusters,
+            self.W.nb_clusters,
+        )
+        self.nb_all_clusters = sum(self.nb_plane_clusters)
 
 
 # ======================================================================
@@ -108,8 +116,8 @@ class PlaneView:
             - min_hits : int, consider only slices with equal or more than min_hits
         """
         self.tpc_view = VIEW_TO_ONEHOT_IDX[tpc_view]
-        # order the calohits by x and store the idx permutation (this does
-        # affect the calohit ordering directly)
+        # order the calohits by x and store the idx permutation (this affects
+        # the calohit ordering directly)
         self.original_calohits = original_hits
 
         calohits = deepcopy(original_hits)
@@ -138,106 +146,67 @@ class PlaneView:
         self.mc_idx = calohits[7]
         self.ordered_mc_idx = deepcopy(calohits[7])
         sort_fn = lambda x: np.count_nonzero(calohits[7] == x)
-        self.sorted_mc_idx = sorted(list(set(calohits[7])), key=sort_fn, reverse=True)
-        for i, idx in enumerate(self.sorted_mc_idx):
+        sorted_mc_idx = sorted(list(set(calohits[7])), key=sort_fn, reverse=True)
+        for i, idx in enumerate(sorted_mc_idx):
             self.ordered_mc_idx[calohits[7] == idx] = i
 
         # build the pndr_slice ordering (useful for testing)
         self.pndr_idx = calohits[6]
         self.ordered_pndr_idx = deepcopy(calohits[6])
         sort_fn = lambda x: np.count_nonzero(calohits[6] == x)
-        self.sorted_pndr_idx = sorted(list(set(calohits[6])), key=sort_fn, reverse=True)
-        for i, idx in enumerate(self.sorted_pndr_idx):
+        sorted_pndr_idx = sorted(list(set(calohits[6])), key=sort_fn, reverse=True)
+        for i, idx in enumerate(sorted_pndr_idx):
             self.ordered_pndr_idx[calohits[6] == idx] = i
 
         # build cluster list ordering
         self.cluster_idx = calohits[5]
         self.ordered_cluster_idx = deepcopy(calohits[5])
         sort_fn = lambda x: np.count_nonzero(calohits[5] == x)
-        self.sorted_cluster_idx = sorted(
-            list(set(calohits[5])), key=sort_fn, reverse=True
-        )
-        for i, idx in enumerate(self.sorted_cluster_idx):
+        sorted_cluster_idx = sorted(list(set(calohits[5])), key=sort_fn, reverse=True)
+        for i, idx in enumerate(sorted_cluster_idx):
             self.ordered_cluster_idx[calohits[5] == idx] = i
 
-        self.cluster_set = set(self.ordered_cluster_idx)
-        self.nb_clusters = len(self.cluster_set)
+        # build status list ordering
+        # if status has only -1s it means that inference never happened before
+        # if status has not results then store the ordered input cluster idxs
+        self.original_status = calohits[8]
+        self.status_has_results = False if np.all(self.original_status == -1) else True
+        sl = 8 if self.status_has_results else 5
+        self.status = deepcopy(calohits[sl])
 
-        # point cloud to be passed to the agent:
-        # (energy, x, z, x_dir, z_dir, pfo cluster idx)
-        self.point_cloud = np.concatenate([calohits[:5], [self.ordered_cluster_idx]])
-        self.status = calohits[8]
         self.nb_calohits = len(self.status)
+
+        # point cloud to be passed to cluster feature extraction
+        # (energy, x, z, x_dir, z_dir)
+        self.point_cloud = calohits[:5]
 
         self.test_beam = self.calohits[9]  # test beam flag array
         self.PDG = self.calohits[10]  # parent mc particle PDG array
         self.pfo_index = self.calohits[11]  # parent pfo index attribute
-
-        (
-            self.all_cluster_features,
-            self.cluster_to_main_pfo,
-        ) = self.get_all_cluster_info()
-
-        # look at the do_checks function docstring
-        self.calo2mpfo = self.cluster_to_main_pfo[self.ordered_cluster_idx.astype(int)]
-        calo2pfo_set = set(self.calo2mpfo)
-        pfo_set = set(self.pfo_index)
-        self.not_visited_pfos = pfo_set.difference(calo2pfo_set)
-        self.not_visited_pfos_completeness = [
-            np.count_nonzero(self.pfo_index == pfo) / self.nb_calohits
-            for pfo in self.not_visited_pfos
-        ]
-        self.visited_pfos = pfo_set.intersection(calo2pfo_set)
-        self.visited_pfos_completeness = [
-            np.count_nonzero(self.pfo_index == pfo) / self.nb_calohits
-            for pfo in self.visited_pfos
-        ]
-
-    # ----------------------------------------------------------------------
-    def get_all_cluster_info(self):
-        """
-        Compute the cluster vector information for all clusters in the plane view.
-        Matches each cluster to the predominant pfo in the event.
-
-        Returns
-        -------
-            - np.array, cluster features of shape=(nb_clusters, nb_features)
-            - np.array, main pfo index of shape=(nb_clusters)
-        """
-        all_features = []
-        # cluster to main pfo
-        c2mpfo = []
-
-        for idx in sorted(list(self.cluster_set)):
-            # extract cluster
-            m = self.ordered_cluster_idx == idx
-            cluster_hits = self.point_cloud[:, m]
-            hits_pct = np.count_nonzero(m) / len(self.ordered_cluster_idx)
-            all_features.append(
-                get_cluster_features(cluster_hits, hits_pct, self.tpc_view)
-            )
-
-            # select the main pfo for cluster
-            sort_fn = lambda x: np.count_nonzero(self.pfo_index[m] == x)
-            c2mpfo.append(
-                sorted(list(set(self.pfo_index[m])), key=sort_fn, reverse=True)[0]
-            )
-        return np.stack(all_features, axis=0), np.array(c2mpfo)
 
     # ----------------------------------------------------------------------
     def __len__(self):
         return self.nb_calohits
 
     # ----------------------------------------------------------------------
-    def state(self):
+    def state(self, i):
         """
-        Return the observable state: describes the clusters adjecency matrix.
+        Return the observable state for cluster i. Matrix of features for each
+        hit inside cluster as an array of shape=(nb cluster hits, nb features).
+        Last axis describes:
+            - E
+            - x
+            - z
+            - expected x direction
+            - expected z direction
+
 
         Returns
         -------
-            - np.array, of shape=(nb_clusters, nb_clusters, 2, nb_features)
+            - np.array, of shape=(nb cluster hits, nb features)
         """
-        return self.cluster_features
+        m = self.status == i
+        return self.point_cloud.T[m]
 
     # ----------------------------------------------------------------------
     def original_order_status(self):
@@ -251,16 +220,32 @@ class PlaneView:
 
         Parameters
         ----------
-            - status : np.array, status predictions array of shape=(num calohits,)
-            - graph   : np.array, graph predictions array of shape=(num calohits, num neighbors)
+            - status : np.array, status predictions array of shape=(nb calohits,)
         """
-        pred = deepcopy(self.ordered_cluster_idx)
-        for slice in deepcopy(slices):
-            idx = np.min(list(slice))
-            slice.remove(idx)
-            for cluster in slice:
+        pred = deepcopy(self.status)
+        for sl in deepcopy(slices):
+            idx = np.min(list(sl))
+            sl.remove(idx)
+            for cluster in sl:
                 pred[pred == cluster] = idx
         self.status = pred
+
+    # ----------------------------------------------------------------------
+    def refine(self):
+        """
+        Looks at the status attribute to build the FFNN input and target
+        information. Stores the needed information in all_cluster_features and
+        cluster_to_main_pfo attributes.
+        """
+        pc = np.concatenate([self.point_cloud, [self.status]])
+        self.cluster_set = set(self.status)
+        self.nb_clusters = len(self.cluster_set)
+        self.all_cluster_features = get_all_cluster_info(
+            pc, self.cluster_set, self.tpc_view
+        )
+        self.cluster_to_main_pfo = get_cluster_to_main_pfo(
+            self.status, self.cluster_set, self.pfo_index
+        )
 
     # ----------------------------------------------------------------------
     def calohits_to_array(self):
@@ -318,7 +303,61 @@ class PlaneView:
             fname.write(b"\n")
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
+def get_all_cluster_info(pc, cluster_set, tpc_view):
+    """
+    Compute the cluster vector information for all clusters in the plane view.
+
+    Parameters
+    ----------
+        - pc: np.array, of shape (6, nb_hits). pc[-1] must contain the ordered
+              cluster index
+        - cluster_set: set, of all cluster indices
+        - tpc_view: np.array
+
+    Returns
+    -------
+        - np.array, cluster features of shape=(nb_clusters, nb_features)
+    """
+    cluster_idx = pc[-1]
+    all_features = []
+
+    for idx in sorted(list(cluster_set)):
+        # extract cluster
+        m = cluster_idx == idx
+        cluster_hits = pc[:, m]
+        hits_pct = np.count_nonzero(m) / len(cluster_idx)
+        all_features.append(get_cluster_features(cluster_hits, hits_pct, tpc_view))
+    return np.stack(all_features, axis=0)
+
+
+# ======================================================================
+def get_cluster_to_main_pfo(cluster_idx, cluster_set, pfo_index):
+    """
+    Matches each cluster to the predominant pfo in the event.
+
+    Parameters
+    ----------
+        - cluster_idx: np.array, mapping of calohit to cluster index of
+                       shape=(nb_hits,)
+        - cluster_set: set, of all cluster indices
+        - pfo_index: np.array, mapping of calohit to pfo index of
+                     shape=(nb_hits,)
+
+    Returns
+    -------
+        - np.array, main pfo index of shape=(nb_clusters)
+    """
+    c2mpfo = []
+    for idx in sorted(list(cluster_set)):
+        m = cluster_idx == idx
+        # select the main pfo for cluster
+        sort_fn = lambda x: np.count_nonzero(pfo_index[m] == x)
+        c2mpfo.append(sorted(list(set(pfo_index[m])), key=sort_fn, reverse=True)[0])
+    return np.array(c2mpfo)
+
+
+# ======================================================================
 def get_cluster_features(cluster_hits, hits_pct, tpc_view):
     """Compute the cluster feature vector, given a single cluster
 
@@ -377,180 +416,3 @@ def get_cluster_features(cluster_hits, hits_pct, tpc_view):
     )  # cluster hits energy standard deviation (24)
     features.extend(tpc_view)
     return np.array(features)
-
-
-# ======================================================================
-
-
-def do_sanity_checks(U, V, W):
-    """
-    Performs sanity checks.
-
-    Note
-    ----
-        clusters and pfos are two different calohit partitions. clusters
-        operate at PlaneView level, while pfos are event-wide.
-        Since 2D clustering is not a perfect algorithm, there could be
-        discrepancies between the two set partitions. We must ensure that the
-        discrepancies are tiny and do not spoil the slicing algorithm performance.
-        Check then the pfos that are left aside when assigning the main pfo to
-        a cluster, have in fact small contribution (completeness) in the
-        overall event (i.e., the percentage of the calohits relative to these
-        pfos is small).
-    """
-    import matplotlib.pyplot as plt
-    from slicerl.diagnostics import norm, cmap
-
-    bins = np.logspace(-4, 0, 20)
-    plt.subplot(131)
-    plt.title("U plane")
-    plt.hist(
-        U.visited_pfos_completeness,
-        bins=bins,
-        label="visited",
-        color="green",
-        histtype="step",
-        lw=0.5,
-    )
-    plt.hist(
-        U.not_visited_pfos_completeness,
-        bins=bins,
-        label="not visited",
-        color="red",
-        histtype="step",
-        lw=0.5,
-    )
-    plt.legend()
-    plt.xscale("log")
-    plt.xlabel("Pfo completeness")
-    plt.subplot(132)
-    plt.title("V plane")
-    plt.hist(
-        V.visited_pfos_completeness,
-        bins=bins,
-        label="visited",
-        color="green",
-        histtype="step",
-        lw=0.5,
-    )
-    plt.hist(
-        V.not_visited_pfos_completeness,
-        bins=bins,
-        label="not visited",
-        color="red",
-        histtype="step",
-        lw=0.5,
-    )
-    plt.xscale("log")
-    plt.xlabel("Pfo completeness")
-    plt.subplot(133)
-    plt.title("W plane")
-    plt.hist(
-        W.visited_pfos_completeness,
-        bins=bins,
-        label="visited",
-        color="green",
-        histtype="step",
-        lw=0.5,
-    )
-    plt.hist(
-        W.not_visited_pfos_completeness,
-        bins=bins,
-        label="not visited",
-        color="red",
-        histtype="step",
-        lw=0.5,
-    )
-    plt.xscale("log")
-    plt.xlabel("Pfo completeness")
-    plt.show()
-
-    plt.subplot(331)
-    plt.title("U plane")
-    plt.ylabel("inputs")
-    plt.scatter(
-        U.calohits[1] * 1000,
-        U.calohits[2] * 1000,
-        s=0.5,
-        c=U.calohits[5] % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(332)
-    plt.title("V plane")
-    plt.scatter(
-        V.calohits[1] * 1000,
-        V.calohits[2] * 1000,
-        s=0.5,
-        c=V.calohits[5] % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(333)
-    plt.title("W plane")
-    plt.scatter(
-        W.calohits[1] * 1000,
-        W.calohits[2] * 1000,
-        s=0.5,
-        c=W.calohits[5] % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(334)
-    plt.ylabel("truths")
-    plt.scatter(
-        U.calohits[1] * 1000,
-        U.calohits[2] * 1000,
-        s=0.5,
-        c=U.calohits[7] % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(335)
-    plt.scatter(
-        V.calohits[1] * 1000,
-        V.calohits[2] * 1000,
-        s=0.5,
-        c=V.calohits[7] % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(336)
-    plt.scatter(
-        W.calohits[1] * 1000,
-        W.calohits[2] * 1000,
-        s=0.5,
-        c=W.calohits[7] % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(337)
-    plt.ylabel("calo to pfos")
-    plt.scatter(
-        U.calohits[1] * 1000,
-        U.calohits[2] * 1000,
-        s=0.5,
-        c=U.calo2mpfo % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(338)
-    plt.scatter(
-        V.calohits[1] * 1000,
-        V.calohits[2] * 1000,
-        s=0.5,
-        c=V.calo2mpfo % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-    plt.subplot(339)
-    plt.scatter(
-        W.calohits[1] * 1000,
-        W.calohits[2] * 1000,
-        s=0.5,
-        c=W.calo2mpfo % 128,
-        norm=norm,
-        cmap=cmap,
-    )
-
-    plt.show()

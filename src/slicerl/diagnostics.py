@@ -311,12 +311,12 @@ def get_beam_metrics(events, pndr=False, dump=False):
                 # completeness is fraction of test beam hits in reconstructed
                 # slice over the total number of test beam hits in the event
 
-                slice = status == p_idx
-                tot = np.count_nonzero(slice)
-                isBeam_purity = np.count_nonzero(event.calohits[-2, slice])
+                sl = status == p_idx
+                tot = np.count_nonzero(sl)
+                isBeam_purity = np.count_nonzero(event.calohits[-2, sl])
                 purity = isBeam_purity / tot
                 # isBeam_completeness = np.count_nonzero(
-                #     np.logical_and(slice_mc, slice)
+                #     np.logical_and(slice_mc, sl)
                 # )
                 # completeness = isBeam_completeness / tot_mc
                 completeness = isBeam_purity / tot_TB
@@ -349,12 +349,12 @@ def get_beam_metrics(events, pndr=False, dump=False):
                     if purity >= THRESHOLD:
                         if dump:
                             print(
-                                f"  - slice {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> TB"
+                                f"  - sl {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> TB"
                             )
                     else:
                         if dump:
                             print(
-                                f"  - slice {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> CR"
+                                f"  - sl {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> CR"
                             )
     statuses = np.array(statuses).T  # of shape=(3, tests)
     purities = np.array(purities)

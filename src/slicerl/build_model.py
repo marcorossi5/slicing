@@ -220,8 +220,7 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
     # )
 
     y_pred = net.get_prediction(
-        test_generator.inputs,
-        test_generator.nb_clusters_list,
+        test_generator,
         setup["model"]["test_batch_size"],
         threshold=setup["model"]["threshold"],
     )

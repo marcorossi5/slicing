@@ -12,17 +12,27 @@ class EventDataset(tf.keras.utils.Sequence):
 
     # ----------------------------------------------------------------------
     def __init__(
-        self, data, batch_size, is_training=False, shuffle=True, verbose=0, **kwargs
+        self,
+        data,
+        batch_size,
+        cthresholds=None,
+        is_training=False,
+        shuffle=False,
+        verbose=1,
     ):
         """
         This generator must be used for training only.
 
         Parameters
         ----------
-            - data    : list, network [inputs, targets]
+            - data: list, network [event, [inputs, targets]]
+            - batch_size: int, batch size
+            - cthresholds: list, for each plane view the index in the adjacency
+                           matrix that separates the two types of clusters
             - is_training: bool, wether the dataset is used for training or
                            testing purposes
-            - shuffle : bool, wether to shuffle dataset on epoch end
+            - shuffle: bool, wether to shuffle dataset on epoch end
+            - verbose: int, print balancing stats
         """
         # needed to generate the dataset
         self.__events = data[0]
@@ -34,6 +44,7 @@ class EventDataset(tf.keras.utils.Sequence):
         self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
         self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
         self.batch_size = batch_size
+        self.cthresholds = cthresholds
         self.is_training = is_training
         self.shuffle = shuffle
         self.verbose = verbose
@@ -194,13 +205,14 @@ def split_dataset(data, split=0.5):
 
 
 # ======================================================================
-def generate_inputs_and_targets(event, is_training=False):
+def generate_inputs_and_targets(event, is_training=False, min_hits=1):
     """
     Takes an Event object and processes the 2D clusters to retrieve inputs and
     associated target arrays. Input arrays are concatenated cluster feacture
     vectors. Target arrays are binaries. If n is cluster number in an event, and
     is_training is False, n*(n-1)/2 clusters pairs are produced, n*(n-1) if
     is_training is True.
+    Filters the clusters by number of hits.
 
     Parameters
     ----------
@@ -236,21 +248,28 @@ def generate_inputs_and_targets(event, is_training=False):
     inputs = []
     targets = []
     ped = 0
-
-    iterable = event.nb_plane_clusters[:1] if is_training else event.nb_plane_clusters
-    for nb_cluster in iterable:
+    sl = slice(1) if is_training else slice(None)
+    zipped = zip(event.nb_plane_clusters[sl], event.nb_plane_hits[sl])
+    for nb_cluster, nb_hits in zipped:
         for i in range(nb_cluster):
             for j in range(nb_cluster):
+                # filtering
                 if i == j:
                     continue
                 if i < j and not is_training:
                     continue
+                nb_hits1 = np.ceil(acf[ped + i, 0] * nb_hits)
+                nb_hits2 = np.ceil(acf[ped + j, 0] * nb_hits)
+                if nb_hits1 < min_hits or nb_hits2 < min_hits:
+                    print(nb_hits2, nb_hits1)
+                    continue
+                # get inputs
                 cf0 = acf[ped + i]
                 cf1 = acf[ped + j]
-                # absolute scalar product between the two expected directions
                 sdot = np.abs((cf0[3:5] * cf1[3:5]).sum())
-                inps = np.concatenate([acf[ped + i], acf[ped + j], [sdot]])
+                inps = np.concatenate([cf0, cf1, [sdot]])
                 inputs.append(inps)
+                # get targets
                 tgt = 1.0 if c2mpfo[ped + i] == c2mpfo[ped + j] else 0.0
                 targets.append(tgt)
         ped += nb_cluster
@@ -258,14 +277,94 @@ def generate_inputs_and_targets(event, is_training=False):
 
 
 # ======================================================================
-def build_dataset(fn, nev=-1, min_hits=1, split=None, is_training=False):
-    """
+def load_events(fn, nev, min_hits):
+    """Loads event from file into a list of Event objects. Supported inputs are
+    either a single file name or a list of file names.
+
     Parameters
     ----------
-        - fn       : list, of str events filenames
-        - nev      : int, number of events to take from each file
+        - fn: str or list, events file names
+        - nev: int, number of events to take from each file
         - min_hits : int, minimum hits per slice for dataset inclusion
-        - split    : float, split percentage between train and val in events
+
+    Returns
+    -------
+        - list of Event objects
+
+    Raises
+    ------
+        - NotImplementedError if fn is not str, list or tuple
+    """
+    if isinstance(fn, str):
+        events = load_Events_from_file(fn, nev, min_hits)
+    elif isinstance(fn, list) or isinstance(fn, tuple):
+        events = load_Events_from_files(fn, nev, min_hits)
+    else:
+        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
+    return events
+
+
+# ======================================================================
+def get_generator(
+    events, batch_size, split=False, is_training=False, min_hits=1, cthreshold=None
+):
+    """
+    Wrapper function to obtain an event dataset ready for inference directly
+    from a list of events.
+
+    Parameters
+    ----------
+        - events: list, of Event instances
+        - batch_size: int, batch size
+        - split: float, split percentage between train and val in events
+        - is_training: bool, wether the dataset is used for training or
+                       testing purposes
+        - min_hits : int, minimum hits per input cluster for dataset inclusion
+        - cthreshold: int, size of input cluster above which a cluster is
+                      considered to be large
+
+    Returns
+    -------
+        - EventDataset, object for inference
+    """
+    kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
+    inputs = []
+    targets = []
+    cthresholds = []
+    for event in events:
+        event.refine()
+        inps, tgts = generate_inputs_and_targets(
+            event, is_training=is_training, min_hits=min_hits
+        )
+        if cthreshold is not None:
+            cthresholds.append(get_cluster_thresholds(event, cthreshold))
+        inputs.append(inps)
+        targets.append(tgts)
+    if split:
+        train_splitted, val_splitted = split_dataset([inputs, targets], split)
+        train_data = [None, train_splitted]
+        val_data = [None, val_splitted]
+        keys = kwargs.copy()
+        keys.update(shuffle=True)
+        return EventDataset(train_data, **keys), EventDataset(val_data, **kwargs)
+    data = events, [inputs, targets]
+    return EventDataset(data, cthresholds=cthresholds, **kwargs)
+
+
+# ======================================================================
+def build_dataset(
+    fn, batch_size, nev=-1, min_hits=1, split=None, is_training=False, cthreshold=None
+):
+    """
+    Loads first the events from file, then generates the dataset to be fed into
+    FFNN.
+
+    Parameters
+    ----------
+        - fn: list, of str events filenames
+        - nev: int, number of events to take from each file
+        - min_hits: int, minimum hits per input cluster for dataset inclusion
+        - split: float, split percentage between train and val in events
 
     Returns
     -------
@@ -274,24 +373,15 @@ def build_dataset(fn, nev=-1, min_hits=1, split=None, is_training=False):
             inputs is list of np.arrays of shape=(nb_cluster_pairs, nb_features);
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
-    if isinstance(fn, str):
-        events = load_Events_from_file(fn, nev, min_hits)
-    elif isinstance(fn, list) or isinstance(fn, tuple):
-        events = load_Events_from_files(fn, nev, min_hits)
-    else:
-        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
-
-    inputs = []
-    targets = []
-    for event in events:
-        inps, tgts = generate_inputs_and_targets(event, is_training=is_training)
-        inputs.append(inps)
-        targets.append(tgts)
-
-    if split:
-        train_splitted, val_splitted = split_dataset([inputs, targets], split)
-        return [None, train_splitted], [None, val_splitted]
-    return events, [inputs, targets]
+    events = load_events(fn, nev, min_hits)
+    return get_generator(
+        events,
+        batch_size,
+        split=split,
+        is_training=is_training,
+        min_hits=min_hits,
+        cthreshold=cthreshold,
+    )
 
 
 # ======================================================================
@@ -311,17 +401,9 @@ def build_dataset_train(setup):
     split = setup["dataset"]["split"]
     batch_size = setup["model"]["batch_size"]
 
-    train, val = build_dataset(
-        fn, nev=nev, min_hits=min_hits, split=split, is_training=True
+    return build_dataset(
+        fn, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True
     )
-
-    train_generator = EventDataset(
-        train, is_training=True, batch_size=batch_size, shuffle=True
-    )
-    val_generator = (
-        EventDataset(val, is_training=True, batch_size=batch_size) if split else None
-    )
-    return train_generator, val_generator
 
 
 # ======================================================================
@@ -337,9 +419,11 @@ def build_dataset_test(setup):
     nev = setup["test"]["nev"]
     min_hits = setup["test"]["min_hits"]
     batch_size = setup["model"]["batch_size"]
+    cthreshold = setup["test"]["cthreshold"]
 
-    data = build_dataset(fn, nev=nev, min_hits=min_hits)
-    return EventDataset(data, batch_size=batch_size)
+    return build_dataset(
+        fn, batch_size, nev=nev, min_hits=min_hits, cthreshold=cthreshold
+    )
 
 
 # ======================================================================
@@ -350,3 +434,29 @@ def dummy_dataset(nb_feats):
     targets = [np.random.rand(B) for i in range(2)]
     data = (None, [inputs, targets])
     return EventDataset(data, batch_size=B, is_training=True)
+
+
+# ======================================================================
+def get_cluster_thresholds(event, cthreshold):
+    """
+    Parameters
+    ----------
+        - event: Event instance
+        - cthreshold: list, size of input cluster above which a cluster is
+                      considered to be large
+
+    Returns
+    -------
+        - list, for each plane view in the event, the index in the adjacency matrix that
+          separates the two types of clusters
+    """
+    cthresholds = []
+    for plane in event.planes:
+        plane_thresholds = []
+        map_fn = lambda x: np.count_nonzero(plane.status == x)
+        csize = np.array(list(map(map_fn, sorted(plane.cluster_set))))
+        for ct in cthreshold:
+            plane_thresholds.append(np.count_nonzero(csize > ct))
+        cthresholds.append(plane_thresholds)
+    print("Thresholds: ", cthresholds)
+    return cthresholds
