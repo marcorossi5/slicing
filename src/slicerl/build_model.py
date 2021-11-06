@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+from slicerl.AbstractNet import get_prediction
 from slicerl.FFNN import FFNN
 from slicerl.losses import dice_loss
 from slicerl.build_dataset import dummy_dataset
@@ -46,6 +47,7 @@ def load_network(setup, checkpoint_filepath=None):
         "batch_size": setup["model"]["batch_size"],
         "use_bias": setup["model"]["use_bias"],
         "f_dims": setup["model"]["f_dims"],
+        "activation": lambda x: tf.keras.activations.relu(x, alpha=0.2),
     }
     net = FFNN(name="FFNN", **net_dict)
 
@@ -85,7 +87,6 @@ def load_network(setup, checkpoint_filepath=None):
         # dummy forward pass to build the layers
         dummy_generator = dummy_dataset(setup["model"]["f_dims"])
         net.evaluate(dummy_generator.inputs, verbose=0)
-
         print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath.as_posix())
 
@@ -212,14 +213,8 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
     checkpoint_filepath = setup["output"].joinpath("network.h5")
     net = load_network(setup, checkpoint_filepath)
 
-    # TODO: this must be a generator with is_training and without the splitting
-    # but it's not mandatory
-    # results = net.evaluate(test_generator)
-    # print(
-    #     f"Test loss: {results[0]:.5f} \t test accuracy: {results[1]} \t test precision: {results[2]} \t test recall: {results[3]}"
-    # )
-
-    y_pred = net.get_prediction(
+    y_pred = get_prediction(
+        net,
         test_generator,
         setup["model"]["test_batch_size"],
         threshold=setup["model"]["threshold"],

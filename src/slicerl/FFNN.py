@@ -3,6 +3,7 @@ from slicerl.AbstractNet import AbstractNet
 from tensorflow.keras.layers import Dense, BatchNormalization, Dropout, Concatenate
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Layer
+from tensorflow.keras.activations import sigmoid
 
 
 # ======================================================================
@@ -128,24 +129,24 @@ class FFNN(AbstractNet):
         # store some useful parameters
         self.filters = [
             self.f_dims,
-            self.f_dims * 2,
-            self.f_dims * 3,
-            self.f_dims * 4,
-            self.f_dims * 5,
-            self.f_dims * 6,
-            self.f_dims * 7,
-            self.f_dims * 8,
-            self.f_dims * 7,
-            self.f_dims * 6,
-            self.f_dims * 5,
-            self.f_dims * 4,
-            self.f_dims * 3,
-            self.f_dims * 2,
-            128,
+            54,
+            50,
+            46,
+            42,
+            36,
+            32,
+            28,
+            24,
+            20,
+            16,
+            12,
+            8,
+            4,
+            2,
             1,
         ]
 
-        self.nb_heads = 3
+        self.nb_heads = 1
         self.heads = []
         for ih in range(self.nb_heads):
             self.heads.append(
@@ -159,8 +160,8 @@ class FFNN(AbstractNet):
             )
 
         self.concat = Concatenate(axis=-1, name="cat")
-        self.final_dense = Dense(1, activation="sigmoid", name="final")
-        self.final_dense.build(input_shape=(len(self.heads) * self.filters[-1],))
+        # self.final_dense = Dense(1, activation=sigmoid, name="final")
+        # self.final_dense.build(input_shape=(len(self.heads) * self.filters[-1],))
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -177,6 +178,7 @@ class FFNN(AbstractNet):
         for head in self.heads:
             results.append(head(inputs))
 
+        return sigmoid(results[0])
         return self.final_dense(self.concat(results))
 
     # ----------------------------------------------------------------------

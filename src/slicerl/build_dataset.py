@@ -6,11 +6,7 @@ import tensorflow as tf
 import numpy as np
 from math import ceil
 
-plane_to_idx = {
-    "U": 0,
-    "V": 1,
-    "W": 2
-}
+plane_to_idx = {"U": 0, "V": 1, "W": 2}
 
 # ======================================================================
 class EventDataset(tf.keras.utils.Sequence):
@@ -49,6 +45,7 @@ class EventDataset(tf.keras.utils.Sequence):
         )
         self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
         self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
+        self.c_indices = np.concatenate(data[1][2]) if is_training else data[1][2]
         self.batch_size = batch_size
         self.cthresholds = cthresholds
         self.is_training = is_training
@@ -70,6 +67,7 @@ class EventDataset(tf.keras.utils.Sequence):
         else:
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
+            # no balance needed for cluster indices because they enter inference only
 
     # ----------------------------------------------------------------------
     def balance_dataset(self, balancing):
@@ -185,7 +183,7 @@ def split_dataset(data, split=0.5):
     """
     Parameters
     ----------
-        - data  : list, [inputs, targets] for RandLA-Net to split
+        - data  : list, [inputs, targets, c indices] for RandLA-Net to split
         - split : list, [validation, test] percentages
 
     Returns
@@ -193,7 +191,7 @@ def split_dataset(data, split=0.5):
         - list, [inputs, targets] for validation
         - list, [inputs, targets] for testing
     """
-    inputs, targets = data
+    inputs, targets, c_indices = data
     assert len(inputs) == len(
         targets
     ), f"Length of inputs and targets must match, got {len(inputs)} and {len(targets)}"
@@ -203,11 +201,13 @@ def split_dataset(data, split=0.5):
 
     train_inp = [inputs[i] for i in perm[:nb_split]]
     train_trg = [targets[i] for i in perm[:nb_split]]
+    train_c = [c_indices[i] for i in perm[:nb_split]]
 
     val_inp = [inputs[i] for i in perm[nb_split:]]
     val_trg = [targets[i] for i in perm[nb_split:]]
+    val_c = [c_indices[i] for i in perm[nb_split:]]
 
-    return [train_inp, train_trg], [val_inp, val_trg]
+    return [train_inp, train_trg, train_c], [val_inp, val_trg, val_c]
 
 
 # ======================================================================
@@ -254,6 +254,7 @@ def generate_inputs_and_targets(event, is_training=False, min_hits=1, plane=None
     # create network inputs and targets
     inputs = []
     targets = []
+    c_indices = []
     ped = 0
     sl = slice(plane, plane + 1) if is_training else slice(None)
     zipped = zip(event.nb_plane_clusters[sl], event.nb_plane_hits[sl])
@@ -268,18 +269,31 @@ def generate_inputs_and_targets(event, is_training=False, min_hits=1, plane=None
                 nb_hits1 = np.ceil(acf[ped + i, 0] * nb_hits)
                 nb_hits2 = np.ceil(acf[ped + j, 0] * nb_hits)
                 if nb_hits1 < min_hits or nb_hits2 < min_hits:
+                    # TODO: is this needed?
                     continue
                 # get inputs
                 cf0 = acf[ped + i]
                 cf1 = acf[ped + j]
+                # angle between exp dirs
                 sdot = np.abs((cf0[3:5] * cf1[3:5]).sum())
-                inps = np.concatenate([cf0, cf1, [sdot]])
+                # min and max intercluster distance
+                delim_c0 = cf0[15:23].reshape(2, 4).T
+                delim_c1 = cf1[15:23].reshape(2, 4).T
+                min_dist = np.inf
+                for p0 in delim_c0:
+                    for p1 in delim_c1:
+                        dist = ((p0 - p1) ** 2).sum()
+                        if dist < min_dist:
+                            min_dist = dist
+                sqdist = np.sqrt(min_dist)
+                inps = np.concatenate([cf0, cf1, [sdot], [sqdist]])
                 inputs.append(inps)
                 # get targets
                 tgt = 1.0 if c2mpfo[ped + i] == c2mpfo[ped + j] else 0.0
                 targets.append(tgt)
+                c_indices.append([ped + i, ped + j])
         ped += nb_cluster
-    return np.stack(inputs, axis=0), np.array(targets)
+    return np.stack(inputs, axis=0), np.array(targets), np.array(c_indices)
 
 
 # ======================================================================
@@ -312,7 +326,13 @@ def load_events(fn, nev, min_hits):
 
 # ======================================================================
 def get_generator(
-    events, batch_size, split=False, is_training=False, min_hits=1, cthreshold=None, plane=None
+    events,
+    batch_size,
+    split=False,
+    is_training=False,
+    min_hits=1,
+    cthreshold=None,
+    plane=None,
 ):
     """
     Wrapper function to obtain an event dataset ready for inference directly
@@ -337,30 +357,41 @@ def get_generator(
     kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
     inputs = []
     targets = []
+    c_indices = []
     cthresholds = []
     for event in events:
         event.refine()
-        inps, tgts = generate_inputs_and_targets(
+        inps, tgts, c_idxs = generate_inputs_and_targets(
             event, is_training=is_training, min_hits=min_hits, plane=plane
         )
         if cthreshold is not None:
             cthresholds.append(get_cluster_thresholds(event, cthreshold))
         inputs.append(inps)
         targets.append(tgts)
+        c_indices.append(c_idxs)
     if split:
-        train_splitted, val_splitted = split_dataset([inputs, targets], split)
+        train_splitted, val_splitted = split_dataset(
+            [inputs, targets, c_indices], split
+        )
         train_data = [None, train_splitted]
         val_data = [None, val_splitted]
         keys = kwargs.copy()
         keys.update(shuffle=True)
         return EventDataset(train_data, **keys), EventDataset(val_data, **kwargs)
-    data = events, [inputs, targets]
+    data = events, [inputs, targets, c_indices]
     return EventDataset(data, cthresholds=cthresholds, **kwargs)
 
 
 # ======================================================================
 def build_dataset(
-    fn, batch_size, nev=-1, min_hits=1, split=None, is_training=False, cthreshold=None, plane=None
+    fn,
+    batch_size,
+    nev=-1,
+    min_hits=1,
+    split=None,
+    is_training=False,
+    cthreshold=None,
+    plane=None,
 ):
     """
     Loads first the events from file, then generates the dataset to be fed into
@@ -389,7 +420,7 @@ def build_dataset(
         is_training=is_training,
         min_hits=min_hits,
         cthreshold=cthreshold,
-        plane=plane
+        plane=plane,
     )
 
 
@@ -412,7 +443,13 @@ def build_dataset_train(setup):
     plane = plane_to_idx[setup["train"]["plane"]]
 
     return build_dataset(
-        fn, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True, plane=plane
+        fn,
+        batch_size,
+        nev=nev,
+        min_hits=min_hits,
+        split=split,
+        is_training=True,
+        plane=plane,
     )
 
 
@@ -438,12 +475,19 @@ def build_dataset_test(setup):
 
 # ======================================================================
 def dummy_dataset(nb_feats):
-    """ Return a dummy dataset to build the model first when loading. """
+    """
+    Return a dummy dataset to build the model first when loading.
+
+    Note
+    ----
+    Do NOT use this generator for the whole inference pipeline. The cluster
+    indices are dummy float values, not integers.
+    """
     B = 32
-    inputs = [np.random.rand(B, nb_feats) for i in range(2)]
-    targets = [np.random.rand(B) for i in range(2)]
-    data = (None, [inputs, targets])
-    return EventDataset(data, batch_size=B, is_training=True)
+    inputs = [np.random.rand(B * 50, nb_feats) for i in range(2)]
+    targets = [np.random.rand(B * 50) for i in range(2)]
+    data = (None, [inputs, targets, targets])
+    return EventDataset(data, batch_size=B, is_training=True, verbose=0)
 
 
 # ======================================================================

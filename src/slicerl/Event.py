@@ -171,8 +171,8 @@ class PlaneView:
         # if status has not results then store the ordered input cluster idxs
         self.original_status = calohits[8]
         self.status_has_results = False if np.all(self.original_status == -1) else True
-        sl = 8 if self.status_has_results else 5
-        self.status = deepcopy(calohits[sl])
+        sl = calohits[8] if self.status_has_results else self.ordered_cluster_idx
+        self.status = deepcopy(sl)
 
         self.nb_calohits = len(self.status)
 
@@ -398,7 +398,7 @@ def get_cluster_features(cluster_hits, hits_pct, tpc_view):
     dists = (rot_pc[:, None] * evectors[..., None]).sum(0)
     p0, p1 = np.argmin(dists, axis=1)
     p2, p3 = np.argmax(dists, axis=1)
-    delimiters = pc[:, [p0, p1, p2, p3]]
+    delimiters = pc[:, [p0, p1, p2, p3]]  # of shape (2,4)
 
     # build the cluster feature vector
     features.append(hits_pct)  # cluster hits percentage (0)
