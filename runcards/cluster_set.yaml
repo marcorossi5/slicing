@@ -23,6 +23,7 @@ test:
       - 50
       - 20
 train:
+  plane: U
   fn:
     - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz     
     - data/prod4_train/prod4_0.5GeV_run4714428_100evts.csv.gz      
@@ -33,7 +34,7 @@ train:
   nev: 1
   min_hits: 5
   hist_freq: 10
-  loss: dice # xent | hinge | dice
+  loss: xent # xent | hinge | dice
   epochs: 10
   lr: 0.005
   min_lr: 0.00001

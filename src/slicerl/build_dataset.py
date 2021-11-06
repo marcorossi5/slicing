@@ -6,6 +6,12 @@ import tensorflow as tf
 import numpy as np
 from math import ceil
 
+plane_to_idx = {
+    "U": 0,
+    "V": 1,
+    "W": 2
+}
+
 # ======================================================================
 class EventDataset(tf.keras.utils.Sequence):
     """ Class defining dataset. """
@@ -205,7 +211,7 @@ def split_dataset(data, split=0.5):
 
 
 # ======================================================================
-def generate_inputs_and_targets(event, is_training=False, min_hits=1):
+def generate_inputs_and_targets(event, is_training=False, min_hits=1, plane=None):
     """
     Takes an Event object and processes the 2D clusters to retrieve inputs and
     associated target arrays. Input arrays are concatenated cluster feacture
@@ -218,6 +224,7 @@ def generate_inputs_and_targets(event, is_training=False, min_hits=1):
     ----------
         - event: Event, the event object holding the hits information
         - is_training: bool
+        - plane: int, plane index to train network only on specific plane
 
     Returns
     -------
@@ -248,7 +255,7 @@ def generate_inputs_and_targets(event, is_training=False, min_hits=1):
     inputs = []
     targets = []
     ped = 0
-    sl = slice(1) if is_training else slice(None)
+    sl = slice(plane, plane + 1) if is_training else slice(None)
     zipped = zip(event.nb_plane_clusters[sl], event.nb_plane_hits[sl])
     for nb_cluster, nb_hits in zipped:
         for i in range(nb_cluster):
@@ -261,7 +268,6 @@ def generate_inputs_and_targets(event, is_training=False, min_hits=1):
                 nb_hits1 = np.ceil(acf[ped + i, 0] * nb_hits)
                 nb_hits2 = np.ceil(acf[ped + j, 0] * nb_hits)
                 if nb_hits1 < min_hits or nb_hits2 < min_hits:
-                    print(nb_hits2, nb_hits1)
                     continue
                 # get inputs
                 cf0 = acf[ped + i]
@@ -306,7 +312,7 @@ def load_events(fn, nev, min_hits):
 
 # ======================================================================
 def get_generator(
-    events, batch_size, split=False, is_training=False, min_hits=1, cthreshold=None
+    events, batch_size, split=False, is_training=False, min_hits=1, cthreshold=None, plane=None
 ):
     """
     Wrapper function to obtain an event dataset ready for inference directly
@@ -322,6 +328,7 @@ def get_generator(
         - min_hits : int, minimum hits per input cluster for dataset inclusion
         - cthreshold: int, size of input cluster above which a cluster is
                       considered to be large
+        - plane: int, plane index to train network only on specific plane
 
     Returns
     -------
@@ -334,7 +341,7 @@ def get_generator(
     for event in events:
         event.refine()
         inps, tgts = generate_inputs_and_targets(
-            event, is_training=is_training, min_hits=min_hits
+            event, is_training=is_training, min_hits=min_hits, plane=plane
         )
         if cthreshold is not None:
             cthresholds.append(get_cluster_thresholds(event, cthreshold))
@@ -353,7 +360,7 @@ def get_generator(
 
 # ======================================================================
 def build_dataset(
-    fn, batch_size, nev=-1, min_hits=1, split=None, is_training=False, cthreshold=None
+    fn, batch_size, nev=-1, min_hits=1, split=None, is_training=False, cthreshold=None, plane=None
 ):
     """
     Loads first the events from file, then generates the dataset to be fed into
@@ -365,6 +372,7 @@ def build_dataset(
         - nev: int, number of events to take from each file
         - min_hits: int, minimum hits per input cluster for dataset inclusion
         - split: float, split percentage between train and val in events
+        - plane: int, plane index to train network only on specific plane
 
     Returns
     -------
@@ -381,6 +389,7 @@ def build_dataset(
         is_training=is_training,
         min_hits=min_hits,
         cthreshold=cthreshold,
+        plane=plane
     )
 
 
@@ -400,9 +409,10 @@ def build_dataset_train(setup):
     min_hits = setup["train"]["min_hits"]
     split = setup["dataset"]["split"]
     batch_size = setup["model"]["batch_size"]
+    plane = plane_to_idx(setup["train"]["plane"])
 
     return build_dataset(
-        fn, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True
+        fn, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True, plane=plane
     )
 
 
@@ -458,5 +468,4 @@ def get_cluster_thresholds(event, cthreshold):
         for ct in cthreshold:
             plane_thresholds.append(np.count_nonzero(csize > ct))
         cthresholds.append(plane_thresholds)
-    print("Thresholds: ", cthresholds)
     return cthresholds
