@@ -18,7 +18,7 @@ test:
     - data/prod4_test/prod4_6GeV_run44121960_50evts.csv.gz
     - data/prod4_test/prod4_7GeV_run20915159_50evts.csv.gz
   nev: 1
-  min_hits: 50
+  min_hits: 10
 train:
   fn:
     - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz     

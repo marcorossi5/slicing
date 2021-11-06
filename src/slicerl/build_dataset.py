@@ -237,7 +237,8 @@ def generate_inputs_and_targets(event, is_training=False):
     targets = []
     ped = 0
 
-    for nb_cluster in event.nb_plane_clusters[:1]:
+    iterable = event.nb_plane_clusters[:1] if is_training else event.nb_plane_clusters
+    for nb_cluster in iterable:
         for i in range(nb_cluster):
             for j in range(nb_cluster):
                 if i == j:
