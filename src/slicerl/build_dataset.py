@@ -11,7 +11,9 @@ class EventDataset(tf.keras.utils.Sequence):
     """ Class defining dataset. """
 
     # ----------------------------------------------------------------------
-    def __init__(self, data, batch_size, is_training=False, shuffle=True, verbose=0, **kwargs):
+    def __init__(
+        self, data, batch_size, is_training=False, shuffle=True, verbose=0, **kwargs
+    ):
         """
         This generator must be used for training only.
 
@@ -245,7 +247,7 @@ def generate_inputs_and_targets(event, is_training=False):
                 cf0 = acf[ped + i]
                 cf1 = acf[ped + j]
                 # absolute scalar product between the two expected directions
-                sdot = np.abs((cf0[3:5] * cf1 [3:5]).sum())
+                sdot = np.abs((cf0[3:5] * cf1[3:5]).sum())
                 inps = np.concatenate([acf[ped + i], acf[ped + j], [sdot]])
                 inputs.append(inps)
                 tgt = 1.0 if c2mpfo[ped + i] == c2mpfo[ped + j] else 0.0

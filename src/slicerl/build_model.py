@@ -200,9 +200,10 @@ def build_and_train_model(setup, generators):
     -------
         network model if scan is False, else dict with loss and status keys.
     """
-    tfK.clear_session()    
+    tfK.clear_session()
     net = build_network(setup)
     return train_network(setup, net, generators)
+
 
 # ----------------------------------------------------------------------
 def inference(setup, test_generator, show_graph=False, no_graphics=False):
