@@ -409,7 +409,7 @@ def build_dataset_train(setup):
     min_hits = setup["train"]["min_hits"]
     split = setup["dataset"]["split"]
     batch_size = setup["model"]["batch_size"]
-    plane = plane_to_idx(setup["train"]["plane"])
+    plane = plane_to_idx[setup["train"]["plane"]]
 
     return build_dataset(
         fn, batch_size, nev=nev, min_hits=min_hits, split=split, is_training=True, plane=plane

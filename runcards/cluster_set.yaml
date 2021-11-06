@@ -40,7 +40,7 @@ train:
   min_lr: 0.00001
   patience: 15
   es_patience: 50
-  optimizer: SGD
+  optimizer: Adam
   initial_weights: null
 scan: false
 cluster:
