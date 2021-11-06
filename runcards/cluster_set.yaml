@@ -3,31 +3,40 @@ gpu: "0"
 dataset:
   split: 0.9
 model:
-  net_type: CM # DRB | RandLA | CM
+  net_type: FF
   batch_size: 32
   test_batch_size: 32
-  f_dims: 56
+  f_dims: 57
   use_bias: true
   threshold: 0.5
 test:
   fn:
-    - data/pfo/prod4.csv.gz
-  nev: -1
+    - data/prod4_test/prod4_0.3GeV_run47144279_50evts.csv.gz  
+    - data/prod4_test/prod4_0.5GeV_run47144284_50evts.csv.gz  
+    - data/prod4_test/prod4_1GeV_run18800650_50evts.csv.gz    
+    - data/prod4_test/prod4_2GeV_run44833767_50evts.csv.gz
+    - data/prod4_test/prod4_6GeV_run44121960_50evts.csv.gz
+    - data/prod4_test/prod4_7GeV_run20915159_50evts.csv.gz
+  nev: 1
   min_hits: 50
 train:
   fn:
-    - data/pfo/prod4.csv.gz
-    - data/pfo/prova.csv.gz
-  nev: -1
-  min_hits: 3
+    - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz     
+    - data/prod4_train/prod4_0.5GeV_run4714428_100evts.csv.gz      
+    - data/prod4_train/prod4_1GeV_run18800650_0006_100evts.csv.gz  
+    - data/prod4_train/prod4_2GeV_run44833767_100evts.csv.gz
+    - data/prod4_train/prod4_p6GeV_run44121960_100evts.csv.gz
+    - data/prod4_train/prod4_7GeV_run20915159_100evts.csv.gz
+  nev: 1
+  min_hits: 5
   hist_freq: 10
   loss: dice # xent | hinge | dice
-  epochs: 1
-  lr: 0.005636993511552649
+  epochs: 10
+  lr: 0.005
   min_lr: 0.00001
   patience: 15
   es_patience: 50
-  optimizer: Adam
+  optimizer: SGD
   initial_weights: null
 scan: false
 cluster:

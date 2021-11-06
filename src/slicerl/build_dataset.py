@@ -11,7 +11,7 @@ class EventDataset(tf.keras.utils.Sequence):
     """ Class defining dataset. """
 
     # ----------------------------------------------------------------------
-    def __init__(self, data, batch_size, is_training=False, shuffle=True, **kwargs):
+    def __init__(self, data, batch_size, is_training=False, shuffle=True, verbose=0, **kwargs):
         """
         This generator must be used for training only.
 
@@ -29,12 +29,13 @@ class EventDataset(tf.keras.utils.Sequence):
             if self.__events is not None
             else None
         )
-
         self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
         self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
         self.batch_size = batch_size
         self.is_training = is_training
         self.shuffle = shuffle
+        self.verbose = verbose
+
         self.indexes = np.arange(len(self.inputs))
         assert len(self.inputs) == len(
             self.targets
@@ -43,8 +44,9 @@ class EventDataset(tf.keras.utils.Sequence):
             nb_positive = np.count_nonzero(self.targets)
             nb_all = len(self.targets)
             balancing = nb_positive / nb_all
-            print(f"Training points: {nb_all} of which positives: {nb_positive}")
-            print(f"Percentage of positives: {balancing}")
+            if self.verbose:
+                print(f"Training points: {nb_all} of which positives: {nb_positive}")
+                print(f"Percentage of positives: {balancing}")
             self.balance_dataset(balancing)
         else:
             self.bal_inputs = self.inputs
@@ -75,12 +77,13 @@ class EventDataset(tf.keras.utils.Sequence):
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
 
-        nb_positive = np.count_nonzero(self.bal_targets)
-        nb_all = len(self.bal_targets)
-        balancing = nb_positive / nb_all
-        print("After balancing")
-        print(f"Training points: {nb_all} of which positives: {nb_positive}")
-        print(f"Percentage of positives: {balancing}")
+        if self.verbose:
+            nb_positive = np.count_nonzero(self.bal_targets)
+            nb_all = len(self.bal_targets)
+            balancing = nb_positive / nb_all
+            print("After balancing")
+            print(f"Training points: {nb_all} of which positives: {nb_positive}")
+            print(f"Percentage of positives: {balancing}")
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -231,14 +234,19 @@ def generate_inputs_and_targets(event, is_training=False):
     inputs = []
     targets = []
     ped = 0
-    for nb_cluster in event.nb_plane_clusters:
+
+    for nb_cluster in event.nb_plane_clusters[:1]:
         for i in range(nb_cluster):
             for j in range(nb_cluster):
                 if i == j:
                     continue
                 if i < j and not is_training:
                     continue
-                inps = np.concatenate([acf[ped + i], acf[ped + j]])
+                cf0 = acf[ped + i]
+                cf1 = acf[ped + j]
+                # absolute scalar product between the two expected directions
+                sdot = np.abs((cf0[3:5] * cf1 [3:5]).sum())
+                inps = np.concatenate([acf[ped + i], acf[ped + j], [sdot]])
                 inputs.append(inps)
                 tgt = 1.0 if c2mpfo[ped + i] == c2mpfo[ped + j] else 0.0
                 targets.append(tgt)

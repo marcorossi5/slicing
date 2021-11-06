@@ -14,6 +14,7 @@ from slicerl.diagnostics import (
 import os
 from copy import deepcopy
 from time import time as tm
+from pathlib import Path
 
 import tensorflow as tf
 import tensorflow.keras.backend as tfK
@@ -35,7 +36,7 @@ def load_network(setup, checkpoint_filepath=None):
     Parameters
     ----------
         - setup               : dict, config dict
-        - checkpoint_filepath : str, model checkpoint path
+        - checkpoint_filepath : Path, model checkpoint path
 
     Returns
     -------
@@ -50,13 +51,13 @@ def load_network(setup, checkpoint_filepath=None):
 
     lr = setup["train"]["lr"]
     if setup["train"]["optimizer"] == "Adam":
-        opt = Adam(lr=lr)
+        opt = Adam(learning_rate=lr)
     elif setup["train"]["optimizer"] == "SGD":
-        opt = SGD(lr=lr)
+        opt = SGD(learning_rate=lr)
     elif setup["train"]["optimizer"] == "RMSprop":
-        opt = RMSprop(lr=lr)
+        opt = RMSprop(learning_rate=lr)
     elif setup["train"]["optimizer"] == "Adagrad":
-        opt = Adagrad(lr=lr)
+        opt = Adagrad(learning_rate=lr)
 
     if setup["train"]["loss"] == "xent":
         loss = tf.keras.losses.BinaryCrossentropy(name="xent")
@@ -86,56 +87,25 @@ def load_network(setup, checkpoint_filepath=None):
         net.evaluate(dummy_generator.inputs, verbose=0)
 
         print(f"[+] Loading weights at {checkpoint_filepath}")
-        net.load_weights(checkpoint_filepath)
+        net.load_weights(checkpoint_filepath.as_posix())
 
     return net
 
 
 # ======================================================================
-def trace(net, generator):
-    """
-    Network first training epoch could last proportionally to the dataset size.
-    Build the network graph trace to speed up the incoming real computation with
-    a dummy backward pass.
-
-    Parameters
-    ----------
-        - net: AbstractNet, network to trace
-        - generator: EventDataset, iterable dataset to train
-
-    Returns
-    -------
-        - AbstractNet, traced network
-    """
-    print("[+] Ahead of time tracing ...")
-    # reduce generator to minimum
-    generator = deepcopy(generator)
-    generator.__len__ = 1
-    net.fit(
-        generator,
-        epochs=1,
-        verbose=1,
-    )
-    print("[+] Network traced ...")
-    return net
-    # TODO: fix this to use dummy dataset instead of modifying generator length
+def build_network(setup):
+    iw = setup["train"]["initial_weights"]
+    initial_weights = Path(iw) if iw is not None else iw
+    if initial_weights:
+        if initial_weights.is_file():
+            print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
+        else:
+            raise FileNotFoundError(f"{initial_weights} no such file or directory")
+    return load_network(setup, initial_weights)
 
 
 # ======================================================================
-def build_and_train_model(setup, generators):
-    """
-    Train a model. If setup['scan'] is True, then perform hyperparameter search.
-
-    Parameters
-    ----------
-        - setup      : dict
-        - generators : list, of EventDataset with train and val generators
-
-    Retruns
-    -------
-        network model if scan is False, else dict with loss and status keys.
-    """
-    tfK.clear_session()
+def train_network(setup, net, generators):
     if setup["scan"]:
         batch_size = setup["model"]["batch_size"]
         loss = setup["train"]["loss"]
@@ -145,12 +115,7 @@ def build_and_train_model(setup, generators):
 
     train_generator, val_generator = generators
 
-    initial_weights = setup["train"]["initial_weights"]
-    if initial_weights and os.path.isfile(initial_weights):
-        print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
-    net = load_network(setup, initial_weights)
-
-    logdir = setup["output"].joinpath(f"logs/{tm()}").as_posix()
+    logdir = setup["output"].joinpath(f"logs/{tm()}")
     checkpoint_filepath = setup["output"].joinpath(f"network.h5").as_posix()
     callbacks = [
         ModelCheckpoint(
@@ -189,28 +154,13 @@ def build_and_train_model(setup, generators):
             write_graph=False,
             write_images=True,
             histogram_freq=setup["train"]["hist_freq"],
-            profile_batch=5,
+            # profile_batch=5,
         )
 
     callbacks.append(tboard)
 
-    # net = trace(net, train_generator)
-
-    # # warmup
-    # original_lr = net.optimizer.learning_rate
-    # tfK.set_value(net.optimizer.learning_rate, original_lr*50)
-    # print(f"[+] Warmup 2 epochs ...")
-    # r = net.fit(
-    #     train_generator,
-    #     epochs=2,
-    #     validation_data=val_generator,
-    #     callbacks=callbacks,
-    #     verbose=2,
-    # )
-    # tfK.set_value(net.optimizer.learning_rate, original_lr)
-
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
-    r = net.fit(
+    net.fit(
         train_generator,
         epochs=setup["train"]["epochs"],
         validation_data=val_generator,
@@ -236,12 +186,30 @@ def build_and_train_model(setup, generators):
     return res
 
 
+# ======================================================================
+def build_and_train_model(setup, generators):
+    """
+    Train a model. If setup['scan'] is True, then perform hyperparameter search.
+
+    Parameters
+    ----------
+        - setup      : dict
+        - generators : list, of EventDataset with train and val generators
+
+    Retruns
+    -------
+        network model if scan is False, else dict with loss and status keys.
+    """
+    tfK.clear_session()    
+    net = build_network(setup)
+    return train_network(setup, net, generators)
+
 # ----------------------------------------------------------------------
 def inference(setup, test_generator, show_graph=False, no_graphics=False):
     tfK.clear_session()
     print("[+] done with training, load best weights")
     checkpoint_filepath = setup["output"].joinpath("network.h5")
-    net = load_network(setup, checkpoint_filepath.as_posix())
+    net = load_network(setup, checkpoint_filepath)
 
     # TODO: this must be a generator with is_training and without the splitting
     # but it's not mandatory
