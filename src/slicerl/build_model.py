@@ -210,7 +210,8 @@ def build_and_train_model(setup, generators):
 def inference(setup, test_generator, show_graph=False, no_graphics=False):
     tfK.clear_session()
     print("[+] done with training, load best weights")
-    checkpoint_filepath = setup["output"].joinpath("network.h5")
+    fname = setup["test"]["checkpoint"]
+    checkpoint_filepath = setup["output"].joinpath(fname)
     net = load_network(setup, checkpoint_filepath)
 
     y_pred = get_prediction(

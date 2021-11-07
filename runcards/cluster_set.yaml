@@ -10,6 +10,7 @@ model:
   use_bias: true
   threshold: 0.9
 test:
+  checkpoint: network.h5
   fn:
     - data/prod4_test/prod4_0.3GeV_run47144279_50evts.csv.gz  
     - data/prod4_test/prod4_0.5GeV_run47144284_50evts.csv.gz  
