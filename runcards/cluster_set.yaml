@@ -37,12 +37,12 @@ train:
   hist_freq: 10
   loss: xent # xent | hinge | dice
   epochs: 30
-  lr: 0.00005
+  lr: 0.005
   min_lr: 0.00001
   patience: 15
   es_patience: 50
   optimizer: SGD
-  initial_weights: ../output/test_4/network.h5
+  initial_weights: null
 scan: false
 cluster:
   max_evals: 10

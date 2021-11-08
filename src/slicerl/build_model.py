@@ -154,9 +154,9 @@ def train_network(setup, net, generators):
     else:
         tboard = TensorBoard(
             log_dir=logdir,
-            write_graph=False,
-            write_images=True,
-            histogram_freq=setup["train"]["hist_freq"],
+            # write_graph=False,
+            # write_images=True,
+            # histogram_freq=setup["train"]["hist_freq"],
             # profile_batch=5,
         )
 

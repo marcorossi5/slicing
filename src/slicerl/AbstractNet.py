@@ -66,8 +66,6 @@ class AbstractNet(Model):
 
 
 # ======================================================================
-
-
 def get_prediction(net, test_generator, batch_size, threshold=0.5):
     """
     Predict over a iterable of inputs

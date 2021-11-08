@@ -22,7 +22,7 @@ class EventDataset(tf.keras.utils.Sequence):
         cthresholds=None,
         is_training=False,
         shuffle=False,
-        verbose=1,
+        verbose=0,
     ):
         """
         This generator must be used for training only.
@@ -460,7 +460,7 @@ def build_dataset(
             inputs is list of np.arrays of shape=(nb_cluster_pairs, nb_features);
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
-    events = load_events(fn, nev, min_hits)
+    events = None if is_training and should_load_dataset else load_events(fn, nev, min_hits)
     if should_load_dataset:
         print("[+] Loading dataset ...")
         dataset_tuple = load_dataset(dataset_dir)
