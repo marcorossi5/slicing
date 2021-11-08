@@ -457,7 +457,7 @@ def build_dataset(
             inputs is list of np.arrays of shape=(nb_cluster_pairs, nb_features);
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
-    events = None if is_training and should_load_dataset else load_events(fn, nev, min_hits)
+    events = None if is_training else load_events(fn, nev, min_hits)
     if should_load_dataset:
         print("[+] Loading dataset ...")
         dataset_tuple = load_dataset(dataset_dir)
