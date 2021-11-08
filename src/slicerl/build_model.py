@@ -74,7 +74,9 @@ def load_network(setup, checkpoint_filepath=None):
         loss=loss,
         optimizer=opt,
         metrics=[
-            tf.keras.metrics.BinaryAccuracy(name="acc"),
+            tf.keras.metrics.BinaryAccuracy(
+                name="acc", threshold=setup["model"]["threshold"]
+            ),
             tf.keras.metrics.Precision(name="prec"),
             tf.keras.metrics.Recall(name="rec"),
         ],

@@ -6,7 +6,7 @@ model:
   net_type: FF
   batch_size: 32
   test_batch_size: 32
-  f_dims: 58
+  f_dims: 89
   use_bias: true
   threshold: 0.9
 test:
@@ -18,13 +18,13 @@ test:
     - data/prod4_test/prod4_2GeV_run44833767_50evts.csv.gz
     - data/prod4_test/prod4_6GeV_run44121960_50evts.csv.gz
     - data/prod4_test/prod4_7GeV_run20915159_50evts.csv.gz
-  nev: -1
+  nev: 1
   min_hits: 5
   cthreshold:
       - 15
       - 10
 train:
-  plane: W
+  dataset_dir: ../dataset/prod4
   fn:
     - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz     
     - data/prod4_train/prod4_0.5GeV_run4714428_100evts.csv.gz      
@@ -33,16 +33,16 @@ train:
     - data/prod4_train/prod4_p6GeV_run44121960_100evts.csv.gz
     - data/prod4_train/prod4_7GeV_run20915159_100evts.csv.gz
   nev: -1
-  min_hits: 5
+  min_hits: 10
   hist_freq: 10
   loss: xent # xent | hinge | dice
-  epochs: 100
-  lr: 0.0004
+  epochs: 30
+  lr: 0.00005
   min_lr: 0.00001
   patience: 15
   es_patience: 50
   optimizer: SGD
-  initial_weights: null
+  initial_weights: ../output/test_4/network.h5
 scan: false
 cluster:
   max_evals: 10

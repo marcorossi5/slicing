@@ -37,6 +37,38 @@ def load_runcard(runcard_file):
 
 
 # ----------------------------------------------------------------------
+def modify_runcard(setup):
+    setup.update({"output": Path(setup["output"])})
+    setup["train"].update({"dataset_dir": Path(setup["train"]["dataset_dir"])})
+
+
+# ----------------------------------------------------------------------
+def check_dataset_directory(
+    dataset_dir, should_load_dataset=False, should_save_dataset=False
+):
+    """
+    If should_load_dataset is true, checks if dataset directory exists and
+    raises error if not. If should_save_dataset is true, checks if dataset
+    directory exists and creates it. Raises error if parent folder does not exist.
+
+    Parameters
+    ----------
+        - dataset_dir: Path
+        - should_load_dataset: bool
+        - should_save_dataset: bool
+
+    Raises
+    ------
+        - FileNotFoundError if directory does not exist
+    """
+    if should_load_dataset and not dataset_dir.exists():
+        raise FileNotFoundError(f"no such file or directory: {dataset_dir}")
+
+    if should_save_dataset and not dataset_dir.exists():
+        dataset_dir.mkdir()
+
+
+# ----------------------------------------------------------------------
 def run_hyperparameter_scan(search_space, load_data_fn, function):
     """ Running a hyperparameter scan using hyperopt. """
 
@@ -95,6 +127,18 @@ def main():
         help="The test set path model.",
     )
     parser.add_argument(
+        "--save_dataset",
+        help="Save training dataset in folder specified by runcard",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--load_dataset",
+        help="Load training dataset from folder specified by runcard",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--debug",
         help="Run TensorFlow eagerly",
         action="store_true",
@@ -139,6 +183,10 @@ def main():
         raise ValueError("Invalid runcard: not a file.")
     if args.force:
         print("WARNING: Running with --force option will overwrite existing model")
+    if args.save_dataset and args.load_dataset:
+        raise ValueError(
+            "Invalid options: requires either create runcard or load dataset."
+        )
 
     setup = {}
     if args.debug:
@@ -179,6 +227,12 @@ def main():
                 print('Delete or run with "--force" to overwrite.')
                 exit(-1)
         setup["output"] = out
+        modify_runcard(setup)
+        check_dataset_directory(
+            setup["train"]["dataset_dir"],
+            should_load_dataset=args.load_dataset,
+            should_save_dataset=args.save_dataset,
+        )
 
         # copy runcard to output folder
         copyfile(args.runcard, out.joinpath("input-runcard.yaml"))
@@ -191,7 +245,11 @@ def main():
         start = tm()
         print("[+] Training best model:")
 
-        generators = build_dataset_train(setup)
+        generators = build_dataset_train(
+            setup,
+            should_load_dataset=args.load_dataset,
+            should_save_dataset=args.save_dataset,
+        )
         build_and_train_model(setup, generators)
         print(f"[+] done in {tm()-start} s")
 
@@ -207,7 +265,12 @@ def main():
         folder = Path(args.model.strip("/"))
         # loading json card
         setup = load_runcard(folder.joinpath("runcard.yaml"))
-        setup["output"] = Path(setup["output"])
+        modify_runcard(setup)
+        check_dataset_directory(
+            setup["train"]["dataset_dir"],
+            should_load_dataset=args.load_dataset,
+            should_save_dataset=args.save_dataset,
+        )
 
         config_tf(setup)
 

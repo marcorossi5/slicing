@@ -203,10 +203,10 @@ class PlaneView:
 
         Returns
         -------
-            - np.array, of shape=(nb cluster hits, nb features)
+            - np.array, of shape=(nb features, nb cluster hits)
         """
         m = self.status == i
-        return self.point_cloud.T[m]
+        return self.point_cloud[:, m]
 
     # ----------------------------------------------------------------------
     def original_order_status(self):
@@ -240,10 +240,10 @@ class PlaneView:
         pc = np.concatenate([self.point_cloud, [self.status]])
         self.cluster_set = set(self.status)
         self.nb_clusters = len(self.cluster_set)
-        self.all_cluster_features = get_all_cluster_info(
-            pc, self.cluster_set, self.tpc_view
-        )
-        self.cluster_to_main_pfo = get_cluster_to_main_pfo(
+        # self.all_cluster_features = get_all_cluster_info(
+        #     pc, self.cluster_set, self.tpc_view
+        # )
+        self.cluster_to_main_pfo = get_cluster_main_pfo(
             self.status, self.cluster_set, self.pfo_index
         )
 
@@ -332,7 +332,7 @@ def get_all_cluster_info(pc, cluster_set, tpc_view):
 
 
 # ======================================================================
-def get_cluster_to_main_pfo(cluster_idx, cluster_set, pfo_index):
+def get_cluster_main_pfo(cluster_idx, cluster_set, pfo_index):
     """
     Matches each cluster to the predominant pfo in the event.
 
@@ -363,7 +363,7 @@ def get_cluster_features(cluster_hits, hits_pct, tpc_view):
 
     Parameters
     ----------
-        - cluster_hits: np.array, of shape=(11, nb_cluster_hits)
+        - cluster_hits: np.array, of shape=(5, nb_cluster_hits),
         - hits_pct: float, percentage of hits contained by this cluster over
                     the total in the plane view
         - tpc_view: list, one-hot list to match U/V/W planes
@@ -400,6 +400,15 @@ def get_cluster_features(cluster_hits, hits_pct, tpc_view):
     p2, p3 = np.argmax(dists, axis=1)
     delimiters = pc[:, [p0, p1, p2, p3]]  # of shape (2,4)
 
+    # max cluster span
+    max_dist = 0
+    for ip in delimiters.T:
+        for jp in delimiters.T:
+            dist = ((ip - jp) ** 2).sum()
+            if dist > max_dist:
+                max_dist = dist
+    sqmax = np.sqrt(max_dist)
+
     # build the cluster feature vector
     features.append(hits_pct)  # cluster hits percentage (0)
     features.extend([mux, muz])  # cluster mean x and z (1:3)
@@ -414,5 +423,6 @@ def get_cluster_features(cluster_hits, hits_pct, tpc_view):
     features.append(
         cluster_hits[0].std()
     )  # cluster hits energy standard deviation (24)
-    features.extend(tpc_view)
+    features.extend(tpc_view)  # tpc view (25:28)
+    features.append(sqmax)  # max span (28)
     return np.array(features)

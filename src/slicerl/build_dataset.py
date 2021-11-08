@@ -1,6 +1,8 @@
 # This file is part of SliceRL by M. Rossi
+from threading import currentThread
 from slicerl.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
+from slicerl.Event import get_cluster_features
 
 import tensorflow as tf
 import numpy as np
@@ -120,40 +122,6 @@ class EventDataset(tf.keras.utils.Sequence):
         return ceil(len(self.bal_inputs) / self.batch_size)
 
     # ----------------------------------------------------------------------
-    def get_pc(self, index):
-        """
-        Get the point cloud at a certain index.
-        TODO: this has to be changed into cluster input adj or similar
-
-        Returns
-        -------
-            - np.array, point cloud of shape=(N,2)
-        """
-        return self.events[index].point_cloud[1:3].T
-
-    # ----------------------------------------------------------------------
-    def get_status(self, index):
-        """
-        Returns the status vector of event at index `index`.
-
-        Returns
-        -------
-            - np.array, point cloud of shape=(N,)
-        """
-        return self.events[index].status
-
-    # ----------------------------------------------------------------------
-    def get_targets(self, index):
-        """
-        Returns the mc status vector of event at index `index`.
-
-        Returns
-        -------
-            - np.array, point cloud of shape=(N,)
-        """
-        return self.events[index].ordered_mc_idx
-
-    # ----------------------------------------------------------------------
     @property
     def events(self):
         """ Event attribute. """
@@ -211,88 +179,90 @@ def split_dataset(data, split=0.5):
 
 
 # ======================================================================
-def generate_inputs_and_targets(event, is_training=False, min_hits=1, plane=None):
+def generate_inputs_and_targets(event, min_hits=1):
     """
     Takes an Event object and processes the 2D clusters to retrieve inputs and
     associated target arrays. Input arrays are concatenated cluster feacture
-    vectors. Target arrays are binaries. If n is cluster number in an event, and
-    is_training is False, n*(n-1)/2 clusters pairs are produced, n*(n-1) if
-    is_training is True.
-    Filters the clusters by number of hits.
+    vectors. Target arrays are binaries. If n is cluster number in an event,
+    n*(n-1)/2 clusters pairs are produced. Filters the clusters by number of hits.
 
     Parameters
     ----------
         - event: Event, the event object holding the hits information
         - is_training: bool
-        - plane: int, plane index to train network only on specific plane
 
     Returns
     -------
         - np.array, inputs of shape=(nb_clusters_pairs, nb_features*2)
         - np.array, target labels of shape=(nb_clusters_pairs)
     """
-    # all clusters features
-    acf = np.concatenate(
-        [
-            event.U.all_cluster_features,
-            event.V.all_cluster_features,
-            event.W.all_cluster_features,
-        ],
-        axis=0,
-    )
-
-    # cluster to main pfo
-    c2mpfo = np.concatenate(
-        [
-            event.U.cluster_to_main_pfo,
-            event.V.cluster_to_main_pfo,
-            event.W.cluster_to_main_pfo,
-        ],
-        axis=0,
-    )
-
     # create network inputs and targets
     inputs = []
     targets = []
     c_indices = []
     ped = 0
-    sl = slice(plane, plane + 1) if is_training else slice(None)
-    zipped = zip(event.nb_plane_clusters[sl], event.nb_plane_hits[sl])
-    for nb_cluster, nb_hits in zipped:
-        for i in range(nb_cluster):
-            for j in range(nb_cluster):
-                # filtering
-                if i == j:
-                    continue
-                if i < j and not is_training:
-                    continue
-                nb_hits1 = np.ceil(acf[ped + i, 0] * nb_hits)
-                nb_hits2 = np.ceil(acf[ped + j, 0] * nb_hits)
-                if nb_hits1 < min_hits or nb_hits2 < min_hits:
+
+    for plane in event.planes:
+        for i in range(plane.nb_clusters):
+            for j in range(i):
+                icluster = plane.state(i)
+                jcluster = plane.state(j)
+
+                if icluster.shape[1] < min_hits or icluster.shape[1] < min_hits:
                     # TODO: is this needed?
                     continue
-                # get inputs
-                cf0 = acf[ped + i]
-                cf1 = acf[ped + j]
-                # angle between exp dirs
-                sdot = np.abs((cf0[3:5] * cf1[3:5]).sum())
-                # min and max intercluster distance
-                delim_c0 = cf0[15:23].reshape(2, 4).T
-                delim_c1 = cf1[15:23].reshape(2, 4).T
+
+                # find intra-cluster properties
+                ifeats = get_cluster_features(
+                    icluster, len(icluster) / len(plane), plane.tpc_view
+                )
+                jfeats = get_cluster_features(
+                    jcluster, len(jcluster) / len(plane), plane.tpc_view
+                )
+
+                # find intra-merged cluster properties
+                mcluster = np.concatenate([icluster, jcluster], axis=1)
+                mfeats = get_cluster_features(
+                    mcluster, len(mcluster) / len(plane), plane.tpc_view
+                )
+
+                # add some inter-cluster properties
+                # min and max inter-cluster distance
+                idelim = ifeats[15:23].reshape(2, 4).T
+                jdelim = jfeats[15:23].reshape(2, 4).T
                 min_dist = np.inf
-                for p0 in delim_c0:
-                    for p1 in delim_c1:
-                        dist = ((p0 - p1) ** 2).sum()
+                for ip in idelim:
+                    for jp in jdelim:
+                        dist = ((ip - jp) ** 2).sum()
                         if dist < min_dist:
                             min_dist = dist
-                sqdist = np.sqrt(min_dist)
-                inps = np.concatenate([cf0, cf1, [sdot], [sqdist]])
-                inputs.append(inps)
-                # get targets
-                tgt = 1.0 if c2mpfo[ped + i] == c2mpfo[ped + j] else 0.0
+                sqmin_dist = np.sqrt(min_dist)
+
+                # |abs(cos(t))|, t angle between expected directions
+                sdot = np.abs((ifeats[3:5] * jfeats[3:5]).sum())
+
+                inputs.append(
+                    np.concatenate(
+                        [
+                            ifeats,
+                            jfeats,
+                            mfeats,
+                            [sdot],
+                            [sqmin_dist],
+                        ],
+                        axis=0,
+                    )
+                )
+
+                # targets
+                ipfo = plane.cluster_to_main_pfo[i]
+                jpfo = plane.cluster_to_main_pfo[j]
+                tgt = 1.0 if ipfo == jpfo else 0.0
                 targets.append(tgt)
+
+                # indices in the adj matrix
                 c_indices.append([ped + i, ped + j])
-        ped += nb_cluster
+        ped += plane.nb_clusters
     return np.stack(inputs, axis=0), np.array(targets), np.array(c_indices)
 
 
@@ -326,13 +296,28 @@ def load_events(fn, nev, min_hits):
 
 # ======================================================================
 def get_generator(
-    events,
-    batch_size,
-    split=False,
-    is_training=False,
-    min_hits=1,
-    cthreshold=None,
-    plane=None,
+    events, inputs, targets, c_indices, cthresholds, batch_size, is_training, split
+):
+    """
+    Get EventDataset generator from data.
+    """
+    kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
+    if split:
+        train_splitted, val_splitted = split_dataset(
+            [inputs, targets, c_indices], split
+        )
+        train_data = [None, train_splitted]
+        val_data = [None, val_splitted]
+        keys = kwargs.copy()
+        keys.update(shuffle=True)
+        return EventDataset(train_data, **keys), EventDataset(val_data, **kwargs)
+    data = events, [inputs, targets, c_indices]
+    return EventDataset(data, cthresholds=cthresholds, **kwargs)
+
+
+# ======================================================================
+def generate_dataset(
+    events, min_hits=1, cthreshold=None, should_save_dataset=False, dataset_dir=None
 ):
     """
     Wrapper function to obtain an event dataset ready for inference directly
@@ -348,38 +333,95 @@ def get_generator(
         - min_hits : int, minimum hits per input cluster for dataset inclusion
         - cthreshold: int, size of input cluster above which a cluster is
                       considered to be large
-        - plane: int, plane index to train network only on specific plane
+        - should_save_dataset: bool, wether to to save the dataset in directory
+                               specified by runcard
+        - dataset_dir: Path, dataset directory
 
     Returns
     -------
-        - EventDataset, object for inference
+        - list: network inputs, of length=(nb_events)
+                each element is a np.array of shape=(nb_cluster_pairs, nb_feats)
+        - list: network targets, of length=(nb_events)
+                each element is a np.array of shape=(nb_cluster_pairs,)
+        - list: adj  cluster pair indices, of length=(nb_events)
+                each element is a np.array of shape=(nb_cluster_pairs, 2)
+        - list: cluster thresholds, of length=(nb_events).
+                For inference only: cluster indices after which clusters should
+                be considered small. Each element is of shape=(3, nb_threhsolds),
+                default nb_threhsolds is 2.
     """
-    kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
     inputs = []
     targets = []
     c_indices = []
     cthresholds = []
     for event in events:
         event.refine()
-        inps, tgts, c_idxs = generate_inputs_and_targets(
-            event, is_training=is_training, min_hits=min_hits, plane=plane
-        )
+        inps, tgts, c_idxs = generate_inputs_and_targets(event, min_hits=min_hits)
         if cthreshold is not None:
             cthresholds.append(get_cluster_thresholds(event, cthreshold))
         inputs.append(inps)
         targets.append(tgts)
         c_indices.append(c_idxs)
-    if split:
-        train_splitted, val_splitted = split_dataset(
-            [inputs, targets, c_indices], split
-        )
-        train_data = [None, train_splitted]
-        val_data = [None, val_splitted]
-        keys = kwargs.copy()
-        keys.update(shuffle=True)
-        return EventDataset(train_data, **keys), EventDataset(val_data, **kwargs)
-    data = events, [inputs, targets, c_indices]
-    return EventDataset(data, cthresholds=cthresholds, **kwargs)
+    if should_save_dataset:
+        save_dataset(dataset_dir, inputs, targets, c_indices, cthresholds)
+    return inputs, targets, c_indices, cthresholds
+
+
+# ======================================================================
+def load_dataset(dataset_dir):
+    """
+    Load dataset from directory.
+
+    Parameters
+    ----------
+        - dataset_dir: Path, directory where the dataset is stored
+
+    Returns
+    -------
+        - list, network inputs
+        - list, network targets
+        - list, adj matrix indices
+        - list, cluster thresholds for inference
+    """
+    row_splits = np.load(dataset_dir / "event_row_splits.npy")
+    splittings = np.cumsum(row_splits[:-1])
+    split_fn = lambda x: np.split(x, splittings, axis=0)
+
+    # load files
+    inputs = np.load(dataset_dir / "inputs.npy")
+    targets = np.load(dataset_dir / "targets.npy")
+    c_indices = np.load(dataset_dir / "c_indices.npy")
+    fname = dataset_dir / "cthresholds.npy"
+    cthresholds = split_fn(np.load(fname)) if fname.is_file() else []
+
+    # check if inputs are consistents
+    assert sum(row_splits) == len(
+        inputs
+    ), f"Dataset loading failes: input arrays first axis lengths should match, found {sum(row_splits)} and {len(inputs)}"
+    assert len(inputs) == len(targets)
+    return split_fn(inputs), split_fn(targets), split_fn(c_indices), cthresholds
+
+
+# ======================================================================
+def save_dataset(dataset_dir, inputs, targets, c_indices, cthresholds):
+    """
+    Save dataset in directory.
+
+    Parameters
+    ----------
+        - dataset_dir: Path, directory where the dataset is stored
+        - inputs: list
+        - targets: list
+        - c_indices: list, adj matrix indices
+        - cthresholds: list
+    """
+    row_splits = np.array([len(tgt) for tgt in targets])
+    np.save(dataset_dir / "inputs.npy", np.concatenate(inputs))
+    np.save(dataset_dir / "targets.npy", np.concatenate(targets))
+    np.save(dataset_dir / "c_indices.npy", np.concatenate(c_indices))
+    if cthresholds:
+        np.save(dataset_dir / "cthresholds.npy", np.array(cthresholds))
+    np.save(dataset_dir / "event_row_splits.npy", row_splits)
 
 
 # ======================================================================
@@ -391,7 +433,9 @@ def build_dataset(
     split=None,
     is_training=False,
     cthreshold=None,
-    plane=None,
+    should_save_dataset=False,
+    should_load_dataset=False,
+    dataset_dir=None,
 ):
     """
     Loads first the events from file, then generates the dataset to be fed into
@@ -403,7 +447,11 @@ def build_dataset(
         - nev: int, number of events to take from each file
         - min_hits: int, minimum hits per input cluster for dataset inclusion
         - split: float, split percentage between train and val in events
-        - plane: int, plane index to train network only on specific plane
+        - should_load_dataset: bool, wether to to load the dataset from directory
+                               specified by runcard
+        - should_save_dataset: bool, wether to to save the dataset in directory
+                               specified by runcard
+        - dataset_dir: Path, dataset directory
 
     Returns
     -------
@@ -413,22 +461,33 @@ def build_dataset(
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
     events = load_events(fn, nev, min_hits)
-    return get_generator(
-        events,
-        batch_size,
-        split=split,
-        is_training=is_training,
-        min_hits=min_hits,
-        cthreshold=cthreshold,
-        plane=plane,
-    )
+    if should_load_dataset:
+        print("[+] Loading dataset ...")
+        dataset_tuple = load_dataset(dataset_dir)
+    else:
+        print("[+] Generating dataset ...")
+        dataset_tuple = generate_dataset(
+            events,
+            min_hits=min_hits,
+            cthreshold=cthreshold,
+            should_save_dataset=should_save_dataset,
+            dataset_dir=dataset_dir,
+        )
+    return get_generator(events, *dataset_tuple, batch_size, is_training, split)
 
 
 # ======================================================================
-def build_dataset_train(setup):
+def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=False):
     """
     Wrapper function to build dataset for training. Implements validation
     splitting according to config file.
+
+    Parameters
+    ----------
+        - should_load_dataset: bool, wether to to load the dataset from directory
+                               specified by runcard
+        - should_save_dataset: bool, wether to to save the dataset in directory
+                               specified by runcard
 
     Returns
     -------
@@ -440,8 +499,7 @@ def build_dataset_train(setup):
     min_hits = setup["train"]["min_hits"]
     split = setup["dataset"]["split"]
     batch_size = setup["model"]["batch_size"]
-    plane = plane_to_idx[setup["train"]["plane"]]
-
+    dataset_dir = setup["train"]["dataset_dir"]
     return build_dataset(
         fn,
         batch_size,
@@ -449,7 +507,9 @@ def build_dataset_train(setup):
         min_hits=min_hits,
         split=split,
         is_training=True,
-        plane=plane,
+        should_save_dataset=should_save_dataset,
+        should_load_dataset=should_load_dataset,
+        dataset_dir=dataset_dir,
     )
 
 
