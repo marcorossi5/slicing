@@ -228,11 +228,15 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
         do_visual_checks(ev, i, setup["output"], no_graphics)
         if i > 10:
             break
-    """
-    plot_slice_size(test_generator.events, setup["output"].joinpath("plots"))
-    plot_multiplicity(test_generator.events, setup["output"].joinpath("plots"))
-    plot_test_beam_metrics(test_generator.events, setup["output"].joinpath("plots"))
+    # plot histogram of the network decisions
+    hist_true = [trg.flatten() for trg in test_generator.targets]
+    hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
+    plot_histogram(hist_true, hist_pred, setup["output"] / "plots")
+    plot_test_beam_metrics(test_generator.events, setup["output"])
+    plot_slice_size(test_generator.events, setup["output"] / "plots")
+    plot_multiplicity(test_generator.events, setup["output"] / "plots")
 
+    """
     n = min(30, len(test_generator))
     for i in range(n):
         pc = test_generator.get_pc(i)  # shape=(N,2)
@@ -251,11 +255,6 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
         )
     """
 
-    # plot histogram of the network decisions
-    hist_true = [trg.flatten() for trg in test_generator.targets]
-    hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
-    plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
-    plot_test_beam_metrics(test_generator.events, setup["output"])
 
 
 # ======================================================================

@@ -173,8 +173,8 @@ def print_stats(name, data, mass_ref, output_folder="./"):
 # ======================================================================
 def plot_multiplicity(events, output_folder="./"):
     """Plot the slice multiplicity distribution and output some statistics."""
-    nmc = np.array([len(set(event.mc_idx)) for event in events])
-    npred = np.array([len(set(event.status)) for event in events])
+    nmc = np.array([len(set(plane.mc_idx)) for event in events for plane in event.planes])
+    npred = np.array([len(set(plane.status)) for event in events for plane in event.planes])
 
     bins = np.linspace(0, 127, 128)
     hnmc, _ = np.histogram(nmc, bins=bins)
@@ -216,8 +216,8 @@ def plot_slice_size(events, output_folder="./"):
     use_bins = [np.array([0]), bins, np.array([np.inf])]
     use_bins = np.concatenate(use_bins)
 
-    binc_mc = [np.bincount(event.ordered_mc_idx.astype(np.int32)) for event in events]
-    binc_pred = [np.bincount(event.status.astype(np.int32)) for event in events]
+    binc_mc = [np.bincount(plane.ordered_mc_idx.astype(np.int32)) for event in events for plane in event.planes]
+    binc_pred = [np.bincount(plane.status.astype(np.int32)) for event in events for plane in event.planes]
     smc = sum([np.histogram(bc, bins=use_bins)[0] for bc in binc_mc])
     spred = sum([np.histogram(bc, bins=use_bins)[0] for bc in binc_pred])
 
