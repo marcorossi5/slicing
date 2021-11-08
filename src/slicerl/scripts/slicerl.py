@@ -259,7 +259,7 @@ def main():
             # yaml is not able to save the Path objects
             # TODO: overload the yaml class
             setup["output"] = setup["output"].as_posix()
-            setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix(0)
+            setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix()
             yaml.dump(setup, f, indent=4)
             modify_runcard(setup)
 
