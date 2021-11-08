@@ -7,6 +7,7 @@ from slicerl.Event import get_cluster_features
 import tensorflow as tf
 import numpy as np
 from math import ceil
+from tqdm import tqdm
 
 plane_to_idx = {"U": 0, "V": 1, "W": 2}
 
@@ -350,7 +351,7 @@ def generate_dataset(
     targets = []
     c_indices = []
     cthresholds = []
-    for event in events:
+    for event in tqdm(events):
         event.refine()
         inps, tgts, c_idxs = generate_inputs_and_targets(event, min_hits=min_hits)
         if cthreshold is not None:
@@ -469,7 +470,6 @@ def build_dataset(
             should_save_dataset=should_save_dataset,
             dataset_dir=dataset_dir,
         )
-    exit()
     return get_generator(events, *dataset_tuple, batch_size, is_training, split)
 
 
@@ -511,7 +511,7 @@ def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=Fa
 
 
 # ======================================================================
-def build_dataset_test(setup):
+def build_dataset_test(setup, should_save_dataset=False, should_load_dataset=False):
     """
     Wrapper function to build dataset for testing.
 
@@ -524,9 +524,17 @@ def build_dataset_test(setup):
     min_hits = setup["test"]["min_hits"]
     batch_size = setup["model"]["batch_size"]
     cthreshold = setup["test"]["cthreshold"]
+    dataset_dir = setup["test"]["dataset_dir"]
 
     return build_dataset(
-        fn, batch_size, nev=nev, min_hits=min_hits, cthreshold=cthreshold
+        fn,
+        batch_size,
+        nev=nev,
+        min_hits=min_hits,
+        cthreshold=cthreshold,
+        should_save_dataset=should_save_dataset,
+        should_load_dataset=should_load_dataset,
+        dataset_dir=dataset_dir,
     )
 
 

@@ -40,6 +40,7 @@ def load_runcard(runcard_file):
 def modify_runcard(setup):
     setup.update({"output": Path(setup["output"])})
     setup["train"].update({"dataset_dir": Path(setup["train"]["dataset_dir"])})
+    setup["test"].update({"dataset_dir": Path(setup["test"]["dataset_dir"])})
 
 
 # ======================================================================
@@ -134,8 +135,20 @@ def main():
         default=False,
     )
     parser.add_argument(
+        "--save_dataset_test",
+        help="Save training dataset in folder specified by runcard",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--load_dataset",
         help="Load training dataset from folder specified by runcard",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--load_dataset_test",
+        help="Load test dataset from folder specified by runcard",
         action="store_true",
         default=False,
     )
@@ -184,9 +197,9 @@ def main():
         raise ValueError("Invalid runcard: not a file.")
     if args.force:
         print("WARNING: Running with --force option will overwrite existing model")
-    if args.save_dataset and args.load_dataset:
+    if (args.save_dataset and args.load_dataset) or (args.save_dataset_test and args.load_dataset_test):
         raise ValueError(
-            "Invalid options: requires either create runcard or load dataset."
+            "Invalid options: requires either save or load dataset."
         )
 
     setup = {}
@@ -204,7 +217,6 @@ def main():
         from slicerl.build_dataset import build_dataset_train
 
         # create output folder
-        base = args.runcard.name
         out = args.runcard.suffix[0]
         if args.output is not None:
             out = args.output
@@ -260,6 +272,7 @@ def main():
             # TODO: overload the yaml class
             setup["output"] = setup["output"].as_posix()
             setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix()
+            setup["test"]["dataset_dir"] = setup["test"]["dataset_dir"].as_posix()
             yaml.dump(setup, f, indent=4)
             modify_runcard(setup)
 
@@ -283,7 +296,11 @@ def main():
     from slicerl.build_dataset import build_dataset_test
     from slicerl.build_model import inference
 
-    test_generator = build_dataset_test(setup)
+    test_generator = build_dataset_test(
+            setup,
+            should_load_dataset=args.load_dataset_test,
+            should_save_dataset=args.save_dataset_test,
+        )
     inference(
         setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics
     )
