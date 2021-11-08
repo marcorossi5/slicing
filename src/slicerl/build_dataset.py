@@ -389,7 +389,7 @@ def load_dataset(dataset_dir):
     targets = np.load(dataset_dir / "targets.npy")
     c_indices = np.load(dataset_dir / "c_indices.npy")
     fname = dataset_dir / "cthresholds.npy"
-    cthresholds = split_fn(np.load(fname)) if fname.is_file() else []
+    cthresholds = np.load(fname).astype(int) if fname.is_file() else []
 
     # check if inputs are consistents
     assert sum(row_splits) == len(
@@ -457,7 +457,13 @@ def build_dataset(
             inputs is list of np.arrays of shape=(nb_cluster_pairs, nb_features);
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
-    events = None if is_training else load_events(fn, nev, min_hits)
+    if not is_training:
+        events = load_events(fn, nev, min_hits)
+        for event in events:
+            event.refine(skip_feats_computation=True)
+    else:
+        events = None
+
     if should_load_dataset:
         print("[+] Loading dataset ...")
         dataset_tuple = load_dataset(dataset_dir)

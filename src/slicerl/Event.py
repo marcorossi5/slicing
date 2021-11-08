@@ -77,9 +77,9 @@ class Event:
         self.W.status = predW
 
     # ----------------------------------------------------------------------
-    def refine(self):
+    def refine(self, skip_feats_computation=False):
         for plane in self.planes:
-            plane.refine()
+            plane.refine(skip_feats_computation)
         self.nb_plane_clusters = (
             self.U.nb_clusters,
             self.V.nb_clusters,
@@ -231,7 +231,7 @@ class PlaneView:
         self.status = pred
 
     # ----------------------------------------------------------------------
-    def refine(self):
+    def refine(self, skip_feats_computation=False):
         """
         Looks at the status attribute to build the FFNN input and target
         information. Stores the needed information in all_cluster_features and
@@ -240,12 +240,13 @@ class PlaneView:
         pc = np.concatenate([self.point_cloud, [self.status]])
         self.cluster_set = set(self.status)
         self.nb_clusters = len(self.cluster_set)
-        self.all_cluster_features = get_all_cluster_info(
-            pc, self.cluster_set, self.tpc_view
-        )
-        self.cluster_to_main_pfo = get_cluster_main_pfo(
-            self.status, self.cluster_set, self.pfo_index
-        )
+        if not skip_feats_computation:
+            self.all_cluster_features = get_all_cluster_info(
+                pc, self.cluster_set, self.tpc_view
+            )
+            self.cluster_to_main_pfo = get_cluster_main_pfo(
+                self.status, self.cluster_set, self.pfo_index
+            )
 
     # ----------------------------------------------------------------------
     def calohits_to_array(self):
