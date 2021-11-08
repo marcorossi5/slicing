@@ -282,9 +282,9 @@ def main():
         setup = load_runcard(folder.joinpath("runcard.yaml"))
         modify_runcard(setup)
         check_dataset_directory(
-            setup["train"]["dataset_dir"],
-            should_load_dataset=args.load_dataset,
-            should_save_dataset=args.save_dataset,
+            setup["test"]["dataset_dir"],
+            should_load_dataset=args.load_dataset_test,
+            should_save_dataset=args.save_dataset_test,
         )
 
         config_tf(setup)
