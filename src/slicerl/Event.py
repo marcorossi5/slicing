@@ -240,9 +240,9 @@ class PlaneView:
         pc = np.concatenate([self.point_cloud, [self.status]])
         self.cluster_set = set(self.status)
         self.nb_clusters = len(self.cluster_set)
-        # self.all_cluster_features = get_all_cluster_info(
-        #     pc, self.cluster_set, self.tpc_view
-        # )
+        self.all_cluster_features = get_all_cluster_info(
+            pc, self.cluster_set, self.tpc_view
+        )
         self.cluster_to_main_pfo = get_cluster_main_pfo(
             self.status, self.cluster_set, self.pfo_index
         )

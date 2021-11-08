@@ -213,12 +213,8 @@ def generate_inputs_and_targets(event, min_hits=1):
                     continue
 
                 # find intra-cluster properties
-                ifeats = get_cluster_features(
-                    icluster, len(icluster) / len(plane), plane.tpc_view
-                )
-                jfeats = get_cluster_features(
-                    jcluster, len(jcluster) / len(plane), plane.tpc_view
-                )
+                ifeats = plane.all_cluster_features[i]
+                jfeats = plane.all_cluster_features[j]
 
                 # find intra-merged cluster properties
                 mcluster = np.concatenate([icluster, jcluster], axis=1)
@@ -473,6 +469,7 @@ def build_dataset(
             should_save_dataset=should_save_dataset,
             dataset_dir=dataset_dir,
         )
+    exit()
     return get_generator(events, *dataset_tuple, batch_size, is_training, split)
 
 
