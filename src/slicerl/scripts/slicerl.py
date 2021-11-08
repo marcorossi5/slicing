@@ -257,9 +257,10 @@ def main():
         with open(out.joinpath("runcard.yaml"), "w") as f:
             # yaml is not able to save the Path objects
             # TODO: overload the yaml class
-            setup["output"] = str(setup["output"])
+            setup["output"] = setup["output"].as_posix()
+            setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix(0)
             yaml.dump(setup, f, indent=4)
-            setup["output"] = Path(setup["output"])
+            modify_runcard(setup)
 
     elif args.model:
         folder = Path(args.model.strip("/"))
