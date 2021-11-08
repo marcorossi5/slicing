@@ -115,7 +115,7 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
 
 # ======================================================================
 def main():
-    start = tm()
+    ss = tm()
     parser = argparse.ArgumentParser(
         """
     Example script to train RandLA-Net for slicing
@@ -281,17 +281,18 @@ def main():
         # loading json card
         setup = load_runcard(folder.joinpath("runcard.yaml"))
         modify_runcard(setup)
-        check_dataset_directory(
-            setup["test"]["dataset_dir"],
-            should_load_dataset=args.load_dataset_test,
-            should_save_dataset=args.save_dataset_test,
-        )
 
         config_tf(setup)
 
         # loading model
         if args.data:
             setup["test"]["fn"] = args.data
+
+    check_dataset_directory(
+        setup["test"]["dataset_dir"],
+        should_load_dataset=args.load_dataset_test,
+        should_save_dataset=args.save_dataset_test,
+    )
 
     from slicerl.build_dataset import build_dataset_test
     from slicerl.build_model import inference
@@ -304,7 +305,7 @@ def main():
     inference(
         setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics
     )
-    print(f"[+] Program done in {tm()-start} s")
+    print(f"[+] Program done in {tm()-ss} s")
 
 
 if __name__ == "__main__":
