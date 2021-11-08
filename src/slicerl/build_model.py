@@ -208,7 +208,7 @@ def build_and_train_model(setup, generators):
     return train_network(setup, net, generators)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def inference(setup, test_generator, show_graph=False, no_graphics=False):
     tfK.clear_session()
     print("[+] done with training, load best weights")
@@ -255,17 +255,10 @@ def inference(setup, test_generator, show_graph=False, no_graphics=False):
     hist_true = [trg.flatten() for trg in test_generator.targets]
     hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
     plot_histogram(hist_true, hist_pred, setup["output"].joinpath("plots"))
-    exit("build_model.py l.297")
-
-    if show_graph:
-        plot_graph(
-            test_generator.get_pc(0),
-            deepcopy(y_pred.get_graph(0)),
-            y_pred.get_status(0),
-            setup["output"].joinpath("plots"),
-        )
+    plot_test_beam_metrics(test_generator.events, setup["output"])
 
 
+# ======================================================================
 def do_visual_checks(ev, evno, output_dir, no_graphics):
     import matplotlib.pyplot as plt
     import numpy as np

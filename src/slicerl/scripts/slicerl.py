@@ -9,7 +9,7 @@ from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
 import pickle, pprint
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def config_tf(setup):
     os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
     gpus = tf.config.list_physical_devices("GPU")
@@ -17,7 +17,7 @@ def config_tf(setup):
         tf.config.experimental.set_memory_growth(gpu, True)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def load_runcard(runcard_file):
     """ Load runcard from yaml file. """
     with open(runcard_file, "r") as stream:
@@ -36,13 +36,13 @@ def load_runcard(runcard_file):
     return runcard
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def modify_runcard(setup):
     setup.update({"output": Path(setup["output"])})
     setup["train"].update({"dataset_dir": Path(setup["train"]["dataset_dir"])})
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def check_dataset_directory(
     dataset_dir, should_load_dataset=False, should_save_dataset=False
 ):
@@ -68,7 +68,7 @@ def check_dataset_directory(
         dataset_dir.mkdir()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def run_hyperparameter_scan(search_space, load_data_fn, function):
     """ Running a hyperparameter scan using hyperopt. """
 
@@ -112,8 +112,9 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
     return best_setup
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def main():
+    start = tm()
     parser = argparse.ArgumentParser(
         """
     Example script to train RandLA-Net for slicing
@@ -286,6 +287,7 @@ def main():
     inference(
         setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics
     )
+    print(f"[+] Program done in {tm()-start} s")
 
 
 if __name__ == "__main__":

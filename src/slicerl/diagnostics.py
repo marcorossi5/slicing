@@ -8,7 +8,7 @@ import numpy as np
 THRESHOLD = 0.9
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # available cmaps
 """
 Color list. An exhaustive list of colors can be retrieved from matplotlib
@@ -155,7 +155,7 @@ l = len(colors)
 vcmap = "plasma"
 vnorm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def print_stats(name, data, mass_ref, output_folder="./"):
     """Print statistics on the mass distribution."""
     r_plain = np.array(data) - mass_ref
@@ -170,7 +170,7 @@ def print_stats(name, data, mass_ref, output_folder="./"):
         )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_multiplicity(events, output_folder="./"):
     """Plot the slice multiplicity distribution and output some statistics."""
     nmc = np.array([len(set(event.mc_idx)) for event in events])
@@ -209,7 +209,7 @@ def plot_multiplicity(events, output_folder="./"):
     plt.close()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_slice_size(events, output_folder="./"):
     """Plot the slice size distribution and output some statistics."""
     bins = np.linspace(50, 1500, 101)
@@ -269,7 +269,7 @@ def plot_slice_size(events, output_folder="./"):
     plt.close()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def get_beam_metrics(events, pndr=False, dump=False):
 
     statuses = []  # correct, lost, split status
@@ -279,83 +279,84 @@ def get_beam_metrics(events, pndr=False, dump=False):
     nb_mc_hits = []
 
     for iev, event in enumerate(events):
-        if pndr:
-            status = event.ordered_pndr_idx
-        else:
-            status = event.status
+        for plane in event.planes:
+            if pndr:
+                status = plane.ordered_pndr_idx
+            else:
+                status = plane.status
 
-        isBeam = event.calohits[-2].astype(bool)
-        tot_TB = np.count_nonzero(isBeam)
-        mc_beam = event.ordered_mc_idx[isBeam]
-        beam_mc_slices = list(set(mc_beam))
+            isBeam = plane.calohits[-3].astype(bool)
+            tot_TB = np.count_nonzero(isBeam)
+            mc_beam = plane.ordered_mc_idx[isBeam]
+            beam_mc_slices = list(set(mc_beam))
 
-        if dump:
-            print("------------------------------")
-            print(f"Event {iev}:")
-
-        for islice, idx in enumerate(beam_mc_slices):
-            slice_mc = event.ordered_mc_idx == idx  # hyp: all of these are test beam
-            tot_mc = np.count_nonzero(slice_mc)
             if dump:
-                print(
-                    f"Test beam slice {islice+1}/{len(beam_mc_slices)}, mc Hits: {tot_mc}:"
-                )
+                print("------------------------------")
+                print(f"plane {iev}:")
 
-            pred_beam = status[slice_mc]
-            beam_pred_slices = list(set(pred_beam))
-            nb_p_slices = len(beam_pred_slices)
+            for islice, idx in enumerate(beam_mc_slices):
+                slice_mc = plane.ordered_mc_idx == idx  # hyp: all of these are test beam
+                tot_mc = np.count_nonzero(slice_mc)
+                if dump:
+                    print(
+                        f"Test beam slice {islice+1}/{len(beam_mc_slices)}, mc Hits: {tot_mc}:"
+                    )
 
-            for ip, p_idx in enumerate(beam_pred_slices):
-                # compute purity and completeness
-                # purity is percentage of test beam hits in reconstructed slice
-                # completeness is fraction of test beam hits in reconstructed
-                # slice over the total number of test beam hits in the event
+                pred_beam = status[slice_mc]
+                beam_pred_slices = list(set(pred_beam))
+                nb_p_slices = len(beam_pred_slices)
 
-                sl = status == p_idx
-                tot = np.count_nonzero(sl)
-                isBeam_purity = np.count_nonzero(event.calohits[-2, sl])
-                purity = isBeam_purity / tot
-                # isBeam_completeness = np.count_nonzero(
-                #     np.logical_and(slice_mc, sl)
-                # )
-                # completeness = isBeam_completeness / tot_mc
-                completeness = isBeam_purity / tot_TB
+                for ip, p_idx in enumerate(beam_pred_slices):
+                    # compute purity and completeness
+                    # purity is percentage of test beam hits in reconstructed slice
+                    # completeness is fraction of test beam hits in reconstructed
+                    # slice over the total number of test beam hits in the plane
 
-                nb_mc_hits.append(tot_mc)
-                nb_pred_hits.append(tot)
-                purities.append(purity)
-                completenesses.append(completeness)
+                    sl = status == p_idx
+                    tot = np.count_nonzero(sl)
+                    isBeam_purity = np.count_nonzero(plane.calohits[-2, sl])
+                    purity = isBeam_purity / tot
+                    # isBeam_completeness = np.count_nonzero(
+                    #     np.logical_and(slice_mc, sl)
+                    # )
+                    # completeness = isBeam_completeness / tot_mc
+                    completeness = isBeam_purity / tot_TB
 
-                if nb_p_slices == 1:
-                    if purity >= THRESHOLD:
-                        if dump:
-                            print(
-                                f"  IsCorrect, reco Hits: {tot},  Purity: {purity*100:.2f}%, Completeness {completeness*100:.2f}%"
-                            )
-                        statuses.append([1, 0, 0])
+                    nb_mc_hits.append(tot_mc)
+                    nb_pred_hits.append(tot)
+                    purities.append(purity)
+                    completenesses.append(completeness)
+
+                    if nb_p_slices == 1:
+                        if purity >= THRESHOLD:
+                            if dump:
+                                print(
+                                    f"  IsCorrect, reco Hits: {tot},  Purity: {purity*100:.2f}%, Completeness {completeness*100:.2f}%"
+                                )
+                            statuses.append([1, 0, 0])
+                        else:
+                            if dump:
+                                print(
+                                    f"  IsLost, reco Hits: {tot},  Purity: {purity*100:.2f}%, Completeness {completeness*100:.2f}%"
+                                )
+                            statuses.append([0, 1, 0])
                     else:
-                        if dump:
-                            print(
-                                f"  IsLost, reco Hits: {tot},  Purity: {purity*100:.2f}%, Completeness {completeness*100:.2f}%"
-                            )
-                        statuses.append([0, 1, 0])
-                else:
-                    if ip == 0:
-                        if dump:
-                            print(f"  IsSplit in {nb_p_slices} slices:")
-                        statuses.append([0, 0, 1])
-                    else:
-                        statuses.append([0, 0, 0])  # since splits counts for one
-                    if purity >= THRESHOLD:
-                        if dump:
-                            print(
-                                f"  - sl {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> TB"
-                            )
-                    else:
-                        if dump:
-                            print(
-                                f"  - sl {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> CR"
-                            )
+                        if ip == 0:
+                            if dump:
+                                print(f"  IsSplit in {nb_p_slices} slices:")
+                            statuses.append([0, 0, 1])
+                        else:
+                            statuses.append([0, 0, 0])  # since splits counts for one
+                        if purity >= THRESHOLD:
+                            if dump:
+                                print(
+                                    f"  - sl {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> TB"
+                                )
+                        else:
+                            if dump:
+                                print(
+                                    f"  - sl {ip + 1}, reco Hits {tot}, Purity {purity*100:.2f}%, Completeness {completeness*100:.2f}% -> CR"
+                                )
     statuses = np.array(statuses).T  # of shape=(3, tests)
     purities = np.array(purities)
     completenesses = np.array(completenesses)
@@ -364,7 +365,7 @@ def get_beam_metrics(events, pndr=False, dump=False):
     return statuses, purities, completenesses, nb_pred_hits, nb_mc_hits
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def print_beam_metrics(beam_metrics):
     m = beam_metrics[0].sum(0) > 0
     nb_tests = np.count_nonzero(m)
@@ -395,7 +396,7 @@ def print_beam_metrics(beam_metrics):
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
     # purity vs completeness scatterplot
     plt.rcParams.update({"font.size": 20})
@@ -477,7 +478,7 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
     plt.close()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_test_beam_metrics(events, output_folder="./"):
     """Plot the test beam metrics distribution and output some statistics."""
     all_statuses = []  # correct, lost, split status
@@ -497,7 +498,7 @@ def plot_test_beam_metrics(events, output_folder="./"):
 
     plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder)
 
-    exit()
+    return
 
     for iev, event in enumerate(events):
         print("------------------------------")
@@ -536,7 +537,7 @@ def plot_test_beam_metrics(events, output_folder="./"):
     exit()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_plane_view(
     pc, pc_init, pc_pred, pc_pndr, pc_test, nb_event, output_folder="./"
 ):
@@ -563,7 +564,7 @@ def plot_plane_view(
     plt.close()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_histogram(y_true, y_pred, output_folder="./"):
     """
     Parameters
@@ -646,7 +647,7 @@ def plot_histogram(y_true, y_pred, output_folder="./"):
     plt.close()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_graph(pc, graph, status, output_folder="./"):
     """
     Plots the graph.

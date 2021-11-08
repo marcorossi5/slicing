@@ -16,7 +16,7 @@ def load_runcard(runcard):
     return res
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def makedir(folder):
     """Create directory."""
     if not folder.exists():
@@ -25,7 +25,7 @@ def makedir(folder):
         raise Exception(f"Output folder {folder} already exists.")
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def get_window_width(masses, lower_frac=20, upper_frac=80):
     """Returns"""
     lower = np.nanpercentile(masses, lower_frac)
@@ -34,7 +34,7 @@ def get_window_width(masses, lower_frac=20, upper_frac=80):
     return lower, upper, median
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def confusion_matrix_per_event(y_true, y_pred):
     """
     Computes confusion matrix values for each graph in list
@@ -68,7 +68,7 @@ def confusion_matrix_per_event(y_true, y_pred):
     return np.array(tp), np.array(fp), np.array(fn), np.array(tn)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def m_lin_fit(x, y):
     """ Compute the angular coefficient of a linear fit. """
     assert x.shape == y.shape
@@ -78,7 +78,7 @@ def m_lin_fit(x, y):
     return num / (den + EPS)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def pearson_distance(x, y, axis):
     """ Computes modified pearson distance. """
     xc = x - x.mean()
@@ -87,17 +87,17 @@ def pearson_distance(x, y, axis):
     den = (xc ** 2).sum() * (yc ** 2).sum()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def rsum(x, axis=None, keepdims=False):
     return tf.reduce_sum(x, axis=axis, keepdims=keepdims)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def rmean(x, axis=None, keepdims=False):
     return tf.reduce_mean(x, axis=axis, keepdims=keepdims)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def m_lin_fit_tf(pc):
     """
     Compute the angular coefficient of a linear fit.
@@ -118,7 +118,7 @@ def m_lin_fit_tf(pc):
     return num / (den + EPS_TF)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def pearson_distance_tf(pc):
     """
     Computes modified pearson distance.
@@ -140,12 +140,12 @@ def pearson_distance_tf(pc):
     return 1 - num ** 2 / (den + EPS)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def mse(x, y):
     return ((x - y) ** 2).mean()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def bce_loss(x, y):
     # Warning: computing log is expensive
     ratio = 0.1  # percentage of ones over zeros
@@ -153,7 +153,7 @@ def bce_loss(x, y):
     return loss.mean()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def dice_loss(x, y):
     ix = 1 - x
     iy = 1 - y
@@ -164,14 +164,14 @@ def dice_loss(x, y):
     return 1 - (num1 / den1 + num2 / den2).mean()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def efficiency_rejection_rate_loss(x, y):
     efficiency = np.count_nonzero(x[y]) / (np.count_nonzero(y) + EPS)
     rejection_rate = np.count_nonzero(x[~y]) / (np.count_nonzero(~y) + EPS)
     return 1 - efficiency + rejection_rate
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def onehot(ind, depth):
     """
     One-hot encoding on the last axis
@@ -188,7 +188,7 @@ def onehot(ind, depth):
     return np.eye(depth)[ind.astype(np.int16)]
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def onehot_to_indices(onehot):
     """
     From one-hot encoding to indices on the last axis
@@ -204,7 +204,7 @@ def onehot_to_indices(onehot):
     return np.argmax(onehot, axis=-1)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def dfs(visited, node, graph):
     """
     Depth First Search graph traversing.
@@ -221,7 +221,7 @@ def dfs(visited, node, graph):
             dfs(visited, neighbor, graph)
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def bfs(sl, visited, root, graph):
     """
     Breadth First Search graph traversing. Fills in the visited set with the
