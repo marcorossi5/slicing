@@ -501,7 +501,7 @@ def build_dataset(
             inputs is list of np.arrays of shape=(nb_cluster_pairs, nb_features);
             targets is a list of np.arrays of shape=(nb_cluster_pairs,)
     """
-    if not is_training:
+    if not is_training or not should_load_dataset:
         events = load_events(fn, nev, min_hits)
         for event in events:
             event.refine(skip_feats_computation=True)
