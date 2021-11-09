@@ -23,7 +23,9 @@ class EventDataset(tf.keras.utils.Sequence):
         cthresholds=None,
         is_training=False,
         shuffle=False,
-        verbose=0,
+        should_split_by_data=True,
+        should_balance=False, 
+        verbose=False,
     ):
         """
         This generator must be used for training only.
@@ -46,9 +48,9 @@ class EventDataset(tf.keras.utils.Sequence):
             if self.__events is not None
             else None
         )
-        self.inputs = np.concatenate(data[1][0], axis=0) if is_training else data[1][0]
-        self.targets = np.concatenate(data[1][1]) if is_training else data[1][1]
-        self.c_indices = np.concatenate(data[1][2]) if is_training else data[1][2]
+        self.inputs = np.concatenate(data[1][0], axis=0) if is_training and not should_split_by_data else data[1][0]
+        self.targets = np.concatenate(data[1][1]) if is_training and not should_split_by_data else data[1][1]
+        self.c_indices = np.concatenate(data[1][2]) if is_training and not should_split_by_data else data[1][2]
         self.batch_size = batch_size
         self.cthresholds = cthresholds
         self.is_training = is_training
@@ -59,51 +61,19 @@ class EventDataset(tf.keras.utils.Sequence):
         assert len(self.inputs) == len(
             self.targets
         ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
-        if is_training:
+        if should_balance:
             nb_positive = np.count_nonzero(self.targets)
             nb_all = len(self.targets)
             balancing = nb_positive / nb_all
             if self.verbose:
                 print(f"Training points: {nb_all} of which positives: {nb_positive}")
                 print(f"Percentage of positives: {balancing}")
-            self.balance_dataset(balancing)
+            self.bal_inputs, self.bal_targets = balance_dataset(self.inputs, self.targets, balancing)
         else:
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
             # no balance needed for cluster indices because they enter inference only
 
-    # ----------------------------------------------------------------------
-    def balance_dataset(self, balancing):
-        """
-        Balances the dataset discarding part of the negative samples to match
-        the size of the positive ones. This happens if the ratio of positve
-        samples is below 20%.
-
-        Parameters
-        ----------
-            - balancing: float, percentage of positive samples over the total
-        """
-        if balancing < 0.2:
-            m_positives = self.targets.astype(bool)
-            neg_idx = np.argwhere(~m_positives).flatten()
-            neg_selected = np.random.choice(
-                neg_idx, size=np.count_nonzero(m_positives), replace=False
-            )
-            m_negatives = np.isin(np.arange(len(self.targets)), neg_selected)
-            mask = np.logical_or(m_positives, m_negatives)
-            self.bal_inputs = self.inputs[mask]
-            self.bal_targets = self.targets[mask]
-        else:
-            self.bal_inputs = self.inputs
-            self.bal_targets = self.targets
-
-        if self.verbose:
-            nb_positive = np.count_nonzero(self.bal_targets)
-            nb_all = len(self.bal_targets)
-            balancing = nb_positive / nb_all
-            print("After balancing")
-            print(f"Training points: {nb_all} of which positives: {nb_positive}")
-            print(f"Percentage of positives: {balancing}")
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -148,7 +118,77 @@ class EventDataset(tf.keras.utils.Sequence):
 
 
 # ======================================================================
-def split_dataset(data, split=0.5):
+def balance_dataset(inputs, targets, verbose=False):
+    """
+    Balances the dataset discarding part of the negative samples to match
+    the size of the positive ones. This happens if the ratio of positve
+    samples is below 20%.
+
+    Parameters
+    ----------
+        - inputs: np.array, of shape=(nb_data, nb_feats)
+        - targets: np.array, of shape=(nb_data,)
+        - balancing: float, percentage of positive samples over the total
+        - verbose: bool, wether to print or not statistics
+    """
+    m_positives = targets.astype(bool)
+    neg_idx = np.argwhere(~m_positives).flatten()
+    neg_selected = np.random.choice(
+        neg_idx, size=np.count_nonzero(m_positives), replace=False
+    )
+    m_negatives = np.isin(np.arange(len(targets)), neg_selected)
+    mask = np.logical_or(m_positives, m_negatives)
+    bal_inputs = inputs[mask]
+    bal_targets = targets[mask]
+
+    if verbose:
+        nb_positive = np.count_nonzero(bal_targets)
+        nb_all = len(bal_targets)
+        balancing = nb_positive / nb_all
+        print("After balancing")
+        print(f"Training points: {nb_all} of which positives: {nb_positive}")
+        print(f"Percentage of positives: {balancing}")
+
+    return bal_inputs, bal_targets
+
+
+# ======================================================================
+def split_dataset_by_data(data, split=0.5):
+    """
+    Parameters
+    ----------
+        - data  : list, [inputs, targets, c indices] for RandLA-Net to split
+        - split : list, [validation, test] percentages
+
+    Returns
+    -------
+        - list, [inputs, targets] for validation
+        - list, [inputs, targets] for testing
+    """
+    inputs, targets, c_indices = data
+    assert len(inputs) == len(
+        targets
+    ), f"Length of inputs and targets must match, got {len(inputs)} and {len(targets)}"
+    inputs = np.concatenate(inputs, axis=0)
+    targets = np.concatenate(targets, axis=0)
+
+    inputs, targets = balance_dataset(inputs, targets)
+    
+    nb_events = len(inputs)
+    perm = np.random.permutation(nb_events)
+    nb_split = int(split * nb_events)
+
+    train_inp = inputs[perm][:nb_split]
+    train_trg = targets[perm][:nb_split]
+
+    val_inp = inputs[perm][nb_split:]
+    val_trg = targets[perm][nb_split:]
+
+    return [train_inp, train_trg, None], [val_inp, val_trg, None]
+
+
+# ======================================================================
+def split_dataset_by_event(data, split=0.5):
     """
     Parameters
     ----------
@@ -293,14 +333,16 @@ def load_events(fn, nev, min_hits):
 
 # ======================================================================
 def get_generator(
-    events, inputs, targets, c_indices, cthresholds, batch_size, is_training, split
+    events, inputs, targets, c_indices, cthresholds, batch_size, is_training, split_by, split
 ):
     """
     Get EventDataset generator from data.
     """
     kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
     if split:
-        train_splitted, val_splitted = split_dataset(
+        assert split_by in [None, "data", "event"], f"{split_by} option not recognized.Valid values are 'data' or 'event'"
+        split_wrapper = split_dataset_by_data if split_by == "data" else split_dataset_by_event
+        train_splitted, val_splitted = split_wrapper(
             [inputs, targets, c_indices], split
         )
         train_data = [None, train_splitted]
@@ -427,6 +469,7 @@ def build_dataset(
     batch_size,
     nev=-1,
     min_hits=1,
+    split_by=None,
     split=None,
     is_training=False,
     cthreshold=None,
@@ -443,6 +486,7 @@ def build_dataset(
         - fn: list, of str events filenames
         - nev: int, number of events to take from each file
         - min_hits: int, minimum hits per input cluster for dataset inclusion
+        - split_by: str, split by data or split by event. Default: None
         - split: float, split percentage between train and val in events
         - should_load_dataset: bool, wether to to load the dataset from directory
                                specified by runcard
@@ -476,7 +520,7 @@ def build_dataset(
             should_save_dataset=should_save_dataset,
             dataset_dir=dataset_dir,
         )
-    return get_generator(events, *dataset_tuple, batch_size, is_training, split)
+    return get_generator(events, *dataset_tuple, batch_size, is_training, split_by, split)
 
 
 # ======================================================================
@@ -503,6 +547,7 @@ def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=Fa
     split = setup["dataset"]["split"]
     batch_size = setup["model"]["batch_size"]
     dataset_dir = setup["train"]["dataset_dir"]
+    split_by = setup["train"]["split_by"]
     return build_dataset(
         fn,
         batch_size,
@@ -510,6 +555,7 @@ def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=Fa
         min_hits=min_hits,
         split=split,
         is_training=True,
+        split_by=split_by,
         should_save_dataset=should_save_dataset,
         should_load_dataset=should_load_dataset,
         dataset_dir=dataset_dir,
@@ -558,7 +604,7 @@ def dummy_dataset(nb_feats):
     inputs = [np.random.rand(B * 50, nb_feats) for i in range(2)]
     targets = [np.random.rand(B * 50) for i in range(2)]
     data = (None, [inputs, targets, targets])
-    return EventDataset(data, batch_size=B, is_training=True, verbose=0)
+    return EventDataset(data, batch_size=B, is_training=True, should_split_by_data=False, verbose=False)
 
 
 # ======================================================================

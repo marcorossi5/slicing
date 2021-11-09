@@ -26,6 +26,7 @@ test:
       - 10
 train:
   dataset_dir: ../dataset/prod4
+  split_by: data # data | event
   fn:
     - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz     
     - data/prod4_train/prod4_0.5GeV_run4714428_100evts.csv.gz      
