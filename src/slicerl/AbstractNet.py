@@ -2,6 +2,7 @@ from slicerl.tools import bfs
 import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input
+from tqdm import tqdm
 
 
 # ======================================================================
@@ -92,7 +93,7 @@ def get_prediction(net, test_generator, batch_size, threshold=0.5):
         raise ValueError(
             "Total number of cluster is unknown, did you forget to pass a valid generator for inference?"
         )
-    zipped = zip(inputs, nb_clusters_list, test_cthresholds)
+    zipped = tqdm(zip(inputs, nb_clusters_list, test_cthresholds))
     for inp, nb_planes_clusters, cthreshold in zipped:
         # predict cluster pair connections
         pred = net.predict(inp, batch_size, verbose=0).flatten()
