@@ -285,7 +285,7 @@ def get_beam_metrics(events, pndr=False, dump=False):
             else:
                 status = plane.status
 
-            isBeam = plane.calohits[-3].astype(bool)
+            isBeam = plane.test_beam.astype(bool)
             tot_TB = np.count_nonzero(isBeam)
             mc_beam = plane.ordered_mc_idx[isBeam]
             beam_mc_slices = list(set(mc_beam))
