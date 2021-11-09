@@ -314,7 +314,7 @@ def get_beam_metrics(events, pndr=False, dump=False):
 
                     sl = status == p_idx
                     tot = np.count_nonzero(sl)
-                    isBeam_purity = np.count_nonzero(plane.calohits[-2, sl])
+                    isBeam_purity = np.count_nonzero(plane.test_beam[sl])
                     purity = isBeam_purity / tot
                     # isBeam_completeness = np.count_nonzero(
                     #     np.logical_and(slice_mc, sl)
