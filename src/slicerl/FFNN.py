@@ -7,7 +7,7 @@ from tensorflow.keras.activations import sigmoid
 
 
 # ======================================================================
-class Head(Layer):
+class Head(Model):
     """ Class defining Spatial Encoding Attention Convolutional Layer. """
 
     # ----------------------------------------------------------------------

@@ -207,12 +207,24 @@ def build_and_train_model(setup, generators):
 
 
 # ======================================================================
-def inference(setup, test_generator, show_graph=False, no_graphics=False):
+def inference(setup, test_generator, no_graphics=False):
     tfK.clear_session()
     print("[+] done with training, load best weights")
     fname = setup["test"]["checkpoint"]
     checkpoint_filepath = setup["output"].joinpath(fname)
     net = load_network(setup, checkpoint_filepath)
+
+    # shut down the last two compontents
+    # w = net.heads[0].layers[-3].weights[0]
+    # new_w = tf.constant([[0.], [1.]])
+    # w.assign(w*new_w)
+
+    # use just the needed events
+    # nev = 50 if setup["test"]["nev"] == -1 else setup["test"]["nev"] 
+
+    # test_generator.targets = test_generator.targets[250:250 + nev]
+    # test_generator.inputs = test_generator.inputs[250:250 + nev]
+    # test_generator.cthresholds = test_generator.cthresholds[250:250 + nev]
 
     y_pred = get_prediction(
         net,
@@ -300,6 +312,37 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         statusV[ev.V.status == idx] = i
     for i, idx in enumerate(sorted_statusW):
         statusW[ev.W.status == idx] = i
+    
+    # plt.figure(figsize=(6.4*2, 4.8))
+    # plt.suptitle("ProtoDUNE-SP simulation preliminary: U plane slices")
+    # plt.subplot(121)
+    # plt.title("CM-Net output")
+    # plt.xlabel("x [cm]")
+    # plt.ylabel("z [cm]")
+    # plt.scatter(
+    #     ev.U.calohits[1] * 1000,
+    #     ev.U.calohits[2] * 1000,
+    #     s=0.5,
+    #     c=statusU % 128,
+    #     norm=norm,
+    #     cmap=cmap,
+    # )
+    # plt.subplot(122)
+    # plt.title("MC truth")
+    # plt.xlabel("x [cm]")
+    # plt.ylabel("z [cm]")
+    # plt.scatter(
+    #     ev.U.calohits[1] * 1000,
+    #     ev.U.calohits[2] * 1000,
+    #     s=0.5,
+    #     c=pfoU % 128,
+    #     norm=norm,
+    #     cmap=cmap,
+    # )
+    # plt.savefig("net_output.png", dpi=300, bbox_inches='tight')
+    # plt.close()
+    # exit()
+
 
     plt.figure(figsize=(6.4 * 3, 4.8 * 4))
     plt.subplot(431)
@@ -426,3 +469,4 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         plt.savefig(fname, dpi=300, bbox_inches="tight")
         plt.close()
     plt.show()
+    exit()

@@ -178,12 +178,6 @@ def main():
         help="A yaml file with the setup.",
     )
     parser.add_argument(
-        "--show_graph",
-        help="Plot the predicted graph",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
         "--no_graphics",
         help="DO not display figures via GUI",
         action="store_true",
@@ -303,7 +297,7 @@ def main():
             should_save_dataset=args.save_dataset_test,
         )
     inference(
-        setup, test_generator, show_graph=args.show_graph, no_graphics=args.no_graphics
+        setup, test_generator, no_graphics=args.no_graphics
     )
     print(f"[+] Program done in {tm()-ss} s")
 
