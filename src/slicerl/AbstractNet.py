@@ -97,8 +97,12 @@ def get_prediction(net, test_generator, batch_size, threshold=0.5):
     zipped = zip(inputs, nb_clusters_list, test_cthresholds)
     for inp, nb_planes_clusters, cthreshold in zipped:
         # predict cluster pair connections
-        pred = [net.predict(ii[None], batch_size, verbose=0).flatten() for ii in inp]
+        pred = [
+            net.predict(ii[None], batch_size, verbose=0).flatten() for ii in tqdm(inp)
+        ]
         pred = np.concatenate(pred)
+        # pred = np.load("../output/test/pred.npy")
+        np.save("../output/test/pred.npy", pred)
         # pred = net.predict(inp, batch_size, verbose=0).flatten()
 
         y_pred.append(pred)

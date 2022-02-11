@@ -2,6 +2,9 @@
 """ This module contains utility functions of general interest. """
 import yaml
 from hyperopt import hp
+import tensorflow as tf
+import numpy as np
+import random
 
 # ======================================================================
 def load_runcard(runcard_file):
@@ -20,3 +23,10 @@ def load_runcard(runcard_file):
                 runcard[key][k] = eval(value)
                 runcard["scan"] = True
     return runcard
+
+# ======================================================================
+def set_manual_seed(seed):
+    random.seed(seed)
+    tf.random.set_seed(seed)
+    np.random.seed(seed)
+

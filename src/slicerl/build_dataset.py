@@ -136,10 +136,51 @@ class MHAEventDataset(EventDataset):
     def __init__(self, *args, **kwargs):
         super(MHAEventDataset, self).__init__(*args, **kwargs)
 
+    # ----------------------------------------------------------------------
     def __getitem__(self, idx):
         batch_x = self.bal_inputs[idx][None]
         batch_y = self.bal_targets[idx : idx + 1]
         return batch_x, batch_y
+
+
+# ======================================================================
+class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
+    """Dataset from numpy array used for training only."""
+
+    # ----------------------------------------------------------------------
+    def __init__(self, inputs, targets, batch_size, shuffle=True, seed=12345):
+        """
+        Parameters
+        ----------
+            - inputs: np.array, inputs array each of shape=(nb clusters pairs, nb feats)
+            - targets: np.array, target array of shape=(nb clusters pairs,)
+            - batch_size: int, batch size
+            - shuffle: bool, wether to shuffle inputs on epoch end
+            - seed: int, the seed of the random generator shuffling on epoch end
+        """
+        self.inputs = inputs
+        self.targets = targets
+        self.batch_size = batch_size
+        self.seed = seed
+        self.shuffle = shuffle
+        self.rng = np.random.default_rng(self.seed)
+        self.perm = np.arange(self.__len__())
+
+    # ----------------------------------------------------------------------
+    def on_epoch_end(self):
+        if self.shuffle:
+            self.perm = self.rng.permutation(self.__len__())
+
+    # ----------------------------------------------------------------------
+    def __getitem__(self, idx):
+        ii = self.perm[idx]
+        batch_x = self.inputs[ii][None]
+        batch_y = self.targets[ii : ii + 1]
+        return batch_x, batch_y
+
+    # ----------------------------------------------------------------------
+    def __len__(self):
+        return ceil(len(self.inputs) / self.batch_size)
 
 
 # ======================================================================
@@ -500,7 +541,7 @@ def generate_dataset(
     targets = []
     c_indices = []
     cthresholds = []
-    for event in events:  # tqdm(events):
+    for event in tqdm(events):  # tqdm(events):
         event.refine()
         inps, tgts, c_idxs = generate_inputs_and_targets_mha(event, min_hits=min_hits)
         if cthreshold is not None:
@@ -703,6 +744,35 @@ def build_dataset_test(setup, should_save_dataset=False, should_load_dataset=Fal
         should_load_dataset=should_load_dataset,
         dataset_dir=dataset_dir,
     )
+
+
+# ======================================================================
+def build_dataset_from_np(setup, folder):
+    """
+    Loads generators from saved numpy arrays.
+
+    Parameters
+    ----------
+        - folder: Path, the folder containing training numpy arrays
+
+    Returns
+    -------
+        - tuple, (train_generator, val_generator)
+
+    """
+    batch_size = setup["model"]["batch_size"]
+    min_hits = setup["train"]["min_hits"]
+    train_inputs = np.load(folder / "train_inputs.npy", allow_pickle=True)
+    train_targets = np.load(folder / "train_targets.npy")
+    val_inputs = np.load(folder / "val_inputs.npy", allow_pickle=True)
+    val_targets = np.load(folder / "val_targets.npy")
+
+    fn = np.vectorize(lambda x: x.shape[0])
+    m = fn(train_inputs) > 2 * min_hits
+
+    return MHAEventDatasetFromNp(
+        train_inputs[m], train_targets[m], batch_size
+    ), MHAEventDatasetFromNp(val_inputs, val_targets, batch_size)
 
 
 # ======================================================================

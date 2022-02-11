@@ -183,6 +183,7 @@ def main():
         action="store_true",
         default=False,
     )
+    parser.add_argument("--just_train", action="store_true", help="Just train with ../dataset/train folder")
     args = parser.parse_args()
     # check that input is coherent
     if (not args.model and not args.runcard) or (args.model and args.runcard):
@@ -208,7 +209,7 @@ def main():
         setup.update(load_runcard(args.runcard))
         config_tf(setup)
 
-        from slicerl.build_dataset import build_dataset_train
+        from slicerl.build_dataset import build_dataset_train, build_dataset_from_np
         from slicerl.build_model import build_and_train_model
 
         # create output folder
@@ -253,13 +254,21 @@ def main():
         start = tm()
         print("[+] Training best model:")
 
-        generators = build_dataset_train(
-            setup,
-            should_load_dataset=args.load_dataset,
-            should_save_dataset=args.save_dataset,
-        )
+        if args.just_train:
+            generators = build_dataset_from_np(setup, Path("../dataset/training"))
+        else:
+            generators = build_dataset_train(
+                setup,
+                should_load_dataset=args.load_dataset,
+                should_save_dataset=args.save_dataset,
+            )
+
         build_and_train_model(setup, generators)
+
         print(f"[+] done in {tm()-start} s")
+
+        # if args.just_train:
+        #     return
 
         # save the final runcard
         with open(out.joinpath("runcard.yaml"), "w") as f:

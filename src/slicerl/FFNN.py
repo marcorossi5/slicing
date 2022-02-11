@@ -14,6 +14,7 @@ class Head(Model):
         self,
         filters,
         nb_head,
+        dropout_idxs,
         dropout,
         activation="relu",
         name="head",
@@ -22,6 +23,7 @@ class Head(Model):
         super(Head, self).__init__(name=name, **kwargs)
         self.filters = filters
         self.nb_head = nb_head
+        self.dropout_idxs = dropout_idxs
         self.dropout = dropout
         self.activation = activation
         lyrs = []
@@ -35,9 +37,10 @@ class Head(Model):
                 )
             )
 
-            if (i + 1) % 3 == 0:
-                lyrs.append(BatchNormalization(name=f"bn_{self.nb_head}_{i}"))
-                lyrs.append(Dropout(self.dropout, name=f"do_{self.nb_head}_{i}"))
+            if i in self.dropout_idxs:
+                pass
+                # lyrs.append(BatchNormalization(name=f"bn_{self.nb_head}_{i}"))
+                # lyrs.append(Dropout(self.dropout, name=f"do_{self.nb_head}_{i}"))
 
         self.fc = Sequential(lyrs, name=name)
 

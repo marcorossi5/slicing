@@ -13,6 +13,25 @@ from tensorflow.keras.layers import (
 )
 from tensorflow.keras.activations import sigmoid
 
+
+def add_extension(name):
+    """
+    Adds extension to cumulative variables while looping over it.
+
+    Parameters
+    ----------
+        - name: str, the weight name to be extended
+
+    Returns
+    -------
+        - str, the extended weight name
+    """
+    ext = "_cum"
+    l = name.split(":")
+    l[-2] += ext
+    return ":".join(l[:-1])
+
+
 # ======================================================================
 class CMNet(AbstractNet):
     """Class deifining CM-Net: Cluster merging network."""
@@ -21,10 +40,11 @@ class CMNet(AbstractNet):
         self,
         batch_size=1,
         f_dims=2,
-        fc_heads=2,
-        mha_heads=1,
+        fc_heads=5,
+        mha_heads=5,
         activation="relu",
         use_bias=True,
+        verbose=False,
         name="CM-Net",
         **kwargs,
     ):
@@ -44,8 +64,10 @@ class CMNet(AbstractNet):
         self.mha_heads = mha_heads
         self.activation = activation
         self.use_bias = use_bias
+        self.verbose = verbose
 
-        self.mha_filters = [16, 32, 64, 128]
+        # self.mha_filters = [16, 32, 64, 128]
+        self.mha_filters = [256,]
         self.mhas = []
         for ih, dout in enumerate(self.mha_filters):
             self.mhas.append(
@@ -58,7 +80,10 @@ class CMNet(AbstractNet):
         self.cumulative_counter = tf.constant(0)
 
         # store some useful parameters for the fc layers
-        self.fc_filters = [64, 32, 16, 8, 4, 2, 1]
+        # self.fc_filters = [64, 32, 16, 8, 4, 2, 1]
+        self.fc_filters = [128, 32, 8, 1]
+        # self.dropout_idxs = [0, 1]
+        self.dropout_idxs = []
         self.dropout = 0.2
         self.heads = []
         for ih in range(self.fc_heads):
@@ -66,6 +91,7 @@ class CMNet(AbstractNet):
                 Head(
                     self.fc_filters,
                     ih,
+                    self.dropout_idxs,
                     self.dropout,
                     activation=self.activation,
                     name=f"head_{ih}",
@@ -91,13 +117,6 @@ class CMNet(AbstractNet):
     def build(self):
         """Explicitly build the weights."""
         super(CMNet, self).build((None, None, self.f_dims))
-        # filters = [self.f_dims] + self.mha_filters[:-1]
-        # for mha, nb_filter in zip(self.mhas, filters):
-        #     input_shape = (None, None, nb_filter)
-        #     mha.build([input_shape] * 2)
-        # for head in self.heads:
-        #     head.build((None, self.mha_filters[-1]))
-        # self.built = True
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -165,6 +184,14 @@ class CMNet(AbstractNet):
             # (the loss function is configured in `compile()`)
             loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
 
+        if self.verbose:
+            reset_2 = (self.cumulative_counter + 1) % self.batch_size == 0
+            tf.cond(
+                reset_2,
+                lambda: print_loss(x, y, y_pred, loss),
+                lambda: False,
+            )
+
         reset = self.cumulative_counter % self.batch_size == 0
         tf.cond(reset, self.reset_cumulator, self.increment_counter)
 
@@ -177,6 +204,15 @@ class CMNet(AbstractNet):
 
         # Update weights
         reset = self.cumulative_counter % self.batch_size == 0
+
+        if self.verbose:
+            reset_1 = (self.cumulative_counter - 1) % self.batch_size == 0
+            tf.cond(
+                reset_1,
+                lambda: print_gradients(zip(self.cumulative_gradients, trainable_vars)),
+                lambda: False,
+            )
+
         tf.cond(
             reset,
             lambda: self.optimizer.apply_gradients(
@@ -191,8 +227,23 @@ class CMNet(AbstractNet):
         return {m.name: m.result() for m in self.metrics}
 
 
-def add_extension(name):
-    ext = "_cum"
-    l = name.split(":")
-    l[-2] += ext
-    return ":".join(l)
+def print_loss(x, y, y_pred, loss):
+    # tf.print(", x:", tf.reduce_mean(x), tf.math.reduce_std(x), ", y:", y, ", y_pred:", y_pred, ", loss:", loss)
+    tf.print(y, y_pred)
+    return True
+
+
+def print_gradients(gradients):
+    for g, t in gradients:
+        tf.print(
+            "Param:",
+            g.name,
+            ", value:",
+            tf.reduce_mean(t),
+            tf.math.reduce_std(t),
+            ", grad:",
+            tf.reduce_mean(g),
+            tf.math.reduce_std(g),
+        )
+    tf.print("---------------------------")
+    return True

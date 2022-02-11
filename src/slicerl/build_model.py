@@ -12,6 +12,7 @@ from slicerl.diagnostics import (
     plot_histogram,
     plot_graph,
 )
+from slicerl.utils.utils import set_manual_seed
 
 import os
 from copy import deepcopy
@@ -167,7 +168,9 @@ def train_network(setup, net, generators):
     callbacks.append(tboard)
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
-    print(f"[+] Training points: {len(train_generator)}/{len(train_generator.targets)}")
+    print(
+        f"[+] Training points: {len(train_generator)*train_generator.batch_size}/{len(train_generator.targets)}"
+    )
     net.fit(
         train_generator,
         epochs=setup["train"]["epochs"],
@@ -209,6 +212,7 @@ def build_and_train_model(setup, generators):
         network model if scan is False, else dict with loss and status keys.
     """
     tfK.clear_session()
+    set_manual_seed(12345)
     net = build_network(setup)
     return train_network(setup, net, generators)
 
@@ -248,6 +252,7 @@ def inference(setup, test_generator, no_graphics=False):
     # plot histogram of the network decisions
     hist_true = [trg.flatten() for trg in test_generator.targets]
     hist_pred = [pred.flatten() for pred in y_pred.all_y_pred]
+
     plot_histogram(hist_true, hist_pred, setup["output"] / "plots")
     plot_test_beam_metrics(test_generator.events, setup["output"])
     plot_slice_size(test_generator.events, setup["output"] / "plots")
@@ -474,4 +479,3 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         plt.savefig(fname, dpi=300, bbox_inches="tight")
         plt.close()
     plt.show()
-    exit()
