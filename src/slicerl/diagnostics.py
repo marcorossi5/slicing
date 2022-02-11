@@ -173,8 +173,12 @@ def print_stats(name, data, mass_ref, output_folder="./"):
 # ======================================================================
 def plot_multiplicity(events, output_folder="./"):
     """Plot the slice multiplicity distribution and output some statistics."""
-    nmc = np.array([len(set(plane.mc_idx)) for event in events for plane in event.planes])
-    npred = np.array([len(set(plane.status)) for event in events for plane in event.planes])
+    nmc = np.array(
+        [len(set(plane.mc_idx)) for event in events for plane in event.planes]
+    )
+    npred = np.array(
+        [len(set(plane.status)) for event in events for plane in event.planes]
+    )
 
     bins = np.linspace(0, 127, 128)
     hnmc, _ = np.histogram(nmc, bins=bins)
@@ -216,8 +220,16 @@ def plot_slice_size(events, output_folder="./"):
     use_bins = [np.array([0]), bins, np.array([np.inf])]
     use_bins = np.concatenate(use_bins)
 
-    binc_mc = [np.bincount(plane.ordered_mc_idx.astype(np.int32)) for event in events for plane in event.planes]
-    binc_pred = [np.bincount(plane.status.astype(np.int32)) for event in events for plane in event.planes]
+    binc_mc = [
+        np.bincount(plane.ordered_mc_idx.astype(np.int32))
+        for event in events
+        for plane in event.planes
+    ]
+    binc_pred = [
+        np.bincount(plane.status.astype(np.int32))
+        for event in events
+        for plane in event.planes
+    ]
     smc = sum([np.histogram(bc, bins=use_bins)[0] for bc in binc_mc])
     spred = sum([np.histogram(bc, bins=use_bins)[0] for bc in binc_pred])
 
@@ -295,9 +307,13 @@ def get_beam_metrics(events, pndr=False, dump=False):
                 print(f"plane {iev}:")
 
             for islice, idx in enumerate(beam_mc_slices):
-                slice_mc = plane.ordered_mc_idx == idx  # hyp: all of these are test beam
+                slice_mc = (
+                    plane.ordered_mc_idx == idx
+                )  # hyp: all of these are test beam
 
-                tot_this_mc_TB = np.count_nonzero(slice_mc) # total hits for this mc slice
+                tot_this_mc_TB = np.count_nonzero(
+                    slice_mc
+                )  # total hits for this mc slice
                 if dump:
                     print(
                         f"Test beam slice {islice+1}/{len(beam_mc_slices)}, mc Hits: {tot_this_mc_TB}:"
@@ -314,8 +330,10 @@ def get_beam_metrics(events, pndr=False, dump=False):
                     # slice over the total number of test beam hits in the plane
                     sl = status == p_idx
 
-                    tot = np.count_nonzero(sl) # total hits in reco slice
-                    isBeam_purity = np.count_nonzero(plane.test_beam[sl]) # total hits in slice that are TB
+                    tot = np.count_nonzero(sl)  # total hits in reco slice
+                    isBeam_purity = np.count_nonzero(
+                        plane.test_beam[sl]
+                    )  # total hits in slice that are TB
                     purity = isBeam_purity / tot
                     # isBeam_completeness = np.count_nonzero(
                     #     np.logical_and(slice_mc, sl)
@@ -364,7 +382,9 @@ def get_beam_metrics(events, pndr=False, dump=False):
                     # statuses.extend(multiple_statuses) # must keep the number of statuses equal to (reco slices * mc slices)
                     statuses.append(this_status)
                 else:
-                    raise ValueError(f"nb_p_slices is {nb_pred_hits}, we should not be here !!")
+                    raise ValueError(
+                        f"nb_p_slices is {nb_pred_hits}, we should not be here !!"
+                    )
 
     statuses = np.array(statuses).T  # of shape=(3, tests)
     purities = np.array(purities)
@@ -425,23 +445,39 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
 
     # purity vs completeness heatmap
     # Warning: the imshow function plots exchanging the x and y axes
-    plt.figure(figsize=(9*2, 7))
-    cbins = np.linspace(0.75,1,26)
-    ybins = np.linspace(0,1,21)
+    plt.figure(figsize=(9 * 2, 7))
+    cbins = np.linspace(0.75, 1, 26)
+    ybins = np.linspace(0, 1, 21)
     tot = len(beam_metrics)
     h_cma, _, _ = np.histogram2d(beam_metrics[1], beam_metrics[2], bins=[cbins, ybins])
     plt.subplot(121)
     plt.title("Network output")
     plt.xlabel("Completeness")
     plt.ylabel("Purity")
-    plt.imshow(h_cma/tot, vmin=0, vmax=1, origin= "lower", extent=[cbins[0], cbins[-1], ybins[0], ybins[-1]], aspect="auto")
+    plt.imshow(
+        h_cma / tot,
+        vmin=0,
+        vmax=1,
+        origin="lower",
+        extent=[cbins[0], cbins[-1], ybins[0], ybins[-1]],
+        aspect="auto",
+    )
     plt.colorbar()
-    h_pndr, _, _ = np.histogram2d(beam_pndr_metrics[1], beam_pndr_metrics[2], bins=[cbins, ybins])
+    h_pndr, _, _ = np.histogram2d(
+        beam_pndr_metrics[1], beam_pndr_metrics[2], bins=[cbins, ybins]
+    )
     plt.subplot(122)
     plt.title("Pandora output")
     plt.xlabel("Completeness")
     plt.ylabel("Purity")
-    plt.imshow(h_pndr/tot, vmin=0, vmax=1, origin= "lower", extent=[cbins[0], cbins[-1], ybins[0], ybins[-1]], aspect="auto")
+    plt.imshow(
+        h_pndr / tot,
+        vmin=0,
+        vmax=1,
+        origin="lower",
+        extent=[cbins[0], cbins[-1], ybins[0], ybins[-1]],
+        aspect="auto",
+    )
     plt.colorbar()
     fname = output_folder / "plots/TB_purity_completeness_heatmap.png"
     print(f"[+] Saving plot at {fname} ")

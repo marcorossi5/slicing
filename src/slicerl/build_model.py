@@ -1,6 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.AbstractNet import get_prediction
 from slicerl.FFNN import FFNN
+from slicerl.CMNet import CMNet
 from slicerl.losses import dice_loss
 from slicerl.build_dataset import dummy_dataset
 from slicerl.diagnostics import (
@@ -43,13 +44,20 @@ def load_network(setup, checkpoint_filepath=None):
     -------
         - SeacNet
     """
+    # net_dict = {
+    #     "batch_size": setup["model"]["batch_size"],
+    #     "use_bias": setup["model"]["use_bias"],
+    #     "f_dims": setup["model"]["f_dims"],
+    #     "activation": lambda x: tf.keras.activations.relu(x, alpha=0.2),
+    # }
+    # net = FFNN(name="FFNN", **net_dict)
     net_dict = {
         "batch_size": setup["model"]["batch_size"],
-        "use_bias": setup["model"]["use_bias"],
         "f_dims": setup["model"]["f_dims"],
+        "use_bias": setup["model"]["use_bias"],
         "activation": lambda x: tf.keras.activations.relu(x, alpha=0.2),
     }
-    net = FFNN(name="FFNN", **net_dict)
+    net = CMNet(name="CMNet", **net_dict)
 
     lr = setup["train"]["lr"]
     if setup["train"]["optimizer"] == "Adam":
@@ -81,13 +89,11 @@ def load_network(setup, checkpoint_filepath=None):
         run_eagerly=setup.get("debug"),
     )
     if not setup["scan"]:
-        net.model().summary()
+        # net.model().summary()
+        net.summary()
+        tf.keras.utils.plot_model(net.model(), to_file="../CMNet.png", show_shapes=True)
 
     if checkpoint_filepath:
-        # dummy forward pass to build the layers
-        dummy_generator = dummy_dataset(setup["model"]["f_dims"])
-        net.evaluate(dummy_generator.inputs, verbose=0)
-        print(f"[+] Loading weights at {checkpoint_filepath}")
         net.load_weights(checkpoint_filepath.as_posix())
 
     return net
@@ -161,6 +167,7 @@ def train_network(setup, net, generators):
     callbacks.append(tboard)
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
+    print(f"[+] Training points: {len(train_generator)}/{len(train_generator.targets)}")
     net.fit(
         train_generator,
         epochs=setup["train"]["epochs"],
@@ -220,7 +227,7 @@ def inference(setup, test_generator, no_graphics=False):
     # w.assign(w*new_w)
 
     # use just the needed events
-    # nev = 50 if setup["test"]["nev"] == -1 else setup["test"]["nev"] 
+    # nev = 50 if setup["test"]["nev"] == -1 else setup["test"]["nev"]
 
     # test_generator.targets = test_generator.targets[250:250 + nev]
     # test_generator.inputs = test_generator.inputs[250:250 + nev]
@@ -264,7 +271,6 @@ def inference(setup, test_generator, no_graphics=False):
             setup["output"].joinpath("plots"),
         )
     """
-
 
 
 # ======================================================================
@@ -312,7 +318,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         statusV[ev.V.status == idx] = i
     for i, idx in enumerate(sorted_statusW):
         statusW[ev.W.status == idx] = i
-    
+
     # plt.figure(figsize=(6.4*2, 4.8))
     # plt.suptitle("ProtoDUNE-SP simulation preliminary: U plane slices")
     # plt.subplot(121)
@@ -342,7 +348,6 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     # plt.savefig("net_output.png", dpi=300, bbox_inches='tight')
     # plt.close()
     # exit()
-
 
     plt.figure(figsize=(6.4 * 3, 4.8 * 4))
     plt.subplot(431)

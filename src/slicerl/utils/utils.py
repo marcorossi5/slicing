@@ -5,7 +5,7 @@ from hyperopt import hp
 
 # ======================================================================
 def load_runcard(runcard_file):
-    """ Load runcard from yaml file. """
+    """Load runcard from yaml file."""
     with open(runcard_file, "r") as stream:
         runcard = yaml.load(stream, Loader=yaml.FullLoader)
     runcard["scan"] = False

@@ -19,7 +19,7 @@ def config_tf(setup):
 
 # ======================================================================
 def load_runcard(runcard_file):
-    """ Load runcard from yaml file. """
+    """Load runcard from yaml file."""
     with open(runcard_file, "r") as stream:
         runcard = yaml.load(stream, Loader=yaml.FullLoader)
     runcard["scan"] = False
@@ -71,7 +71,7 @@ def check_dataset_directory(
 
 # ======================================================================
 def run_hyperparameter_scan(search_space, load_data_fn, function):
-    """ Running a hyperparameter scan using hyperopt. """
+    """Running a hyperparameter scan using hyperopt."""
 
     print("[+] Performing hyperparameter scan...")
     max_evals = search_space["cluster"]["max_evals"]
@@ -191,15 +191,16 @@ def main():
         raise ValueError("Invalid runcard: not a file.")
     if args.force:
         print("WARNING: Running with --force option will overwrite existing model")
-    if (args.save_dataset and args.load_dataset) or (args.save_dataset_test and args.load_dataset_test):
-        raise ValueError(
-            "Invalid options: requires either save or load dataset."
-        )
+    if (args.save_dataset and args.load_dataset) or (
+        args.save_dataset_test and args.load_dataset_test
+    ):
+        raise ValueError("Invalid options: requires either save or load dataset.")
 
     setup = {}
     if args.debug:
         print("[+] Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
+        # tf.data.experimental.enable_debug_mode()
         setup["debug"] = True
 
     if args.runcard:
@@ -207,8 +208,8 @@ def main():
         setup.update(load_runcard(args.runcard))
         config_tf(setup)
 
-        from slicerl.build_model import build_and_train_model
         from slicerl.build_dataset import build_dataset_train
+        from slicerl.build_model import build_and_train_model
 
         # create output folder
         out = args.runcard.suffix[0]
@@ -292,13 +293,11 @@ def main():
     from slicerl.build_model import inference
 
     test_generator = build_dataset_test(
-            setup,
-            should_load_dataset=args.load_dataset_test,
-            should_save_dataset=args.save_dataset_test,
-        )
-    inference(
-        setup, test_generator, no_graphics=args.no_graphics
+        setup,
+        should_load_dataset=args.load_dataset_test,
+        should_save_dataset=args.save_dataset_test,
     )
+    inference(setup, test_generator, no_graphics=args.no_graphics)
     print(f"[+] Program done in {tm()-ss} s")
 
 

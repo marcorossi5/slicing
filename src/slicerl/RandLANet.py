@@ -12,7 +12,7 @@ from tensorflow.keras.constraints import MaxNorm
 
 # ======================================================================
 class RandLANet(AbstractNet):
-    """ Class deifining RandLA-Net. """
+    """Class deifining RandLA-Net."""
 
     def __init__(
         self,
@@ -60,7 +60,7 @@ class RandLANet(AbstractNet):
         self.fc_units = [32, 64, 128, self.nb_classes]
         self.fc_acts = [self.activation] * 3 + ["linear"]
         self.latent_f_dim = 32
-        self.enc_units = [self.latent_f_dim * 2 ** i for i in range(self.nb_layers)]
+        self.enc_units = [self.latent_f_dim * 2**i for i in range(self.nb_layers)]
         self.enc_iunits = [8] + self.enc_units[:-1]
         self.dec_units = self.enc_units[-2::-1] + [self.fc_units[0]]
         self.fc_iunits = self.dec_units[-1:] + self.fc_units[:-1]

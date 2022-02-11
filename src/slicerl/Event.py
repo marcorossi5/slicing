@@ -187,14 +187,13 @@ class PlaneView:
         # import matplotlib.pyplot as plt
         # from slicerl.diagnostics import cmap, norm
         # plt.figure()
-        # plt.title("ProtoDUNE-SP simulation preliminary: U plane slices (MC truths)") 
+        # plt.title("ProtoDUNE-SP simulation preliminary: U plane slices (MC truths)")
         # plt.xlabel("x [cm]")
         # plt.ylabel("z [cm]")
         # plt.scatter(original_hits[1]*1000, original_hits[2]*1000, s=1, c=original_hits[7]%128, cmap=cmap, norm=norm)
         # plt.savefig("mc_slices.png", dpi=300, bbox_inches='tight')
         # plt.show()
         # exit()
-
 
     # ----------------------------------------------------------------------
     def __len__(self):
@@ -309,7 +308,7 @@ class PlaneView:
 
     # ----------------------------------------------------------------------
     def dump(self, fname):
-        """ Dump calohits list to fname file """
+        """Dump calohits list to fname file"""
         rows = self.calohits_to_array()
         for row in rows:
             np.savetxt(fname, row, fmt="%.5f", newline=",")

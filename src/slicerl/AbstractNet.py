@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 # ======================================================================
 class Predictions:
-    """ Utility class to return RandLA-Net predictions. """
+    """Utility class to return RandLA-Net predictions."""
 
     def __init__(self, y_pred, preds, slices):
         """
@@ -93,10 +93,14 @@ def get_prediction(net, test_generator, batch_size, threshold=0.5):
         raise ValueError(
             "Total number of cluster is unknown, did you forget to pass a valid generator for inference?"
         )
-    zipped = tqdm(zip(inputs, nb_clusters_list, test_cthresholds))
+    # zipped = tqdm(zip(inputs, nb_clusters_list, test_cthresholds))
+    zipped = zip(inputs, nb_clusters_list, test_cthresholds)
     for inp, nb_planes_clusters, cthreshold in zipped:
         # predict cluster pair connections
-        pred = net.predict(inp, batch_size, verbose=0).flatten()
+        pred = [net.predict(ii[None], batch_size, verbose=0).flatten() for ii in inp]
+        pred = np.concatenate(pred)
+        # pred = net.predict(inp, batch_size, verbose=0).flatten()
+
         y_pred.append(pred)
         # nb_clusters = (1 + np.sqrt(1 + 8 * len(pred))) / 2
         nb_clusters = sum(nb_planes_clusters)

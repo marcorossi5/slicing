@@ -1,14 +1,13 @@
 # This file is part of SliceRL by M. Rossi
 from slicerl.AbstractNet import AbstractNet
 from tensorflow.keras.layers import Dense, BatchNormalization, Dropout, Concatenate
-from tensorflow.keras import Input, Model
-from tensorflow.keras.layers import Layer
+from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import sigmoid
 
 
 # ======================================================================
 class Head(Model):
-    """ Class defining Spatial Encoding Attention Convolutional Layer. """
+    """Class defining Spatial Encoding Attention Convolutional Layer."""
 
     # ----------------------------------------------------------------------
     def __init__(
@@ -20,50 +19,27 @@ class Head(Model):
         name="head",
         **kwargs,
     ):
-        """
-        Parameters
-        ----------
-            - dh              : int, number of hidden feature dimensions
-            - do              : int, number of output dimensions
-            - ds              : int, number of spatial encoding output dimensions
-            - K               : int, number of nearest neighbors
-            - dims            : int, point cloud spatial dimensions
-            - f_dims          : int, point cloud feature dimensions
-            - locse_nb_layers : int, number of hidden layers in LocSE block
-            - activation      : str, MLP layer activation
-            - use_bias        : bool, wether to use bias in MLPs
-        """
         super(Head, self).__init__(name=name, **kwargs)
         self.filters = filters
         self.nb_head = nb_head
         self.dropout = dropout
         self.activation = activation
-        self.lyrs = []
+        lyrs = []
 
-    # ----------------------------------------------------------------------
-    def build(self, input_shape):
-        """
-        Note: the MLP kernel has size 1. This means that point features are
-              not mixed across neighbours.
-        """
-        for i, filters in enumerate(self.filters[1:]):
-            ishape = input_shape if i == 0 else (self.filters[i],)
-            l = Dense(
-                filters,
-                activation=self.activation,
-                input_shape=ishape,
-                name=f"dense_{self.nb_head}_{i}",
+        for i, filters in enumerate(self.filters):
+            lyrs.append(
+                Dense(
+                    filters,
+                    activation=self.activation,
+                    name=f"dense_{self.nb_head}_{i}",
+                )
             )
-            self.lyrs.append(l)
-            if i % 3 == 0:
-                l = BatchNormalization(
-                    input_shape=(None, filters), name=f"bn_{self.nb_head}_{i}"
-                )
-                self.lyrs.append(l)
-                l = Dropout(
-                    self.dropout, input_shape=(filters,), name=f"do_{self.nb_head}_{i}"
-                )
-                self.lyrs.append(l)
+
+            if (i + 1) % 3 == 0:
+                lyrs.append(BatchNormalization(name=f"bn_{self.nb_head}_{i}"))
+                lyrs.append(Dropout(self.dropout, name=f"do_{self.nb_head}_{i}"))
+
+        self.fc = Sequential(lyrs, name=name)
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -79,10 +55,7 @@ class Head(Model):
         -------
             tf.Tensor of shape=(B,N,K,do)
         """
-        x = inputs
-        for layer in self.lyrs:
-            x = layer(x)
-        return x
+        return self.fc(inputs)
 
     # ----------------------------------------------------------------------
     def get_config(self):
@@ -99,7 +72,7 @@ class Head(Model):
 
 # ======================================================================
 class FFNN(AbstractNet):
-    """ Class deifining a simple feed-forward NN. """
+    """Class deifining a simple feed-forward NN."""
 
     def __init__(
         self,
@@ -155,7 +128,7 @@ class FFNN(AbstractNet):
             )
 
         self.concat = Concatenate(axis=-1, name="cat")
-        # self.final_dense = Dense(1, activation=sigmoid, name="final")
+        self.final_dense = Dense(1, activation=sigmoid, name="final")
         # self.final_dense.build(input_shape=(len(self.heads) * self.filters[-1],))
 
     # ----------------------------------------------------------------------
@@ -173,7 +146,6 @@ class FFNN(AbstractNet):
         for head in self.heads:
             results.append(head(inputs))
 
-        return sigmoid(results[0])
         return self.final_dense(self.concat(results))
 
     # ----------------------------------------------------------------------

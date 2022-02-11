@@ -49,7 +49,7 @@ class Reader(object):
 
     # ----------------------------------------------------------------------
     def next_plane(self):
-        """ Main function to read one plane view at a time from file."""
+        """Main function to read one plane view at a time from file."""
         try:
             c = []
             c.append(self.readline_fn(self.stream) / 100)  # energies [ADC]/100
@@ -95,7 +95,7 @@ class Reader(object):
 
     # ----------------------------------------------------------------------
     def next_event(self):
-        """ Main function to read one plane view at a time from file."""
+        """Main function to read one plane view at a time from file."""
         # return after hitting the maximum number of events
         if self.n == self.nmax:
             print(f"# Exiting after having read {self.nmax} events")

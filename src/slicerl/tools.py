@@ -70,7 +70,7 @@ def confusion_matrix_per_event(y_true, y_pred):
 
 # ======================================================================
 def m_lin_fit(x, y):
-    """ Compute the angular coefficient of a linear fit. """
+    """Compute the angular coefficient of a linear fit."""
     assert x.shape == y.shape
     n = x.shape[0]
     num = n * (x * y).sum() - x.sum() * y.sum()
@@ -80,11 +80,11 @@ def m_lin_fit(x, y):
 
 # ======================================================================
 def pearson_distance(x, y, axis):
-    """ Computes modified pearson distance. """
+    """Computes modified pearson distance."""
     xc = x - x.mean()
     yc = y - y.mean()
     num = (xc * yc).sum()
-    den = (xc ** 2).sum() * (yc ** 2).sum()
+    den = (xc**2).sum() * (yc**2).sum()
 
 
 # ======================================================================
@@ -136,8 +136,8 @@ def pearson_distance_tf(pc):
     xc = x - rmean(x, -2, True)
     yc = y - rmean(y, -2, True)
     num = rsum(xc * yc, -2, True)
-    den = rsum(xc ** 2, -2, True) * rsum(yc ** 2, -2, True)
-    return 1 - num ** 2 / (den + EPS)
+    den = rsum(xc**2, -2, True) * rsum(yc**2, -2, True)
+    return 1 - num**2 / (den + EPS)
 
 
 # ======================================================================

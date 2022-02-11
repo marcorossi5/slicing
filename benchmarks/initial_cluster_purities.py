@@ -29,13 +29,13 @@ def get_plane_purities(plane, min_cluster_hits=1):
         - plane: PlaneView, the input plane view
         - min_cluster_hits: int, filters away clusters of reduced size. Default
                             is 1: no filtering.
-    
+
     Returns
     -------
         - np.array, plane cluster purities
     """
     plane_purities = []
-    cluster_idx= list(set(plane.ordered_cluster_idx))
+    cluster_idx = list(set(plane.ordered_cluster_idx))
 
     for cluster_idx in cluster_idx:
         cluster = plane.ordered_cluster_idx == cluster_idx
@@ -49,6 +49,7 @@ def get_plane_purities(plane, min_cluster_hits=1):
         plane_purities.append(max_hits / nb_cluster_hits)
     return np.array(plane_purities)
 
+
 # ======================================================================
 def get_purities(events, min_cluster_hits=1):
     """
@@ -59,7 +60,7 @@ def get_purities(events, min_cluster_hits=1):
         - events: list, the input events
         - min_cluster_hits: int, filters away clusters of reduced size. Default
                             is 1: no filtering.
-    
+
     Returns
     -------
         - np.array, cluster purities
@@ -100,7 +101,11 @@ def main(runcard, force):
     h = np.histogram(purities, bins=bins, density=True)[0] * binw
 
     fig = plt.figure(figsize=[8, 6], dpi=125)
-    fig.suptitle("ProtoDUNE-SP simulation preliminary: Pandora 2D initial clusters purity", y=0.96, fontsize=16)
+    fig.suptitle(
+        "ProtoDUNE-SP simulation preliminary: Pandora 2D initial clusters purity",
+        y=0.96,
+        fontsize=16,
+    )
     ax = fig.add_subplot()
     msg = f"Purities mean value: {purities.mean():.5f} +/- {purities.std():.5f}"
     plt.title(msg, fontsize=16)
@@ -116,7 +121,7 @@ def main(runcard, force):
     ax.set_yscale("log")
     plt.savefig("../output/proc/plots/purities_hist.png", bbox_inches="tight")
     plt.close()
-    
+
     print(msg)
 
 
@@ -124,7 +129,9 @@ if __name__ == "__main__":
     start = tm()
     parser = argparse.ArgumentParser()
     parser.add_argument("runcard", type=Path, help="runcard file")
-    parser.add_argument("--force", action="store_true", help="force purities computation")
+    parser.add_argument(
+        "--force", action="store_true", help="force purities computation"
+    )
     args = parser.parse_args()
     main(args.runcard, args.force)
     print(f"Program done in {tm()-start}s")

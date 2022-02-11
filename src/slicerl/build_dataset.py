@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+from multiprocessing import Event
 from threading import currentThread
 from slicerl.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
@@ -13,7 +14,7 @@ plane_to_idx = {"U": 0, "V": 1, "W": 2}
 
 # ======================================================================
 class EventDataset(tf.keras.utils.Sequence):
-    """ Class defining dataset. """
+    """Class defining dataset."""
 
     # ----------------------------------------------------------------------
     def __init__(
@@ -24,7 +25,7 @@ class EventDataset(tf.keras.utils.Sequence):
         is_training=False,
         shuffle=False,
         should_split_by_data=True,
-        should_balance=False, 
+        should_balance=False,
         verbose=False,
     ):
         """
@@ -48,9 +49,21 @@ class EventDataset(tf.keras.utils.Sequence):
             if self.__events is not None
             else None
         )
-        self.inputs = np.concatenate(data[1][0], axis=0) if is_training and not should_split_by_data else data[1][0]
-        self.targets = np.concatenate(data[1][1]) if is_training and not should_split_by_data else data[1][1]
-        self.c_indices = np.concatenate(data[1][2]) if is_training and not should_split_by_data else data[1][2]
+        self.inputs = (
+            np.concatenate(data[1][0], axis=0)
+            if is_training and not should_split_by_data
+            else data[1][0]
+        )
+        self.targets = (
+            np.concatenate(data[1][1])
+            if is_training and not should_split_by_data
+            else data[1][1]
+        )
+        self.c_indices = (
+            np.concatenate(data[1][2])
+            if is_training and not should_split_by_data
+            else data[1][2]
+        )
         self.batch_size = batch_size
         self.cthresholds = cthresholds
         self.is_training = is_training
@@ -68,12 +81,13 @@ class EventDataset(tf.keras.utils.Sequence):
             if self.verbose:
                 print(f"Training points: {nb_all} of which positives: {nb_positive}")
                 print(f"Percentage of positives: {balancing}")
-            self.bal_inputs, self.bal_targets = balance_dataset(self.inputs, self.targets, balancing)
+            self.bal_inputs, self.bal_targets = balance_dataset(
+                self.inputs, self.targets, balancing
+            )
         else:
             self.bal_inputs = self.inputs
             self.bal_targets = self.targets
             # no balance needed for cluster indices because they enter inference only
-
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
@@ -95,7 +109,7 @@ class EventDataset(tf.keras.utils.Sequence):
     # ----------------------------------------------------------------------
     @property
     def events(self):
-        """ Event attribute. """
+        """Event attribute."""
         return self.__events
 
     # ----------------------------------------------------------------------
@@ -115,6 +129,17 @@ class EventDataset(tf.keras.utils.Sequence):
                 "Cannot set events attribute, found None"
                 " (is the EventDataset generator in training mode?)"
             )
+
+
+# ======================================================================
+class MHAEventDataset(EventDataset):
+    def __init__(self, *args, **kwargs):
+        super(MHAEventDataset, self).__init__(*args, **kwargs)
+
+    def __getitem__(self, idx):
+        batch_x = self.bal_inputs[idx][None]
+        batch_y = self.bal_targets[idx : idx + 1]
+        return batch_x, batch_y
 
 
 # ======================================================================
@@ -142,9 +167,15 @@ def balance_dataset(inputs, targets, verbose=False):
     bal_targets = targets[mask]
 
     if verbose:
+        nb_pre_positive = np.count_nonzero(m_positives)
+        nb_pre_all = len(targets)
+        pre_balancing = nb_pre_positive / nb_pre_all
         nb_positive = np.count_nonzero(bal_targets)
         nb_all = len(bal_targets)
         balancing = nb_positive / nb_all
+        print("Before balancing:")
+        print(f"Training points: {nb_pre_all} of which positives: {nb_pre_positive}")
+        print(f"Percentage of positives: {pre_balancing}")
         print("After balancing")
         print(f"Training points: {nb_all} of which positives: {nb_positive}")
         print(f"Percentage of positives: {balancing}")
@@ -153,7 +184,7 @@ def balance_dataset(inputs, targets, verbose=False):
 
 
 # ======================================================================
-def split_dataset_by_data(data, split=0.5):
+def split_dataset_by_data(data, split=0.5, verbose=False):
     """
     Parameters
     ----------
@@ -165,15 +196,15 @@ def split_dataset_by_data(data, split=0.5):
         - list, [inputs, targets] for validation
         - list, [inputs, targets] for testing
     """
-    inputs, targets, c_indices = data
+    inputs, targets, _ = data
     assert len(inputs) == len(
         targets
     ), f"Length of inputs and targets must match, got {len(inputs)} and {len(targets)}"
     inputs = np.concatenate(inputs, axis=0)
     targets = np.concatenate(targets, axis=0)
 
-    inputs, targets = balance_dataset(inputs, targets)
-    
+    inputs, targets = balance_dataset(inputs, targets, verbose)
+
     nb_events = len(inputs)
     perm = np.random.permutation(nb_events)
     nb_split = int(split * nb_events)
@@ -188,7 +219,7 @@ def split_dataset_by_data(data, split=0.5):
 
 
 # ======================================================================
-def split_dataset_by_event(data, split=0.5):
+def split_dataset_by_event(data, split=0.5, verbose=False):
     """
     Parameters
     ----------
@@ -304,6 +335,62 @@ def generate_inputs_and_targets(event, min_hits=1):
 
 
 # ======================================================================
+def generate_inputs_and_targets_mha(event, min_hits=1):
+    """
+    Takes an Event object and processes the 2D clusters to retrieve inputs and
+    associated target arrays. Input arrays are 2D clusters point clouds
+    vectors. Target arrays are binaries. If n is cluster number in an event,
+    n*(n-1)/2 clusters pairs are produced. Filters the clusters by number of hits.
+
+    Parameters
+    ----------
+        - event: Event, the event object holding the hits information
+        - is_training: bool
+
+    Returns
+    -------
+        - np.array, of shape=(nb_clusters_pairs,). Each element is an np.array
+                    of shape=(1, nb_hits, 6)
+        - np.array, target labels of shape=(nb_clusters_pairs,)
+    """
+    # create network inputs and targets
+    inputs = []
+    targets = []
+    c_indices = []
+    ped = 0
+
+    for plane in event.planes:
+        for i in range(plane.nb_clusters):
+            for j in range(i):
+                icluster = plane.state(i)
+                ilen = icluster.shape[1]
+
+                jcluster = plane.state(j)
+                jlen = jcluster.shape[1]
+
+                if ilen < min_hits or jlen < min_hits:
+                    # TODO: is this needed?
+                    continue
+
+                ipc = np.concatenate([icluster, np.zeros([1, ilen])], axis=0)
+                jpc = np.concatenate([jcluster, np.zeros([1, jlen])], axis=0)
+
+                # inputs of shape (1, nb hits, 6)
+                inputs.append(np.concatenate([ipc, jpc], axis=1).T)
+
+                # targets
+                ipfo = plane.cluster_to_main_pfo[i]
+                jpfo = plane.cluster_to_main_pfo[j]
+                tgt = 1.0 if ipfo == jpfo else 0.0
+                targets.append(tgt)
+
+                # indices in the adj matrix
+                c_indices.append([ped + i, ped + j])
+        ped += plane.nb_clusters
+    return np.array(inputs, dtype=object), np.array(targets), np.array(c_indices)
+
+
+# ======================================================================
 def load_events(fn, nev, min_hits):
     """Loads event from file into a list of Event objects. Supported inputs are
     either a single file name or a list of file names.
@@ -333,25 +420,45 @@ def load_events(fn, nev, min_hits):
 
 # ======================================================================
 def get_generator(
-    events, inputs, targets, c_indices, cthresholds, batch_size, is_training, split_by, split
+    events,
+    inputs,
+    targets,
+    c_indices,
+    cthresholds,
+    batch_size,
+    is_training,
+    split_by,
+    split,
+    verbose,
 ):
     """
     Get EventDataset generator from data.
     """
-    kwargs = {"batch_size": batch_size, "is_training": is_training, "shuffle": False}
+    kwargs = {
+        "batch_size": batch_size,
+        "is_training": is_training,
+        "shuffle": False,
+        "verbose": verbose,
+    }
     if split:
-        assert split_by in [None, "data", "event"], f"{split_by} option not recognized.Valid values are 'data' or 'event'"
-        split_wrapper = split_dataset_by_data if split_by == "data" else split_dataset_by_event
+        assert split_by in [
+            None,
+            "data",
+            "event",
+        ], f"{split_by} option not recognized.Valid values are 'data' or 'event'"
+        split_wrapper = (
+            split_dataset_by_data if split_by == "data" else split_dataset_by_event
+        )
         train_splitted, val_splitted = split_wrapper(
-            [inputs, targets, c_indices], split
+            [inputs, targets, c_indices], split, verbose=verbose
         )
         train_data = [None, train_splitted]
         val_data = [None, val_splitted]
         keys = kwargs.copy()
         keys.update(shuffle=True)
-        return EventDataset(train_data, **keys), EventDataset(val_data, **kwargs)
+        return MHAEventDataset(train_data, **keys), MHAEventDataset(val_data, **kwargs)
     data = events, [inputs, targets, c_indices]
-    return EventDataset(data, cthresholds=cthresholds, **kwargs)
+    return MHAEventDataset(data, cthresholds=cthresholds, **kwargs)
 
 
 # ======================================================================
@@ -393,9 +500,9 @@ def generate_dataset(
     targets = []
     c_indices = []
     cthresholds = []
-    for event in tqdm(events):
+    for event in events:  # tqdm(events):
         event.refine()
-        inps, tgts, c_idxs = generate_inputs_and_targets(event, min_hits=min_hits)
+        inps, tgts, c_idxs = generate_inputs_and_targets_mha(event, min_hits=min_hits)
         if cthreshold is not None:
             cthresholds.append(get_cluster_thresholds(event, cthreshold))
         inputs.append(inps)
@@ -476,6 +583,7 @@ def build_dataset(
     should_save_dataset=False,
     should_load_dataset=False,
     dataset_dir=None,
+    verbose=False,
 ):
     """
     Loads first the events from file, then generates the dataset to be fed into
@@ -493,6 +601,7 @@ def build_dataset(
         - should_save_dataset: bool, wether to to save the dataset in directory
                                specified by runcard
         - dataset_dir: Path, dataset directory
+        - verbose: bool, wether to print status information
 
     Returns
     -------
@@ -520,11 +629,15 @@ def build_dataset(
             should_save_dataset=should_save_dataset,
             dataset_dir=dataset_dir,
         )
-    return get_generator(events, *dataset_tuple, batch_size, is_training, split_by, split)
+    return get_generator(
+        events, *dataset_tuple, batch_size, is_training, split_by, split, verbose
+    )
 
 
 # ======================================================================
-def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=False):
+def build_dataset_train(
+    setup, should_load_dataset=False, should_save_dataset=False, debug=False
+):
     """
     Wrapper function to build dataset for training. Implements validation
     splitting according to config file.
@@ -535,6 +648,7 @@ def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=Fa
                                specified by runcard
         - should_save_dataset: bool, wether to to save the dataset in directory
                                specified by runcard
+        - debug: bool, wether to print verbose information
 
     Returns
     -------
@@ -559,6 +673,7 @@ def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=Fa
         should_save_dataset=should_save_dataset,
         should_load_dataset=should_load_dataset,
         dataset_dir=dataset_dir,
+        verbose=debug,
     )
 
 
@@ -604,7 +719,14 @@ def dummy_dataset(nb_feats):
     inputs = [np.random.rand(B * 50, nb_feats) for i in range(2)]
     targets = [np.random.rand(B * 50) for i in range(2)]
     data = (None, [inputs, targets, targets])
-    return EventDataset(data, batch_size=B, is_training=True, should_split_by_data=False, verbose=False)
+    return EventDataset(
+        data,
+        batch_size=B,
+        is_training=True,
+        should_split_by_data=False,
+        should_balance=False,
+        verbose=False,
+    )
 
 
 # ======================================================================

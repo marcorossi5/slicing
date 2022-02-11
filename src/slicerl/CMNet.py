@@ -1,16 +1,28 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.layers import AbstractNet
+from slicerl.AbstractNet import AbstractNet
+from slicerl.FFNN import Head
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, Conv1D, BatchNormalization
+from tensorflow.keras import Sequential, Model, Input
+from tensorflow.keras.layers import (
+    Dense,
+    Conv1D,
+    BatchNormalization,
+    Concatenate,
+    MultiHeadAttention,
+    LeakyReLU,
+)
+from tensorflow.keras.activations import sigmoid
 
 # ======================================================================
 class CMNet(AbstractNet):
-    """ Class deifining CM-Net: Cluster merging network. """
+    """Class deifining CM-Net: Cluster merging network."""
 
     def __init__(
         self,
         batch_size=1,
         f_dims=2,
+        fc_heads=2,
+        mha_heads=1,
         activation="relu",
         use_bias=True,
         name="CM-Net",
@@ -28,65 +40,64 @@ class CMNet(AbstractNet):
         # store args
         self.batch_size = int(batch_size)
         self.f_dims = f_dims
+        self.fc_heads = fc_heads
+        self.mha_heads = mha_heads
         self.activation = activation
         self.use_bias = use_bias
+
+        self.mha_filters = [16, 32, 64, 128]
+        self.mhas = []
+        for ih, dout in enumerate(self.mha_filters):
+            self.mhas.append(
+                MultiHeadAttention(
+                    self.mha_heads, dout, output_shape=dout, name=f"mha_{ih}"
+                )
+            )
 
         # self.cumulative_gradients = None
         self.cumulative_counter = tf.constant(0)
 
-        # store some useful parameters
-        self.nb_filters = [32, 64, 128, 256, 128, 64, 32, 16, 8]
-        kernel_sizes = [2] + [1] * (len(self.nb_filters) - 1)
-        self.convs = [
-            Conv1D(
-                filters,
-                kernel_size,
-                # kernel_constraint=MaxNorm(axis=[0, 1]),
-                activation=self.activation,
-                use_bias=self.use_bias,
-                name=f"conv_{i}",
+        # store some useful parameters for the fc layers
+        self.fc_filters = [64, 32, 16, 8, 4, 2, 1]
+        self.dropout = 0.2
+        self.heads = []
+        for ih in range(self.fc_heads):
+            self.heads.append(
+                Head(
+                    self.fc_filters,
+                    ih,
+                    self.dropout,
+                    activation=self.activation,
+                    name=f"head_{ih}",
+                )
             )
-            for i, (filters, kernel_size) in enumerate(
-                zip(self.nb_filters, kernel_sizes)
-            )
-        ]
+        self.concat = Concatenate(axis=-1, name="cat")
 
-        self.bns = (
-            [None] * 2
-            + [BatchNormalization(name="bn_0")]
-            + [None] * 2
-            + [BatchNormalization(name="bn_1")]
-            + [None] * 2
-            + [BatchNormalization(name="bn_2")]
-        )
+        self.build()
 
-        self.final_conv = Conv1D(
-            1,
-            1,
-            # kernel_constraint=MaxNorm(axis=[0, 1]),
-            activation="sigmoid",
-            use_bias=self.use_bias,
-            name=f"final_conv",
-        )
-        self.build_weights()
         self.cumulative_gradients = [
-            tf.Variable(tf.zeros_like(this_var), trainable=False)
+            tf.Variable(
+                tf.zeros_like(this_var),
+                trainable=False,
+                name=add_extension(this_var.name),
+            )
             for this_var in self.trainable_variables
         ]
-        self.cumulative_counter = tf.Variable(tf.constant(0), trainable=False)
+        self.cumulative_counter = tf.Variable(
+            tf.constant(0), trainable=False, name="cum_counter"
+        )
 
     # ----------------------------------------------------------------------
-    def build_weights(self):
-        """ Explicitly build the weights."""
-        input_shapes = [self.f_dims] + self.nb_filters[:-1]
-        for conv, input_shape in zip(self.convs, input_shapes):
-            conv.build((input_shape,))
-
-        self.final_conv.build((self.nb_filters[-1],))
-
-        for bn, input_shape in zip(self.bns, self.nb_filters):
-            if bn is not None:
-                bn.build((None, None, None, None, input_shape))
+    def build(self):
+        """Explicitly build the weights."""
+        super(CMNet, self).build((None, None, self.f_dims))
+        # filters = [self.f_dims] + self.mha_filters[:-1]
+        # for mha, nb_filter in zip(self.mhas, filters):
+        #     input_shape = (None, None, nb_filter)
+        #     mha.build([input_shape] * 2)
+        # for head in self.heads:
+        #     head.build((None, self.mha_filters[-1]))
+        # self.built = True
 
     # ----------------------------------------------------------------------
     def call(self, inputs):
@@ -101,11 +112,22 @@ class CMNet(AbstractNet):
             tf.Tensor, output tensor of shape=(B,N,nb_classes)
         """
         x = inputs
-        for conv, bn in zip(self.convs, self.bns):
-            x = conv(x)
-            if bn is not None:
-                x = bn(x)
-        return tf.squeeze(self.final_conv(x), [-2, -1])
+        # x = tf.expand_dims(inputs, 0)
+        for mha in self.mhas:
+            x = self.activation(mha(x, x))
+
+        x = tf.reduce_max(x, axis=1)
+
+        results = []
+        for head in self.heads:
+            results.append(head(x))
+
+        return tf.reduce_mean(sigmoid(self.concat(results)), axis=-1)
+
+    # ----------------------------------------------------------------------
+    def model(self):
+        inputs = Input(shape=(None, self.f_dims), name="pc")
+        return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
     # ----------------------------------------------------------------------
     def reset_cumulator(self):
@@ -167,3 +189,10 @@ class CMNet(AbstractNet):
         self.compiled_metrics.update_state(y, y_pred)
         # Return a dict mapping metric names to current value
         return {m.name: m.result() for m in self.metrics}
+
+
+def add_extension(name):
+    ext = "_cum"
+    l = name.split(":")
+    l[-2] += ext
+    return ":".join(l)

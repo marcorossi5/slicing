@@ -12,7 +12,7 @@ from tensorflow.keras.constraints import MaxNorm
 
 # ======================================================================
 class DRBNet(AbstractNet):
-    """ Class deifining DRB-Net. """
+    """Class deifining DRB-Net."""
 
     def __init__(
         self,

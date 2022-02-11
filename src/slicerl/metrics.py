@@ -12,7 +12,7 @@ from tensorflow.keras.metrics import (
 
 # ======================================================================
 class F1score(Metric):
-    """ Implementation of F1 score. """
+    """Implementation of F1 score."""
 
     def __init__(self, name="F1-score", **kwargs):
         super(F1score, self).__init__(name=name, **kwargs)
@@ -32,7 +32,7 @@ class F1score(Metric):
 
 # ======================================================================
 class WCCEMetric(CategoricalCrossentropy):
-    """ Wrapper class for weighted categorical crossentropy. """
+    """Wrapper class for weighted categorical crossentropy."""
 
     def __init__(self, nb_classes, scale, name="w_xent", **kwargs):
         super(WCCEMetric, self).__init__(name=name, **kwargs)
@@ -49,7 +49,7 @@ class WCCEMetric(CategoricalCrossentropy):
 
 # ======================================================================
 class WAccMetric(Metric):
-    """ Wrapper class for weighted categorical accuracy. """
+    """Wrapper class for weighted categorical accuracy."""
 
     def __init__(self, nb_classes, scale, name="w_acc", **kwargs):
         super(WAccMetric, self).__init__(name=name, **kwargs)

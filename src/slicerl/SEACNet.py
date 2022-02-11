@@ -8,7 +8,7 @@ from tensorflow.keras.activations import sigmoid
 
 # ======================================================================
 class SeacNet(AbstractNet):
-    """ Class deifining SEAC-Net. """
+    """Class deifining SEAC-Net."""
 
     def __init__(
         self,

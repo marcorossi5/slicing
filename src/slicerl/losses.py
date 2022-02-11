@@ -14,7 +14,7 @@ from tensorflow.keras.losses import (
 
 # ======================================================================
 def dice_loss(y_true, y_pred):
-    """ Implementation of Dice loss. """
+    """Implementation of Dice loss."""
     iy_true = 1 - y_true
     iy_pred = 1 - y_pred
     num1 = tf.math.reduce_sum((y_true * y_pred), -1) + EPS_TF
@@ -106,7 +106,7 @@ def focal_crossentropy(y_true, y_pred, alpha=1.0, gamma=2.0, from_logits=False):
 
 # ======================================================================
 class WeightedCategoricalCrossEntropy(CategoricalCrossentropy):
-    """ Implementation of weighted categorical crossentropy.  """
+    """Implementation of weighted categorical crossentropy."""
 
     def __init__(self, nb_classes, scale, name="weight-xent", **kwargs):
         super().__init__(name=name, **kwargs)
@@ -135,7 +135,7 @@ class WeightedCategoricalCrossEntropy(CategoricalCrossentropy):
 
 # ======================================================================
 class FocalCrossentropy(Loss):
-    """ Implementation of Focal crossentropy.  """
+    """Implementation of Focal crossentropy."""
 
     def __init__(
         self,
@@ -169,7 +169,7 @@ class FocalCrossentropy(Loss):
 
 # ======================================================================
 class CombinedLoss(Loss):
-    """ Categorical crossentropy plus L1 on slice size.  """
+    """Categorical crossentropy plus L1 on slice size."""
 
     def __init__(
         self,
@@ -210,7 +210,7 @@ class CombinedLoss(Loss):
 
 # ======================================================================
 class CombinedFocalLoss(Loss):
-    """ Focal crossentropy plus L1 on slice size.  """
+    """Focal crossentropy plus L1 on slice size."""
 
     def __init__(
         self,

@@ -66,7 +66,7 @@ class EllipticTopK:
         x = rot[..., 0] / self.majAxis
         y = rot[..., 1] / self.minAxis
 
-        dists = -(x ** 2) - y ** 2
+        dists = -(x**2) - y**2
         knn_idx = tf.math.top_k(dists, k=self.K, sorted=True)
 
         if self.batched:
