@@ -4,6 +4,7 @@ from slicerl.FFNN import Head
 import tensorflow as tf
 from tensorflow.keras import Sequential, Model, Input
 from tensorflow.keras.layers import (
+    Layer,
     Dense,
     Conv1D,
     BatchNormalization,
@@ -11,26 +12,70 @@ from tensorflow.keras.layers import (
     MultiHeadAttention,
     LeakyReLU,
 )
-from tensorflow.keras.activations import sigmoid
+from tensorflow.keras.activations import sigmoid, tanh
 
 
 def add_extension(name):
     """
     Adds extension to cumulative variables while looping over it.
-
+    
     Parameters
     ----------
         - name: str, the weight name to be extended
-
+    
     Returns
     -------
-        - str, the extended weight name
+        - str, the extended weight name    
     """
     ext = "_cum"
     l = name.split(":")
     l[-2] += ext
     return ":".join(l[:-1])
 
+
+# ======================================================================
+class MyGRU(Layer):
+    """ Implementation of the GRU layer. """
+    def __init__(self, units, **kwargs):
+        """
+        Parameters
+        ----------
+            - units: int, output feature dimensionality
+        """
+        super(MyGRU, self).__init__(**kwargs)
+        self.units = units
+        self.wr = Dense(units, name="wr", activation=None)
+        self.hr = Dense(units, name="hr", activation=None, use_bias=False)
+
+        self.wz = Dense(units, name="wz", activation=None)
+        self.hz = Dense(units, name="hz", activation=None, use_bias=False)
+
+        self.wn = Dense(units, name="wn", activation=None)
+        self.hn = Dense(units, name="hn", activation=None)
+
+        self.act = sigmoid
+        self.n_act = tanh
+
+        self.mha = MultiHeadAttention(1, units, output_shape=units, name='mha')
+
+    def call(self, x):
+        """
+        Parameters
+        ----------
+            - x: tf.Tensor, input tensor of shape=(B, L, d_in)
+        
+        Returns
+        -------
+            - tf.Tensor, output tensor of shape=(B, L, d_out)
+        """
+        h = self.mha(x, x)
+        rt = self.act(self.wr(x) + self.hr(h))
+        zt = self.act(self.wz(x) + self.hz(h))
+        nt = self.n_act(self.wn(x) + rt * self.hn(h))
+        return (1 - zt) * nt + zt * h
+
+    def get_config(self):
+        return {"units": self.units}
 
 # ======================================================================
 class CMNet(AbstractNet):
@@ -66,8 +111,7 @@ class CMNet(AbstractNet):
         self.use_bias = use_bias
         self.verbose = verbose
 
-        # self.mha_filters = [16, 32, 64, 128]
-        self.mha_filters = [256,]
+        self.mha_filters = [64, 128]
         self.mhas = []
         for ih, dout in enumerate(self.mha_filters):
             self.mhas.append(
@@ -80,8 +124,7 @@ class CMNet(AbstractNet):
         self.cumulative_counter = tf.constant(0)
 
         # store some useful parameters for the fc layers
-        # self.fc_filters = [64, 32, 16, 8, 4, 2, 1]
-        self.fc_filters = [128, 32, 8, 1]
+        self.fc_filters = [64, 32, 16, 8, 4, 2, 1]
         # self.dropout_idxs = [0, 1]
         self.dropout_idxs = []
         self.dropout = 0.2
@@ -177,18 +220,20 @@ class CMNet(AbstractNet):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
         x, y = data
-
+        
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)  # Forward pass
             # Compute the loss value
             # (the loss function is configured in `compile()`)
             loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
-
+        
         if self.verbose:
-            reset_2 = (self.cumulative_counter + 1) % self.batch_size == 0
+            reset_2 = (self.cumulative_counter+1) % self.batch_size == 0
             tf.cond(
                 reset_2,
-                lambda: print_loss(x, y, y_pred, loss),
+                lambda: print_loss(
+                    x, y, y_pred, loss
+                ),
                 lambda: False,
             )
 
@@ -206,10 +251,12 @@ class CMNet(AbstractNet):
         reset = self.cumulative_counter % self.batch_size == 0
 
         if self.verbose:
-            reset_1 = (self.cumulative_counter - 1) % self.batch_size == 0
+            reset_1 = (self.cumulative_counter-1) % self.batch_size == 0
             tf.cond(
                 reset_1,
-                lambda: print_gradients(zip(self.cumulative_gradients, trainable_vars)),
+                lambda: print_gradients(
+                    zip(self.cumulative_gradients, trainable_vars)
+                ),
                 lambda: False,
             )
 
@@ -235,15 +282,6 @@ def print_loss(x, y, y_pred, loss):
 
 def print_gradients(gradients):
     for g, t in gradients:
-        tf.print(
-            "Param:",
-            g.name,
-            ", value:",
-            tf.reduce_mean(t),
-            tf.math.reduce_std(t),
-            ", grad:",
-            tf.reduce_mean(g),
-            tf.math.reduce_std(g),
-        )
+        tf.print("Param:", g.name, ", value:", tf.reduce_mean(t), tf.math.reduce_std(t), ", grad:", tf.reduce_mean(g), tf.math.reduce_std(g))
     tf.print("---------------------------")
     return True
