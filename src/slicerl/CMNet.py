@@ -11,6 +11,7 @@ from tensorflow.keras.layers import (
     Concatenate,
     MultiHeadAttention,
     LeakyReLU,
+    LayerNormalization,
 )
 from tensorflow.keras.activations import sigmoid, tanh
 
@@ -18,14 +19,14 @@ from tensorflow.keras.activations import sigmoid, tanh
 def add_extension(name):
     """
     Adds extension to cumulative variables while looping over it.
-    
+
     Parameters
     ----------
         - name: str, the weight name to be extended
-    
+
     Returns
     -------
-        - str, the extended weight name    
+        - str, the extended weight name
     """
     ext = "_cum"
     l = name.split(":")
@@ -35,8 +36,9 @@ def add_extension(name):
 
 # ======================================================================
 class MyGRU(Layer):
-    """ Implementation of the GRU layer. """
-    def __init__(self, units, **kwargs):
+    """Implementation of the GRU layer."""
+
+    def __init__(self, units, mha_heads, **kwargs):
         """
         Parameters
         ----------
@@ -56,14 +58,17 @@ class MyGRU(Layer):
         self.act = sigmoid
         self.n_act = tanh
 
-        self.mha = MultiHeadAttention(1, units, output_shape=units, name='mha')
+        self.mha_heads = mha_heads
+        self.mha = MultiHeadAttention(
+            self.mha_heads, units, output_shape=units, name="mha"
+        )
 
     def call(self, x):
         """
         Parameters
         ----------
             - x: tf.Tensor, input tensor of shape=(B, L, d_in)
-        
+
         Returns
         -------
             - tf.Tensor, output tensor of shape=(B, L, d_out)
@@ -75,7 +80,61 @@ class MyGRU(Layer):
         return (1 - zt) * nt + zt * h
 
     def get_config(self):
-        return {"units": self.units}
+        return {"units": self.units, "mha_heads": self.mha_heads}
+
+
+# ======================================================================
+class TransformerEncoder(Layer):
+    """Implementation of ViT Encoder layer."""
+
+    def __init__(self, units, mha_heads, **kwargs):
+        """
+        Parameters
+        ----------
+            - units: int, output feature dimensionality
+            - mha_heads: int, number of heads in MultiHeadAttention layers
+        """
+        super(TransformerEncoder, self).__init__(**kwargs)
+        self.units = units
+        self.mha_heads = mha_heads
+
+        self.norm0 = LayerNormalization(axis=-1, name="ln_0")
+
+        self.mlp = Sequential(
+            [Dense(units, activation="relu"), Dense(units, activation=None)], name="mlp"
+        )
+
+        # self.conv = Conv1D(units, name="conv")
+        self.norm1 = LayerNormalization(axis=-1, name="ln_1")
+
+    def build(self, input_shape):
+        """
+        Parameters
+        ----------
+        """
+        units = input_shape[-1]
+        self.mha = MultiHeadAttention(units, self.mha_heads, name="mha")
+        super(TransformerEncoder, self).build(input_shape)
+
+    def call(self, x):
+        """
+        Parameters
+        ----------
+            - x: tf.Tensor, input tensor of shape=(B, L, d_in)
+
+        Returns
+        -------
+            - tf.Tensor, output tensor of shape=(B, L, d_out)
+        """
+        # residual and multi head attention
+        x += self.mha(x, x)
+        # layer normalization
+        x = self.norm0(x)
+        return self.norm1(self.mlp(x))
+
+    def get_config(self):
+        return {"units": self.units, "mha_heads": self.mha_heads}
+
 
 # ======================================================================
 class CMNet(AbstractNet):
@@ -113,12 +172,10 @@ class CMNet(AbstractNet):
 
         self.mha_filters = [64, 128]
         self.mhas = []
+        # self.mha_ifilters = [self.fc_heads] + self.mha_filters[:-1]
         for ih, dout in enumerate(self.mha_filters):
-            self.mhas.append(
-                MultiHeadAttention(
-                    self.mha_heads, dout, output_shape=dout, name=f"mha_{ih}"
-                )
-            )
+            # self.mhas.append(MyGRU(dout, self.mha_heads, name=f"mha_{ih}"))
+            self.mhas.append(TransformerEncoder(dout, self.mha_heads, name=f"mha_{ih}"))
 
         # self.cumulative_gradients = None
         self.cumulative_counter = tf.constant(0)
@@ -176,7 +233,7 @@ class CMNet(AbstractNet):
         x = inputs
         # x = tf.expand_dims(inputs, 0)
         for mha in self.mhas:
-            x = self.activation(mha(x, x))
+            x = self.activation(mha(x))
 
         x = tf.reduce_max(x, axis=1)
 
@@ -220,20 +277,18 @@ class CMNet(AbstractNet):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
         x, y = data
-        
+
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)  # Forward pass
             # Compute the loss value
             # (the loss function is configured in `compile()`)
             loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
-        
+
         if self.verbose:
-            reset_2 = (self.cumulative_counter+1) % self.batch_size == 0
+            reset_2 = (self.cumulative_counter + 1) % self.batch_size == 0
             tf.cond(
                 reset_2,
-                lambda: print_loss(
-                    x, y, y_pred, loss
-                ),
+                lambda: print_loss(x, y, y_pred, loss),
                 lambda: False,
             )
 
@@ -251,12 +306,10 @@ class CMNet(AbstractNet):
         reset = self.cumulative_counter % self.batch_size == 0
 
         if self.verbose:
-            reset_1 = (self.cumulative_counter-1) % self.batch_size == 0
+            reset_1 = (self.cumulative_counter - 1) % self.batch_size == 0
             tf.cond(
                 reset_1,
-                lambda: print_gradients(
-                    zip(self.cumulative_gradients, trainable_vars)
-                ),
+                lambda: print_gradients(zip(self.cumulative_gradients, trainable_vars)),
                 lambda: False,
             )
 
@@ -282,6 +335,15 @@ def print_loss(x, y, y_pred, loss):
 
 def print_gradients(gradients):
     for g, t in gradients:
-        tf.print("Param:", g.name, ", value:", tf.reduce_mean(t), tf.math.reduce_std(t), ", grad:", tf.reduce_mean(g), tf.math.reduce_std(g))
+        tf.print(
+            "Param:",
+            g.name,
+            ", value:",
+            tf.reduce_mean(t),
+            tf.math.reduce_std(t),
+            ", grad:",
+            tf.reduce_mean(g),
+            tf.math.reduce_std(g),
+        )
     tf.print("---------------------------")
     return True
