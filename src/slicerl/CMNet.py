@@ -113,7 +113,7 @@ class TransformerEncoder(Layer):
         ----------
         """
         units = input_shape[-1]
-        self.mha = MultiHeadAttention(units, self.mha_heads, name="mha")
+        self.mha = MultiHeadAttention(self.mha_heads, units, name="mha")
         super(TransformerEncoder, self).build(input_shape)
 
     def call(self, x):
