@@ -4,44 +4,11 @@ from pathlib import Path
 from shutil import copyfile
 from time import time as tm
 import tensorflow as tf
-
 from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
+from slicerl.config import config_tf
+from slicerl.utils.utils import load_runcard, modify_runcard
 import pickle, pprint
-
-# ======================================================================
-def config_tf(setup):
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
-    gpus = tf.config.list_physical_devices("GPU")
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-
-
-# ======================================================================
-def load_runcard(runcard_file):
-    """Load runcard from yaml file."""
-    with open(runcard_file, "r") as stream:
-        runcard = yaml.load(stream, Loader=yaml.FullLoader)
-    runcard["scan"] = False
-    for key, value in runcard.items():
-        if isinstance(value, dict):
-            for k, v in value.items():
-                if "hp." in str(v):
-                    runcard[key][k] = eval(v)
-                    runcard["scan"] = True
-        else:
-            if "hp." in str(value):
-                runcard[key][k] = eval(value)
-                runcard["scan"] = True
-    return runcard
-
-
-# ======================================================================
-def modify_runcard(setup):
-    setup.update({"output": Path(setup["output"])})
-    setup["train"].update({"dataset_dir": Path(setup["train"]["dataset_dir"])})
-    setup["test"].update({"dataset_dir": Path(setup["test"]["dataset_dir"])})
-
 
 # ======================================================================
 def check_dataset_directory(
@@ -291,7 +258,7 @@ def main():
         # loading model
         if args.data:
             setup["test"]["fn"] = args.data
-
+    
     check_dataset_directory(
         setup["test"]["dataset_dir"],
         should_load_dataset=args.load_dataset_test,

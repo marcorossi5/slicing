@@ -1,19 +1,9 @@
 # This file is part of SliceRL by M. Rossi
 """ Module containing utility functions. """
 from slicerl.config import EPS, EPS_TF, float_me
-
-import json
 from collections import deque
 import numpy as np
 import tensorflow as tf
-
-
-# ======================================================================
-def load_runcard(runcard):
-    """Read in a runcard json file and set up dimensions correctly."""
-    with open(runcard, "r") as f:
-        res = json.load(f)
-    return res
 
 
 # ======================================================================

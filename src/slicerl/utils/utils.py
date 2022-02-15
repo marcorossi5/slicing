@@ -1,10 +1,8 @@
 # This file is part of SliceRL by M. Rossi
 """ This module contains utility functions of general interest. """
+from pathlib import Path
 import yaml
 from hyperopt import hp
-import tensorflow as tf
-import numpy as np
-import random
 
 # ======================================================================
 def load_runcard(runcard_file):
@@ -24,9 +22,16 @@ def load_runcard(runcard_file):
                 runcard["scan"] = True
     return runcard
 
-# ======================================================================
-def set_manual_seed(seed):
-    random.seed(seed)
-    tf.random.set_seed(seed)
-    np.random.seed(seed)
 
+# ======================================================================
+def modify_runcard(setup):
+    """
+    Loads correctly the Path objects in the runcard.
+    
+    Parameters
+    ----------
+        - setup: dict, the loaded settings
+    """
+    setup.update({"output": Path(setup["output"])})
+    setup["train"].update({"dataset_dir": Path(setup["train"]["dataset_dir"])})
+    setup["test"].update({"dataset_dir": Path(setup["test"]["dataset_dir"])})

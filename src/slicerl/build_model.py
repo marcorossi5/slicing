@@ -12,7 +12,7 @@ from slicerl.diagnostics import (
     plot_histogram,
     plot_graph,
 )
-from slicerl.utils.utils import set_manual_seed
+from slicerl.config import set_manual_seed
 
 import os
 from copy import deepcopy
@@ -89,10 +89,10 @@ def load_network(setup, checkpoint_filepath=None):
         ],
         run_eagerly=setup.get("debug"),
     )
-    if not setup["scan"]:
-        # net.model().summary()
-        net.summary()
-        tf.keras.utils.plot_model(net.model(), to_file="../CMNet.png", show_shapes=True)
+    # if not setup["scan"]:
+    #     # net.model().summary()
+    #     net.summary()
+    #     tf.keras.utils.plot_model(net.model(), to_file="../CMNet.png", show_shapes=True)
 
     if checkpoint_filepath:
         net.load_weights(checkpoint_filepath.as_posix())
