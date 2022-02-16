@@ -1,12 +1,15 @@
 # This file is part of SliceRL by M. Rossi
 """ Module containing utility functions for computations. """
+import logging
 from collections import deque
 import numpy as np
 import tensorflow as tf
+from slicerl import PACKAGE
 from slicerl.utils.configflow import EPS, EPS_TF, float_me
 
+logger = logging.getLogger(PACKAGE)
 
-# ======================================================================
+
 def get_window_width(masses, lower_frac=20, upper_frac=80):
     """Returns"""
     lower = np.nanpercentile(masses, lower_frac)
@@ -195,10 +198,10 @@ def dfs(visited, node, graph):
     """
     if node not in visited:
         visited.add(node)
-        print(f"Check in node {node}, slice: {visited}")
+        logger.debug(f"Check in node {node}, slice: {visited}")
         to_visit = graph[node].difference(visited)
         for neighbor in to_visit:
-            print(f"For loop made with {to_visit}")
+            logger.debug(f"For loop made with {to_visit}")
             dfs(visited, neighbor, graph)
 
 
@@ -223,7 +226,7 @@ def bfs(sl, visited, root, graph):
 
         # Dequeue a node from queue
         node = queue.popleft()
-        # print(str(node) + " ", end="")
+        logger.debug(str(node) + " ", end="")
 
         # If not visited, mark it as visited, and
         # enqueue it

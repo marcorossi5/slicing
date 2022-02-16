@@ -1,7 +1,11 @@
 # This file is part of SliceRL by M. Rossi
+import logging
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
+from slicerl import PACKAGE
+
+logger = logging.getLogger(PACKAGE + ".diagnostics")
 
 THRESHOLD = 0.9
 
@@ -205,7 +209,7 @@ def plot_multiplicity(events, output_folder="./"):
     plt.xlim((bins[0], bins[-1]))
     plt.legend()
     fname = f"{output_folder}/multiplicity.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -273,7 +277,7 @@ def plot_slice_size(events, output_folder="./"):
     ax.legend()
 
     fname = f"{output_folder}/slice_size.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -299,9 +303,8 @@ def get_beam_metrics(events, pndr=False, dump=False):
             mc_beam = plane.ordered_mc_idx[isBeam]
             beam_mc_slices = list(set(mc_beam))
 
-            if dump:
-                print("------------------------------")
-                print(f"plane {iev}:")
+            logger.debug("------------------------------")
+            logger.debug(f"plane {iev}:")
 
             for islice, idx in enumerate(beam_mc_slices):
                 slice_mc = (
@@ -311,10 +314,9 @@ def get_beam_metrics(events, pndr=False, dump=False):
                 tot_this_mc_TB = np.count_nonzero(
                     slice_mc
                 )  # total hits for this mc slice
-                if dump:
-                    print(
-                        f"Test beam slice {islice+1}/{len(beam_mc_slices)}, mc Hits: {tot_this_mc_TB}:"
-                    )
+                logger.debug(
+                    f"Test beam slice {islice+1}/{len(beam_mc_slices)}, mc Hits: {tot_this_mc_TB}:"
+                )
 
                 pred_beam = status[slice_mc]
                 beam_pred_slices = list(set(pred_beam))
@@ -348,12 +350,10 @@ def get_beam_metrics(events, pndr=False, dump=False):
                 if nb_p_slices == 1:
                     if purity >= THRESHOLD:
                         print_str = f"  Is%(result)s, reco Hits: {nb_pred_hits[-1]},  Purity: {purities[-1]*100:.2f}%, Completeness {completenesses[-1]*100:.2f}%"
-                        if dump:
-                            print(print_str % {"result": "Correct"})
+                        logger.debug(print_str % {"result": "Correct"})
                         statuses.append([1, 0, 0])
                     else:
-                        if dump:
-                            print(print(print_str % {"result": "Lost"}))
+                        logger.debug(print_str % {"result": "Lost"})
                         statuses.append([0, 1, 0])
                 elif nb_p_slices > 1:
                     cs = completenesses[-nb_p_slices:]
@@ -364,16 +364,13 @@ def get_beam_metrics(events, pndr=False, dump=False):
                         print_str = f"  Is%(result)s, reco Hits: {nb},  Purity: {purities[-nb_p_slices:][amax_cs]*100:.2f}%, Completeness {completenesses[-nb_p_slices:][amax_cs]*100:.2f}%"
                         p = purities[-nb_p_slices:][amax_cs]
                         if p > THRESHOLD:
-                            if dump:
-                                print(print_str % {"result": "Correct"})
+                            logger.debug(print_str % {"result": "Correct"})
                             this_status = [1, 0, 0]
                         else:
-                            if dump:
-                                print(print_str % {"result": "Lost"})
+                            logger.debug(print_str % {"result": "Lost"})
                             this_status = [0, 1, 0]
                     else:
-                        if dump:
-                            print(f"  IsSplit in {nb_p_slices} slices:")
+                        logger.debug(f"  IsSplit in {nb_p_slices} slices:")
                         this_status = [0, 0, 1]
                     # multiple_statuses = [[0,0,0] for i in range(amax_cs - 1)] + [this_status] + [[0,0,0] for i in range(amax_cs + 1, nb_p_slices)]
                     # statuses.extend(multiple_statuses) # must keep the number of statuses equal to (reco slices * mc slices)
@@ -403,12 +400,12 @@ def print_beam_metrics(beam_metrics):
     stats = beam_metrics[0][:, m]
     # filtered_stats = beam_metrics[0][:, filtered_m]
 
-    print("------------------------------\n- Including all slices")
-    print(
+    logger.info("------------------------------\n- Including all slices")
+    logger.info(
         f"  isCorrect: {stats[0].sum()}/{nb_tests}, {stats[0].sum()/nb_tests*100:.2f}%"
     )
-    print(f"  isLost: {stats[1].sum()}/{nb_tests}, {stats[1].sum()/nb_tests*100:.2f}%")
-    print(f"  isSplit: {stats[2].sum()}/{nb_tests}, {stats[2].sum()/nb_tests*100:.2f}%")
+    logger.info(f"  isLost: {stats[1].sum()}/{nb_tests}, {stats[1].sum()/nb_tests*100:.2f}%")
+    logger.info(f"  isSplit: {stats[2].sum()}/{nb_tests}, {stats[2].sum()/nb_tests*100:.2f}%")
 
     # print("- Filtering out small slices (< 5 mc hits)")
     # print(
@@ -436,7 +433,7 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
     plt.legend()
     plt.grid(alpha=0.4)
     fname = output_folder / "plots/TB_purity_completeness.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -477,7 +474,7 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
     )
     plt.colorbar()
     fname = output_folder / "plots/TB_purity_completeness_heatmap.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -510,7 +507,7 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
     plt.xlabel("Purity")
     plt.legend(loc="upper left")
     fname = output_folder / "plots/TB_purity.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -542,7 +539,7 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
     plt.xlabel("Completeness")
     plt.legend(loc="upper left")
     fname = output_folder / "plots/TB_completeness.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -557,12 +554,12 @@ def plot_test_beam_metrics(events, output_folder="./"):
     all_nb_mc_hits = []
 
     beam_metrics = get_beam_metrics(events)
-    print("\n[+] Evaluating metrics Cluster Merging Network ...")
+    logger.info("\nEvaluating metrics Cluster Merging Network ...")
     print_beam_metrics(beam_metrics)
     # plot_purity_completeness(beam_metrics, output_folder + "purity_completeness.png")
 
     beam_pndr_metrics = get_beam_metrics(events, pndr=True)
-    print("\n[+] Evaluating metrics Pandora ...")
+    logger.info("\nEvaluating metrics Pandora ...")
     print_beam_metrics(beam_pndr_metrics)
 
     plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder)
@@ -570,8 +567,8 @@ def plot_test_beam_metrics(events, output_folder="./"):
     return
 
     for iev, event in enumerate(events):
-        print("------------------------------")
-        print(f"Event {iev}:")
+        logger.info("------------------------------")
+        logger.info(f"Event {iev}:")
 
         # beam_metrics = get_beam_metrics(event.status, event.ordered_mc_idx, event.calohits[-2])
         beam_metrics = get_beam_metrics(
@@ -628,7 +625,7 @@ def plot_plane_view(
     ax.set_title("pc_true")
 
     fname = f"{output_folder}/pview_{nb_event}.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight", dpi=300)
     plt.close()
 
@@ -711,7 +708,7 @@ def plot_histogram(y_true, y_pred, output_folder="./"):
     ax.set_yscale("log")
     ax.legend()
     fname = f"{output_folder}/pred_hist.png"
-    print(f"[+] Saving plot at {fname} ")
+    logger.info(f"Saving plot at {fname} ")
     plt.savefig(fname, bbox_inches="tight", dpi=300)
     plt.close()
 
@@ -743,6 +740,6 @@ def plot_graph(pc, graph, status, output_folder="./"):
     ax.scatter(pc[:, 0], pc[:, 1], s=0.5, c=status, cmap=cmap, norm=norm)
 
     fname = f"{output_folder}/pred_graph.png"
-    print(f"[+] Saving plot at {fname}")
+    logger.info(f"Saving plot at {fname}")
     plt.savefig(fname, bbox_inches="tight", dpi=300)
     plt.close()

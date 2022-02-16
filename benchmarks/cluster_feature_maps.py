@@ -127,7 +127,7 @@ def main(setup):
 
     # load network
     network = load_network(setup, setup["output"] / setup["test"]["checkpoint"])
-    stack = tf.keras.Sequential([l for l in network.layers if "mha" in l.name])
+    stack = tf.keras.Sequential([l for l in network.layers if "mha_0" in l.name])
     # stack.add(ReduceMax(axis=1, name="reduce_max"))
     stack.build((1, None, setup["model"]["f_dims"]))
     stack.summary()
@@ -157,11 +157,10 @@ def main(setup):
         best_feat,
         setup["output"] / f"plots/cluster_best_feature.png",
     )
-    exit()
 
     # histogramming
     print(f"Histogramming on {y_true.shape[0]} points")
-    for i in range(0, 128, 16):
+    for i in range(0, y_pred[0].shape[1], 16):
         plot_features(
             feats,
             y_true,

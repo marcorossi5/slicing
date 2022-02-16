@@ -1,1 +1,3 @@
-# We don't want to import stuff here that could slow down the import times
+from slicerl.utils.configlog import PACKAGE
+
+__version__ = "1.0.0"

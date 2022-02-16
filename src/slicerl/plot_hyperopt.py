@@ -1,9 +1,14 @@
+# This file is part of SliceRL by M. Rossi
+import logging
 import pickle
 import matplotlib.pyplot as plt
 import pprint
 import pandas as pd
 import numpy as np
 import seaborn as sns
+from slicerl import PACKAGE
+
+logger = logging.getLogger(PACKAGE + ".hopt")
 
 
 def build_dataframe(trials, bestid):
@@ -21,7 +26,7 @@ def build_dataframe(trials, bestid):
 
 # ----------------------------------------------------------------------
 def plot_scans(df, bestdf, trials, bestid, file):
-    print("plotting scan results...")
+    logger.info("Plotting scan results...")
     # plot loss
     nplots = len(trials[0]["misc"]["vals"].keys()) + 1
     f, axs = plt.subplots(1, nplots, sharey=True, figsize=(50, 10))
@@ -64,7 +69,7 @@ def plot_scans(df, bestdf, trials, bestid, file):
 
 # ----------------------------------------------------------------------
 def plot_correlations(df, file):
-    print("plotting correlations...")
+    logger.info("Plotting correlations...")
     plt.figure(figsize=(20, 20))
     sns.heatmap(
         df.corr(),
@@ -81,7 +86,7 @@ def plot_correlations(df, file):
 
 # ----------------------------------------------------------------------
 def plot_pairs(df, file):
-    print("plotting pairs")
+    logger.info("Plotting pairs")
     plt.figure(figsize=(50, 50))
     sns.pairplot(df)
     plt.savefig(f"{file}", bbox_inches="tight")
@@ -98,7 +103,7 @@ def plot_hyperopt(trials_fname):
     with open(trials_fname, "rb") as f:
         input_trials = pickle.load(f)
 
-    print("Filtering bad scans...")
+    logger.info("Filtering bad scans...")
     trials = []
     best = 10000
     bestid = -1
@@ -108,7 +113,7 @@ def plot_hyperopt(trials_fname):
             if t["result"]["loss"] < best:
                 best = t["result"]["loss"]
                 bestid = t
-    print(f"Number of good trials {len(trials)}")
+    logger.info(f"Number of good trials {len(trials)}")
     pprint.pprint(bestid)
 
     # compute dataframe

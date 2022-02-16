@@ -1,10 +1,14 @@
 # This file is part of SliceRL by M. Rossi
+import logging
 import gzip
 import sys
 import csv
 from abc import ABC, abstractmethod
 import numpy as np
+from slicerl import PACKAGE
 from slicerl.Event import Event
+
+logger = logging.getLogger(PACKAGE)
 
 # ======================================================================
 class Reader(object):
@@ -69,28 +73,28 @@ class Reader(object):
             c.append(self.readline_fn(self.stream))  # PDG
             c.append(self.readline_fn(self.stream))  # pfo index
         except IOError:
-            print(
-                "# got to end with IOError (maybe gzip structure broken?) around event",
+            logger.error(
+                "Got to end with IOError (maybe gzip structure broken?) around event",
                 self.n,
                 file=sys.stderr,
             )
             return None
         except EOFError:
-            print(
-                "# got to end with EOFError (maybe gzip structure broken?) around event",
+            logger.error(
+                "Got to end with EOFError (maybe gzip structure broken?) around event",
                 self.n,
                 file=sys.stderr,
             )
             return None
         except ValueError:
-            print(
-                "# got to end with ValueError (empty csv entry) around event",
+            logger.error(
+                "Got to end with ValueError (empty csv entry) around event",
                 self.n,
                 file=sys.stderr,
             )
             return None
         except StopIteration:
-            print(f"# Exiting after having read all the {self.n} events")
+            logger.info(f"Exiting after having read all the {self.n} events")
             return None
         return np.stack(c)
 
@@ -99,7 +103,7 @@ class Reader(object):
         """Main function to read one plane view at a time from file."""
         # return after hitting the maximum number of events
         if self.n == self.nmax:
-            print(f"# Exiting after having read {self.nmax} events")
+            logger.info(f"Exiting after having read {self.nmax} events")
             return None
         tpc_view_U = self.next_plane()
         if tpc_view_U is not None:
@@ -188,7 +192,7 @@ def load_Events_from_file(
         - list
             list of loaded Event object (with length equal to nev)
     """
-    print(f"[+] Reading {filename}")
+    logger.info(f"Reading {filename}")
     reader = Events(filename, nev, min_hits, max_hits, load_results)
     return reader.values()
 
@@ -217,7 +221,7 @@ def load_Events_from_files(
     """
     events = []
     for fname in filelist:
-        print(f"[+] Reading {fname}")
+        logger.info(f"Reading {fname}")
         events.extend(Events(fname, nev, min_hits, max_hits, load_results).values())
     return events
 

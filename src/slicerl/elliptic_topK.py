@@ -1,3 +1,4 @@
+# This file is part of SliceRL by M. Rossi
 import tensorflow as tf
 import numpy as np
 

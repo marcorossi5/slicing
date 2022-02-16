@@ -1,8 +1,13 @@
+# This file is part of SliceRL by M. Rossi
+import logging
 from tqdm import tqdm
 import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input
+from slicerl import PACKAGE
 from slicerl.utils.tools import bfs
+
+logger = logging.getLogger(PACKAGE)
 
 
 # ======================================================================
@@ -153,24 +158,24 @@ def print_prediction(adj, slices):
     import sys
 
     nb_clusters = len(adj)
-    print(f"Number of clusters: {nb_clusters}")
+    logger.debug(f"Number of clusters: {nb_clusters}")
     adj_mod = np.concatenate([np.arange(nb_clusters).reshape(1, -1), adj], axis=0)
     extra_line = np.concatenate([[-1], np.arange(nb_clusters)])
     adj_mod = np.concatenate([extra_line.reshape(-1, 1), adj_mod], axis=1)
 
     lw = 400
     np.set_printoptions(precision=2, suppress=True, threshold=sys.maxsize, linewidth=lw)
-    # print(adj_mod)
-    print(adj)
+    # logger.debug(adj_mod)
+    logger.debug(adj)
 
     pred = (adj > 0.5).astype(int)
-    print(pred)
-    edges = np.argwhere(pred)
-    m = edges[:, 0] > edges[:, 1]
-    # print(edges[m])
+    logger.debug(pred)
+    # edges = np.argwhere(pred)
+    # m = edges[:, 0] > edges[:, 1]
+    # logger.debug(edges[m])
 
     for sl in slices:
-        print(sl)
+        logger.debug(sl)
 
 
 # ======================================================================

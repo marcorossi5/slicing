@@ -4,7 +4,9 @@
 """
 import os
 import shutil
+import logging
 import tensorflow as tf
+from slicerl import PACKAGE
 from slicerl.utils.utils import (
     get_cmd_args,
     check_cmd_args,
@@ -14,6 +16,8 @@ from slicerl.utils.utils import (
     modify_runcard,
 )
 
+
+logger = logging.getLogger(PACKAGE)
 
 def preconfig_tf(setup):
     """
@@ -25,7 +29,7 @@ def preconfig_tf(setup):
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
     if setup.get("debug"):
-        print("[+] Run all tf functions eagerly")
+        logger.warning("Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
         # tf.data.experimental.enable_debug_mode()
 
@@ -34,6 +38,10 @@ def preconfig_tf(setup):
 def config_init():
     args = get_cmd_args()
     check_cmd_args(args)
+
+    if args.debug:
+        logger.setLevel("DEBUG")
+        logger.handlers[0].setLevel("DEBUG")
 
     setup = {"debug": args.debug}
     if args.runcard:

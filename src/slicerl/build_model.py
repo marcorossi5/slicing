@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+import logging
 from copy import deepcopy
 from time import time as tm
 from pathlib import Path
@@ -14,6 +15,7 @@ from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 
 from hyperopt import STATUS_OK
 
+from slicerl import PACKAGE
 from slicerl.utils.configflow import set_manual_seed
 from slicerl.AbstractNet import get_prediction
 from slicerl.CMNet import CMNet
@@ -25,6 +27,8 @@ from slicerl.diagnostics import (
     plot_histogram,
 )
 
+logger = logging.getLogger(PACKAGE)
+logger_hopt = logging.getLogger(PACKAGE + ".hopt")
 
 def load_network(setup, checkpoint_filepath=None):
     """
@@ -93,7 +97,7 @@ def build_network(setup):
     initial_weights = Path(iw) if iw is not None else iw
     if initial_weights:
         if initial_weights.is_file():
-            print(f"[+] Found Initial weights configuration at {initial_weights} ... ")
+            logger.info(f"Found Initial weights configuration at {initial_weights} ... ")
         else:
             raise FileNotFoundError(f"{initial_weights} no such file or directory")
     return load_network(setup, initial_weights)
@@ -106,7 +110,7 @@ def train_network(setup, net, generators):
         loss = setup["train"]["loss"]
         lr = setup["train"]["lr"]
         opt = setup["train"]["optimizer"]
-        print(f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}")
+        logging.info(f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}")
 
     train_generator, val_generator = generators
 
@@ -154,7 +158,7 @@ def train_network(setup, net, generators):
 
     callbacks.append(tboard)
 
-    print(f"[+] Train for {setup['train']['epochs']} epochs ...")
+    logger.info(f"Train for {setup['train']['epochs']} epochs ...")
     net.fit(
         train_generator,
         epochs=setup["train"]["epochs"],
@@ -166,7 +170,7 @@ def train_network(setup, net, generators):
     if setup["scan"]:
         net.load_weights(checkpoint_filepath)
         loss, acc, prec, rec = net.evaluate(val_generator, verbose=0)
-        print(
+        logger_hopt.info(
             f"Evaluate model instance: [loss: {loss:.5f}, acc: {acc:.5f}, prec: {prec:.5f}, rec: {rec:.5f}]"
         )
         res = {
@@ -204,7 +208,7 @@ def build_and_train_model(setup, generators):
 # ======================================================================
 def inference(setup, test_generator, no_graphics=False):
     tfK.clear_session()
-    print("[+] done with training, load best weights")
+    logger.info("Done with training, load best weights")
     fname = setup["test"]["checkpoint"]
     checkpoint_filepath = setup["output"].joinpath(fname)
     net = load_network(setup, checkpoint_filepath)

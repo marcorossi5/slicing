@@ -1,10 +1,14 @@
 # This file is part of SliceRL by M. Rossi
+import logging
 from math import ceil
 from tqdm import tqdm
 import tensorflow as tf
 import numpy as np
+from slicerl import PACKAGE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 from slicerl.Event import get_cluster_features
+
+logger = logging.getLogger(PACKAGE)
 
 plane_to_idx = {"U": 0, "V": 1, "W": 2}
 
@@ -23,7 +27,6 @@ class EventDataset(tf.keras.utils.Sequence):
         seed=12345,
         should_split_by_data=True,
         should_balance=False,
-        verbose=False,
     ):
         """
         This generator must be used for training only.
@@ -38,7 +41,6 @@ class EventDataset(tf.keras.utils.Sequence):
                            testing purposes
             - shuffle: bool, wether to shuffle dataset on epoch end
             - seed: int, the seed of the random generator shuffling on epoch end
-            - verbose: int, print balancing stats
         """
         # needed to generate the dataset
         self.__events = data[0]
@@ -68,7 +70,6 @@ class EventDataset(tf.keras.utils.Sequence):
         self.shuffle = shuffle
         self.seed = seed
         self.rng = np.random.default_rng(self.seed)
-        self.verbose = verbose
 
         self.indexes = np.arange(len(self.inputs_))
         assert len(self.inputs_) == len(
@@ -78,9 +79,8 @@ class EventDataset(tf.keras.utils.Sequence):
             nb_positive = np.count_nonzero(self.targets_)
             nb_all = len(self.targets_)
             balancing = nb_positive / nb_all
-            if self.verbose:
-                print(f"Training points: {nb_all} of which positives: {nb_positive}")
-                print(f"Percentage of positives: {balancing}")
+            logger.debug(f"Training points: {nb_all} of which positives: {nb_positive}")
+            logger.debug(f"Percentage of positives: {balancing}")
             self.inputs, self.targets = balance_dataset(
                 self.inputs_, self.targets_, balancing
             )
@@ -121,7 +121,7 @@ class EventDataset(tf.keras.utils.Sequence):
         ----------
             - y_pred: Predictions, object storing network predictions
         """
-        print("[+] setting events")
+        logger.info("Setting events")
         if self.__events:
             for i, event in enumerate(self.__events):
                 event.store_preds(y_pred.get_slices(i))
@@ -199,7 +199,7 @@ class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
 
 
 # ======================================================================
-def balance_dataset(inputs, targets, verbose=False):
+def balance_dataset(inputs, targets):
     """
     Balances the dataset discarding part of the negative samples to match
     the size of the positive ones. This happens if the ratio of positve
@@ -210,7 +210,6 @@ def balance_dataset(inputs, targets, verbose=False):
         - inputs: np.array, of shape=(nb_data, nb_feats)
         - targets: np.array, of shape=(nb_data,)
         - balancing: float, percentage of positive samples over the total
-        - verbose: bool, wether to print or not statistics
     """
     m_positives = targets.astype(bool)
     neg_idx = np.argwhere(~m_positives).flatten()
@@ -222,25 +221,26 @@ def balance_dataset(inputs, targets, verbose=False):
     bal_inputs = inputs[mask]
     bal_targets = targets[mask]
 
-    if verbose:
-        nb_pre_positive = np.count_nonzero(m_positives)
-        nb_pre_all = len(targets)
-        pre_balancing = nb_pre_positive / nb_pre_all
-        nb_positive = np.count_nonzero(bal_targets)
-        nb_all = len(bal_targets)
-        balancing = nb_positive / nb_all
-        print("Before balancing:")
-        print(f"Training points: {nb_pre_all} of which positives: {nb_pre_positive}")
-        print(f"Percentage of positives: {pre_balancing}")
-        print("After balancing")
-        print(f"Training points: {nb_all} of which positives: {nb_positive}")
-        print(f"Percentage of positives: {balancing}")
+    nb_pre_positive = np.count_nonzero(m_positives)
+    nb_pre_all = len(targets)
+    pre_balancing = nb_pre_positive / nb_pre_all
+    nb_positive = np.count_nonzero(bal_targets)
+    nb_all = len(bal_targets)
+    balancing = nb_positive / nb_all
+    logger.debug(
+        "\n\tBefore balancing:\n"
+        f"\tTraining points: {nb_pre_all} of which positives: {nb_pre_positive}\n"
+        f"\nPercentage of positives: {pre_balancing}\n"
+        "\nAfter balancing\n"
+        f"\nTraining points: {nb_all} of which positives: {nb_positive}\n"
+        f"\nPercentage of positives: {balancing}"
+    )
 
     return bal_inputs, bal_targets
 
 
 # ======================================================================
-def split_dataset_by_data(data, split=0.5, verbose=False):
+def split_dataset_by_data(data, split=0.5):
     """
     Parameters
     ----------
@@ -259,7 +259,7 @@ def split_dataset_by_data(data, split=0.5, verbose=False):
     inputs = np.concatenate(inputs, axis=0)
     targets = np.concatenate(targets, axis=0)
 
-    inputs, targets = balance_dataset(inputs, targets, verbose)
+    inputs, targets = balance_dataset(inputs, targets)
 
     nb_events = len(inputs)
     perm = np.random.permutation(nb_events)
@@ -275,7 +275,7 @@ def split_dataset_by_data(data, split=0.5, verbose=False):
 
 
 # ======================================================================
-def split_dataset_by_event(data, split=0.5, verbose=False):
+def split_dataset_by_event(data, split=0.5):
     """
     Parameters
     ----------
@@ -486,7 +486,6 @@ def get_generator(
     is_training,
     split_by,
     split,
-    verbose,
 ):
     """
     Get EventDataset generator from data.
@@ -495,7 +494,6 @@ def get_generator(
         "batch_size": batch_size,
         "is_training": is_training,
         "shuffle": False,
-        "verbose": verbose,
     }
     if split:
         assert split_by in [
@@ -507,7 +505,7 @@ def get_generator(
             split_dataset_by_data if split_by == "data" else split_dataset_by_event
         )
         train_splitted, val_splitted = split_wrapper(
-            [inputs, targets, c_indices], split, verbose=verbose
+            [inputs, targets, c_indices], split
         )
         train_data = [None, train_splitted]
         val_data = [None, val_splitted]
@@ -641,7 +639,6 @@ def build_dataset(
     should_save_dataset=False,
     should_load_dataset=False,
     dataset_dir=None,
-    verbose=False,
 ):
     """
     Loads first the events from file, then generates the dataset to be fed into
@@ -659,7 +656,6 @@ def build_dataset(
         - should_save_dataset: bool, wether to to save the dataset in directory
                                specified by runcard
         - dataset_dir: Path, dataset directory
-        - verbose: bool, wether to print status information
 
     Returns
     -------
@@ -676,10 +672,10 @@ def build_dataset(
         events = None
 
     if should_load_dataset:
-        print("[+] Loading dataset ...")
+        logger.info("Loading dataset ...")
         dataset_tuple = load_dataset(dataset_dir)
     else:
-        print("[+] Generating dataset ...")
+        logger.info("Generating dataset ...")
         dataset_tuple = generate_dataset(
             events,
             min_hits=min_hits,
@@ -688,13 +684,13 @@ def build_dataset(
             dataset_dir=dataset_dir,
         )
     return get_generator(
-        events, *dataset_tuple, batch_size, is_training, split_by, split, verbose
+        events, *dataset_tuple, batch_size, is_training, split_by, split
     )
 
 
 # ======================================================================
 def build_dataset_train(
-    setup, should_load_dataset=False, should_save_dataset=False, debug=False
+    setup, should_load_dataset=False, should_save_dataset=False
 ):
     """
     Wrapper function to build dataset for training. Implements validation
@@ -706,7 +702,6 @@ def build_dataset_train(
                                specified by runcard
         - should_save_dataset: bool, wether to to save the dataset in directory
                                specified by runcard
-        - debug: bool, wether to print verbose information
 
     Returns
     -------
@@ -731,7 +726,6 @@ def build_dataset_train(
         should_save_dataset=should_save_dataset,
         should_load_dataset=should_load_dataset,
         dataset_dir=dataset_dir,
-        verbose=debug,
     )
 
 
@@ -829,7 +823,6 @@ def dummy_dataset(nb_feats):
         is_training=True,
         should_split_by_data=False,
         should_balance=False,
-        verbose=False,
     )
 
 

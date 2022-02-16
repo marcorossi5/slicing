@@ -1,11 +1,15 @@
 # This file is part of SliceRL by M. Rossi
 """ This module contains utility functions of general interest. """
 import shutil
+import logging
 import argparse
 from pathlib import Path
 from hyperopt import hp
 import yaml
+from slicerl import PACKAGE
 
+
+logger = logging.getLogger(PACKAGE)
 
 def makedir(folder):
     """Create directory."""
@@ -176,7 +180,7 @@ def check_cmd_args(args):
     elif args.runcard and not args.runcard.is_file():
         raise FileExistsError("Invalid runcard: not a file.")
     if args.force:
-        print("WARNING: Running with --force option will overwrite existing model")
+        logger.warning("Running with --force option will overwrite existing model")
     if (args.save_dataset and args.load_dataset) or (
         args.save_dataset_test and args.load_dataset_test
     ):
@@ -199,15 +203,15 @@ def initialize_output_folder(output, should_force, should_scan):
             makedir(output / "hopt")
     except Exception as error:
         if should_force:
-            print(f"WARNING: Overwriting {output} with new model")
+            logger.warning(f"Overwriting {output} with new model")
             shutil.rmtree(output)
             makedir(output)
             makedir(output / "plots")
             if should_scan:
                 makedir(output / "hopt")
         else:
-            print(error)
-            print('Delete or run with "--force" to overwrite.')
+            logger.error(error)
+            logger.error('Delete or run with "--force" to overwrite.')
             exit(-1)
 
 
