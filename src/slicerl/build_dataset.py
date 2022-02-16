@@ -173,6 +173,19 @@ class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
 
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
+        """
+        Returns
+        -------
+            - np.array: batch of inputs of shape=(1, [nb hits], nb feats). The
+                        feature axis contains for each hit:
+                            - deposited energy
+                            - x position
+                            - z position
+                            - expected x direction
+                            - expected z direction
+                            - cluster origin: 1 or 0
+            - np.array: target label of shape (1,)
+        """
         ii = self.perm[idx]
         batch_x = self.inputs[ii][None]
         batch_y = self.targets[ii : ii + 1]
@@ -413,8 +426,9 @@ def generate_inputs_and_targets_mha(event, min_hits=1):
                     # TODO: is this needed?
                     continue
 
+                # add cluster origin feature
                 ipc = np.concatenate([icluster, np.zeros([1, ilen])], axis=0)
-                jpc = np.concatenate([jcluster, np.zeros([1, jlen])], axis=0)
+                jpc = np.concatenate([jcluster, np.ones([1, jlen])], axis=0)
 
                 # inputs of shape (1, nb hits, 6)
                 inputs.append(np.concatenate([ipc, jpc], axis=1).T)
@@ -603,6 +617,7 @@ def save_dataset(dataset_dir, inputs, targets, c_indices, cthresholds):
         - cthresholds: list
     """
     row_splits = np.array([len(tgt) for tgt in targets])
+
     np.save(dataset_dir / "inputs.npy", np.concatenate(inputs))
     np.save(dataset_dir / "targets.npy", np.concatenate(targets))
     np.save(dataset_dir / "c_indices.npy", np.concatenate(c_indices))
@@ -744,6 +759,23 @@ def build_dataset_test(setup, should_save_dataset=False, should_load_dataset=Fal
         should_load_dataset=should_load_dataset,
         dataset_dir=dataset_dir,
     )
+
+
+# ======================================================================
+def save_dataset_np(generators, folder):
+    """
+    Parameters
+    ----------
+        - generators: tuple, (train, val) generators of MHAEventDataset objects
+        - folder: Path
+    """
+    train, val = generators
+    train_inputs = np.array(train.bal_inputs, dtype=object)
+    val_inputs = np.array(val.bal_inputs, dtype=object)
+    np.save(folder / "train_inputs.npy", train_inputs)
+    np.save(folder / "train_targets.npy", train.bal_targets)
+    np.save(folder / "val_inputs.npy", val_inputs)
+    np.save(folder / "val_targets.npy", train.bal_targets)
 
 
 # ======================================================================

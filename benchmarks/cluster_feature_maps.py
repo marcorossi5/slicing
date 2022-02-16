@@ -12,6 +12,7 @@
 """
 import argparse
 from pathlib import Path
+from random import gauss
 from time import time as tm
 from tqdm import tqdm
 import numpy as np
@@ -21,10 +22,50 @@ from slicerl.config import config_tf
 from slicerl.utils.utils import load_runcard, modify_runcard
 from slicerl.build_dataset import build_dataset_from_np
 from slicerl.build_model import load_network
-from slicerl.CMNet import ReduceMax
+
+# from slicerl.CMNet import ReduceMax
+
+from sklearn.feature_selection import mutual_info_classif
+import seaborn as sns
+from scipy.stats import gaussian_kde
 
 
-def plot_features(feats, y_true, fname, ffeat=0):
+def plot_clusters(inputs, y_pred, y_true, fidx, fname):
+    """
+    Parameters
+    ----------
+        - inputs: np.array, inputs of length `events`. Each element of
+                            shape=([nb hits], nb feats)
+        - y_pred: np.array, extracted features of length `events`. Each element
+                            of shape=([nb hits], nb feats)
+        - y_true: np.array, target labels of shape=(events,)
+        - fidx: int, feature idx to plot
+        - fname: Path, the output plot file name
+    """
+    nrow = 1
+    ncol = 2
+    fig = plt.figure(figsize=[6.4 * nrow, 4.8 * ncol])
+    axs = fig.subplots(nrow, ncol)
+
+    n = 2
+    axs[0].title.set_text("Initial cluster pair")
+    print(inputs[n][:,5])
+    # print(np.count_nonzero(inputs[n][:,5]), 1-np.count_nonzero(inputs[n][:,5]))
+    exit()
+    axs[0].scatter(inputs[n][:, 1], inputs[n][:, 2], c=inputs[n][:,5], s=1)
+    axs[1].title.set_text("Extracted feature")
+    axs[1].scatter(inputs[n][:, 1], inputs[n][:, 2], c=y_pred[n][:,fidx], s=1)
+
+    # for r in range(nrow):
+    #     for c in range(ncol):
+    #         n = r * ncol + c
+    #         axs[r, c].scatter(inputs[n][:, 1], inputs[n][:, 2], c=y_pred[n][:,fidx], s=1)
+    #         axs[r, c].title.set_text(f"Should merge? {'Yes' if y_true[n] else 'No'}")
+    plt.savefig(fname, bbox_inches="tight")
+    plt.close()
+
+
+def plot_features(feats, y_true, fname, mis=None, t=0.2, ffeat=0):
     """
     Plots the extracted features.
 
@@ -33,11 +74,16 @@ def plot_features(feats, y_true, fname, ffeat=0):
         - feats: np.array, features array of shape=(events, nb feats)
         - y_true: np.array, targets of shape=(events,)
         - fname: Path, the output plot file name
+        - mis: np.array, the mutual information for each feature against
+               validation set labels, of shape=(nb feats,). If it is not `None`,
+               increase transparency of features showing a MI score less than a
+               threshold `t` value.
+        - t: float, the mi threshold value
         - ffeat: int, first progressive feature to plot
     """
     nrow = 4
     ncol = 4
-    print(f"Plotting features {ffeat}-{ffeat+nrow*ncol-1}...")
+    print(f"Plotting features {ffeat}-{ffeat+nrow*ncol-1} ...")
     fig = plt.figure(figsize=[6.4 * nrow, 4.8 * ncol])
     axs = fig.subplots(nrow, ncol)
     bins = np.linspace(-3, 3, 101)
@@ -49,11 +95,18 @@ def plot_features(feats, y_true, fname, ffeat=0):
     up_feats = feats[y_true.astype(bool)]
     down_feats = feats[~y_true.astype(bool)]
 
+    alphas = np.where(mis > t, 1, 0.3) if mis is not None else np.ones_like(mis)
+
     for r in range(nrow):
         for c in range(ncol):
             n = r * ncol + c + ffeat
             axs[r, c].hist(
-                up_feats[:, n], bins=bins, color="green", histtype="step", label="merge"
+                up_feats[:, n],
+                bins=bins,
+                color="green",
+                histtype="step",
+                label="merge",
+                alpha=alphas[n],
             )
             axs[r, c].hist(
                 down_feats[:, n],
@@ -61,8 +114,9 @@ def plot_features(feats, y_true, fname, ffeat=0):
                 color="red",
                 histtype="step",
                 label="not merge",
+                alpha=alphas[n],
             )
-            axs[r, c].title.set_text(f"feature {n}")
+            axs[r, c].title.set_text(f"feature {n}, MI= {mis[n]:.3f}")
     axs[0, 0].legend()
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
@@ -83,27 +137,45 @@ def main(setup):
     # load network
     network = load_network(setup, setup["output"] / setup["test"]["checkpoint"])
     stack = tf.keras.Sequential([l for l in network.layers if "mha" in l.name])
-    stack.add(ReduceMax(axis=1, name="reduce_max"))
+    # stack.add(ReduceMax(axis=1, name="reduce_max"))
     stack.build((1, None, setup["model"]["f_dims"]))
     stack.summary()
 
     # forward pass
     fname = setup["output"] / "cluster_features.npy"
     if fname.is_file():
-        feats = np.load(fname)
+        y_pred = np.load(fname, allow_pickle=True)
     else:
-        feats = [stack.predict(inp[None]) for inp in tqdm(val_generator.inputs)]
-        feats = np.concatenate(feats)
+        y_pred = [stack.predict(inp[None])[0] for inp in tqdm(val_generator.inputs)]
+        y_pred = np.array(feats, dtype=object)
         np.save(fname, feats)
+    feats = np.stack([ev.max(0) for ev in y_pred], axis=0)
+    y_true = val_generator.targets
+    assert (
+        feats.shape[0] == y_true.shape[0]
+    ), f"found shapes {feats.shape[0]} and {y_true.shape[0]}"
+
+    # mutual informatio
+    mis = mutual_info_classif(feats, y_true).flatten()
+    best_feat = np.argmax(mis)
+    print(f"Maximum MI {mis.max():.3f} for feature {best_feat}")
+    plot_clusters(
+        val_generator.inputs,
+        y_pred,
+        y_true,
+        best_feat,
+        setup["output"] / f"plots/cluster_best_feature.png",
+    )
+    exit()
 
     # histogramming
-    print(f"Histogramming on {val_generator.targets.shape[0]} points")
-    y_true = val_generator.targets
+    print(f"Histogramming on {y_true.shape[0]} points")
     for i in range(0, 128, 16):
         plot_features(
             feats,
             y_true,
             setup["output"] / f"plots/cluster_features{i}-{i+15}.png",
+            mis=mis,
             ffeat=i,
         )
 
