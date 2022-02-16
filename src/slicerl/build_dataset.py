@@ -20,6 +20,7 @@ class EventDataset(tf.keras.utils.Sequence):
         cthresholds=None,
         is_training=False,
         shuffle=False,
+        seed=12345,
         should_split_by_data=True,
         should_balance=False,
         verbose=False,
@@ -36,6 +37,7 @@ class EventDataset(tf.keras.utils.Sequence):
             - is_training: bool, wether the dataset is used for training or
                            testing purposes
             - shuffle: bool, wether to shuffle dataset on epoch end
+            - seed: int, the seed of the random generator shuffling on epoch end
             - verbose: int, print balancing stats
         """
         # needed to generate the dataset
@@ -45,12 +47,12 @@ class EventDataset(tf.keras.utils.Sequence):
             if self.__events is not None
             else None
         )
-        self.inputs = (
+        self.inputs_ = (
             np.concatenate(data[1][0], axis=0)
             if is_training and not should_split_by_data
             else data[1][0]
         )
-        self.targets = (
+        self.targets_ = (
             np.concatenate(data[1][1])
             if is_training and not should_split_by_data
             else data[1][1]
@@ -64,43 +66,46 @@ class EventDataset(tf.keras.utils.Sequence):
         self.cthresholds = cthresholds
         self.is_training = is_training
         self.shuffle = shuffle
+        self.seed = seed
+        self.rng = np.random.default_rng(self.seed)
         self.verbose = verbose
 
-        self.indexes = np.arange(len(self.inputs))
-        assert len(self.inputs) == len(
-            self.targets
-        ), f"Length of inputs and targets must match, got {len(self.inputs)} and {len(self.targets)}"
+        self.indexes = np.arange(len(self.inputs_))
+        assert len(self.inputs_) == len(
+            self.targets_
+        ), f"Length of inputs and targets must match, got {len(self.inputs_)} and {len(self.targets_)}"
         if should_balance:
-            nb_positive = np.count_nonzero(self.targets)
-            nb_all = len(self.targets)
+            nb_positive = np.count_nonzero(self.targets_)
+            nb_all = len(self.targets_)
             balancing = nb_positive / nb_all
             if self.verbose:
                 print(f"Training points: {nb_all} of which positives: {nb_positive}")
                 print(f"Percentage of positives: {balancing}")
-            self.bal_inputs, self.bal_targets = balance_dataset(
-                self.inputs, self.targets, balancing
+            self.inputs, self.targets = balance_dataset(
+                self.inputs_, self.targets_, balancing
             )
         else:
-            self.bal_inputs = self.inputs
-            self.bal_targets = self.targets
+            self.inputs = self.inputs_
+            self.targets = self.targets_
             # no balance needed for cluster indices because they enter inference only
+
+        self.perm = np.arange(self.__len__())
 
     # ----------------------------------------------------------------------
     def on_epoch_end(self):
         if self.shuffle:
-            perm = np.random.permutation(len(self.bal_inputs))
-            self.bal_inputs = self.bal_inputs[perm]
-            self.bal_targets = self.bal_targets[perm]
+            self.perm = self.rng.permutation(self.__len__())
 
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
-        batch_x = self.bal_inputs[idx * self.batch_size : (idx + 1) * self.batch_size]
-        batch_y = self.bal_targets[idx * self.batch_size : (idx + 1) * self.batch_size]
+        ii = self.perm[idx]
+        batch_x = self.inputs[ii * self.batch_size : (ii + 1) * self.batch_size]
+        batch_y = self.targets[ii * self.batch_size : (ii + 1) * self.batch_size]
         return batch_x, batch_y
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return ceil(len(self.bal_inputs) / self.batch_size)
+        return ceil(len(self.inputs) / self.batch_size)
 
     # ----------------------------------------------------------------------
     @property
@@ -134,8 +139,9 @@ class MHAEventDataset(EventDataset):
 
     # ----------------------------------------------------------------------
     def __getitem__(self, idx):
-        batch_x = self.bal_inputs[idx][None]
-        batch_y = self.bal_targets[idx : idx + 1]
+        ii = self.perm[idx]
+        batch_x = self.inputs[ii][None]
+        batch_y = self.targets[ii : ii + 1]
         return batch_x, batch_y
 
 
@@ -154,8 +160,8 @@ class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
             - shuffle: bool, wether to shuffle inputs on epoch end
             - seed: int, the seed of the random generator shuffling on epoch end
         """
-        self.bal_inputs = inputs
-        self.bal_targets = targets
+        self.inputs = inputs
+        self.targets = targets
         self.batch_size = batch_size
         self.seed = seed
         self.shuffle = shuffle
@@ -183,13 +189,13 @@ class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
             - np.array: target label of shape (1,)
         """
         ii = self.perm[idx]
-        batch_x = self.bal_inputs[ii][None]
-        batch_y = self.bal_targets[ii : ii + 1]
+        batch_x = self.inputs[ii][None]
+        batch_y = self.targets[ii : ii + 1]
         return batch_x, batch_y
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return ceil(len(self.bal_inputs) / self.batch_size)
+        return ceil(len(self.inputs) / self.batch_size)
 
 
 # ======================================================================
@@ -766,12 +772,12 @@ def save_dataset_np(generators, folder):
         - folder: Path
     """
     train, val = generators
-    train_inputs = np.array(train.bal_inputs, dtype=object)
-    val_inputs = np.array(val.bal_inputs, dtype=object)
+    train_inputs = np.array(train.inputs, dtype=object)
+    val_inputs = np.array(val.inputs, dtype=object)
     np.save(folder / "train_inputs.npy", train_inputs)
-    np.save(folder / "train_targets.npy", train.bal_targets)
+    np.save(folder / "train_targets.npy", train.targets)
     np.save(folder / "val_inputs.npy", val_inputs)
-    np.save(folder / "val_targets.npy", train.bal_targets)
+    np.save(folder / "val_targets.npy", val.targets)
 
 
 # ======================================================================

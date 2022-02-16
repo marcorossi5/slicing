@@ -27,6 +27,7 @@ def main():
         print("[+] Training best model:")
         just_train_path = setup["train"]["dataset_dir"].parent / "training"
         if args.just_train:
+            print(f"[+] Importing dataset from {just_train_path}")
             generators = build_dataset_from_np(setup, just_train_path)
         else:
             generators = build_dataset_train(
@@ -36,7 +37,9 @@ def main():
                 debug=args.debug,
             )
             if args.save_train_np:
+                print(f"[+] Saving dataset to {just_train_path}")
                 save_dataset_np(generators, just_train_path)
+                exit()
         build_and_train_model(setup, generators)
         save_runcard(setup["output"] / "runcard.yaml", setup)
         print(f"[+] done in {tm()-start} s")

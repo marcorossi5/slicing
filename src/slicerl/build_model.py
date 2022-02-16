@@ -2,7 +2,6 @@
 from copy import deepcopy
 from time import time as tm
 from pathlib import Path
-
 import tensorflow as tf
 import tensorflow.keras.backend as tfK
 from tensorflow.keras.callbacks import (
@@ -156,9 +155,6 @@ def train_network(setup, net, generators):
     callbacks.append(tboard)
 
     print(f"[+] Train for {setup['train']['epochs']} epochs ...")
-    print(
-        f"[+] Training points about {len(train_generator)*train_generator.batch_size}"
-    )
     net.fit(
         train_generator,
         epochs=setup["train"]["epochs"],

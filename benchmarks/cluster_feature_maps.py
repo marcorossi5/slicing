@@ -12,13 +12,12 @@
 """
 import argparse
 from pathlib import Path
-from random import gauss
 from time import time as tm
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from slicerl.utils.config import config_tf
+from slicerl.utils.config import preconfig_tf
 from slicerl.utils.utils import load_runcard, modify_runcard
 from slicerl.build_dataset import build_dataset_from_np
 from slicerl.build_model import load_network
@@ -42,25 +41,16 @@ def plot_clusters(inputs, y_pred, y_true, fidx, fname):
         - fidx: int, feature idx to plot
         - fname: Path, the output plot file name
     """
-    nrow = 1
-    ncol = 2
+    nrow = 4
+    ncol = 4
     fig = plt.figure(figsize=[6.4 * nrow, 4.8 * ncol])
     axs = fig.subplots(nrow, ncol)
 
-    n = 2
-    axs[0].title.set_text("Initial cluster pair")
-    print(inputs[n][:,5])
-    # print(np.count_nonzero(inputs[n][:,5]), 1-np.count_nonzero(inputs[n][:,5]))
-    exit()
-    axs[0].scatter(inputs[n][:, 1], inputs[n][:, 2], c=inputs[n][:,5], s=1)
-    axs[1].title.set_text("Extracted feature")
-    axs[1].scatter(inputs[n][:, 1], inputs[n][:, 2], c=y_pred[n][:,fidx], s=1)
-
-    # for r in range(nrow):
-    #     for c in range(ncol):
-    #         n = r * ncol + c
-    #         axs[r, c].scatter(inputs[n][:, 1], inputs[n][:, 2], c=y_pred[n][:,fidx], s=1)
-    #         axs[r, c].title.set_text(f"Should merge? {'Yes' if y_true[n] else 'No'}")
+    for r in range(nrow):
+        for c in range(ncol):
+            n = r * ncol + c
+            axs[r, c].scatter(inputs[n][:, 1]*1000, inputs[n][:, 2]*1000, c=y_pred[n][:,fidx], s=1)
+            axs[r, c].title.set_text(f"Should merge? {'Yes' if y_true[n] else 'No'}")
     plt.savefig(fname, bbox_inches="tight")
     plt.close()
 
@@ -132,7 +122,8 @@ def main(setup):
         - setup: dict, the loaded settings
     """
     # load dataset
-    val_generator = build_dataset_from_np(setup, Path("../dataset/training"))[1]
+    dataset_dir = Path("../dataset/training")
+    val_generator = build_dataset_from_np(setup, dataset_dir)[1]
 
     # load network
     network = load_network(setup, setup["output"] / setup["test"]["checkpoint"])
@@ -147,15 +138,15 @@ def main(setup):
         y_pred = np.load(fname, allow_pickle=True)
     else:
         y_pred = [stack.predict(inp[None])[0] for inp in tqdm(val_generator.inputs)]
-        y_pred = np.array(feats, dtype=object)
-        np.save(fname, feats)
+        y_pred = np.array(y_pred, dtype=object)
+        np.save(fname, y_pred)
     feats = np.stack([ev.max(0) for ev in y_pred], axis=0)
     y_true = val_generator.targets
     assert (
         feats.shape[0] == y_true.shape[0]
     ), f"found shapes {feats.shape[0]} and {y_true.shape[0]}"
 
-    # mutual informatio
+    # mutual information
     mis = mutual_info_classif(feats, y_true).flatten()
     best_feat = np.argmax(mis)
     print(f"Maximum MI {mis.max():.3f} for feature {best_feat}")
@@ -188,7 +179,7 @@ if __name__ == "__main__":
     # load the runcard
     setup = load_runcard(args.model / "runcard.yaml")
     modify_runcard(setup)
-    config_tf(setup)
+    preconfig_tf(setup)
 
     start = tm()
     main(setup)
