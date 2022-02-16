@@ -1,7 +1,7 @@
 # This file is part of SliceRL by M. Rossi
-import numpy as np
-from collections import namedtuple
 from copy import deepcopy
+from collections import namedtuple
+import numpy as np
 
 EventTuple = namedtuple(
     "EventTuple",

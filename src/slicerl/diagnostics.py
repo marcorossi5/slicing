@@ -1,6 +1,4 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.utils.config import NP_DTYPE_INT
-
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
@@ -8,7 +6,6 @@ import numpy as np
 THRESHOLD = 0.9
 
 
-# ======================================================================
 # available cmaps
 """
 Color list. An exhaustive list of colors can be retrieved from matplotlib

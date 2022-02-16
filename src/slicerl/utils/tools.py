@@ -1,9 +1,9 @@
 # This file is part of SliceRL by M. Rossi
 """ Module containing utility functions for computations. """
-from slicerl.utils.configflow import EPS, EPS_TF, float_me
 from collections import deque
 import numpy as np
 import tensorflow as tf
+from slicerl.utils.configflow import EPS, EPS_TF, float_me
 
 
 # ======================================================================

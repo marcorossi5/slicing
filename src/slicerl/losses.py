@@ -1,15 +1,13 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.utils.configflow import EPS_TF, float_me
-
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.losses import (
     Loss,
     CategoricalCrossentropy,
-    MAE,
     Reduction,
 )
+from slicerl.utils.configflow import EPS_TF, float_me
 
 
 # ======================================================================

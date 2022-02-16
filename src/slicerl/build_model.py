@@ -1,20 +1,4 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.AbstractNet import get_prediction
-from slicerl.FFNN import FFNN
-from slicerl.CMNet import CMNet
-from slicerl.losses import dice_loss
-from slicerl.build_dataset import dummy_dataset
-from slicerl.diagnostics import (
-    plot_plane_view,
-    plot_slice_size,
-    plot_multiplicity,
-    plot_test_beam_metrics,
-    plot_histogram,
-    plot_graph,
-)
-from slicerl.utils.config import set_manual_seed
-
-import os
 from copy import deepcopy
 from time import time as tm
 from pathlib import Path
@@ -31,6 +15,17 @@ from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 
 from hyperopt import STATUS_OK
 
+from slicerl.utils.config import set_manual_seed
+from slicerl.AbstractNet import get_prediction
+from slicerl.CMNet import CMNet
+from slicerl.losses import dice_loss
+from slicerl.diagnostics import (
+    plot_slice_size,
+    plot_multiplicity,
+    plot_test_beam_metrics,
+    plot_histogram,
+)
+
 
 def load_network(setup, checkpoint_filepath=None):
     """
@@ -45,13 +40,6 @@ def load_network(setup, checkpoint_filepath=None):
     -------
         - SeacNet
     """
-    # net_dict = {
-    #     "batch_size": setup["model"]["batch_size"],
-    #     "use_bias": setup["model"]["use_bias"],
-    #     "f_dims": setup["model"]["f_dims"],
-    #     "activation": lambda x: tf.keras.activations.relu(x, alpha=0.2),
-    # }
-    # net = FFNN(name="FFNN", **net_dict)
     net_dict = {
         "batch_size": setup["model"]["batch_size"],
         "f_dims": setup["model"]["f_dims"],
@@ -323,36 +311,6 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
         statusV[ev.V.status == idx] = i
     for i, idx in enumerate(sorted_statusW):
         statusW[ev.W.status == idx] = i
-
-    # plt.figure(figsize=(6.4*2, 4.8))
-    # plt.suptitle("ProtoDUNE-SP simulation preliminary: U plane slices")
-    # plt.subplot(121)
-    # plt.title("CM-Net output")
-    # plt.xlabel("x [cm]")
-    # plt.ylabel("z [cm]")
-    # plt.scatter(
-    #     ev.U.calohits[1] * 1000,
-    #     ev.U.calohits[2] * 1000,
-    #     s=0.5,
-    #     c=statusU % 128,
-    #     norm=norm,
-    #     cmap=cmap,
-    # )
-    # plt.subplot(122)
-    # plt.title("MC truth")
-    # plt.xlabel("x [cm]")
-    # plt.ylabel("z [cm]")
-    # plt.scatter(
-    #     ev.U.calohits[1] * 1000,
-    #     ev.U.calohits[2] * 1000,
-    #     s=0.5,
-    #     c=pfoU % 128,
-    #     norm=norm,
-    #     cmap=cmap,
-    # )
-    # plt.savefig("net_output.png", dpi=300, bbox_inches='tight')
-    # plt.close()
-    # exit()
 
     plt.figure(figsize=(6.4 * 3, 4.8 * 4))
     plt.subplot(431)

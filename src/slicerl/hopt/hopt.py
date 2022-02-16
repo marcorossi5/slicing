@@ -1,7 +1,8 @@
+import pickle
+import pprint
 from time import time as tm
 from hyperopt import fmin, tpe, hp, Trials, space_eval
 from hyperopt.mongoexp import MongoTrials
-import pickle, pprint
 
 
 def run_hyperparameter_scan(search_space, load_data_fn, function):

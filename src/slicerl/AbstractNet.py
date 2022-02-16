@@ -1,8 +1,8 @@
-from slicerl.utils.tools import bfs
+from tqdm import tqdm
 import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input
-from tqdm import tqdm
+from slicerl.utils.tools import bfs
 
 
 # ======================================================================

@@ -1,14 +1,10 @@
 # This file is part of SliceRL by M. Rossi
-from multiprocessing import Event
-from threading import currentThread
-from slicerl.utils.config import NP_DTYPE
-from slicerl.read_data import load_Events_from_file, load_Events_from_files
-from slicerl.Event import get_cluster_features
-
-import tensorflow as tf
-import numpy as np
 from math import ceil
 from tqdm import tqdm
+import tensorflow as tf
+import numpy as np
+from slicerl.read_data import load_Events_from_file, load_Events_from_files
+from slicerl.Event import get_cluster_features
 
 plane_to_idx = {"U": 0, "V": 1, "W": 2}
 

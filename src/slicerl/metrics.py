@@ -1,7 +1,4 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.utils.config import float_me
-from slicerl.utils.tools import onehot
-
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.metrics import (
@@ -9,6 +6,7 @@ from tensorflow.keras.metrics import (
     CategoricalCrossentropy,
     CategoricalAccuracy,
 )
+from slicerl.utils.config import float_me
 
 # ======================================================================
 class F1score(Metric):

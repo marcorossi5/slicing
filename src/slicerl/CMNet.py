@@ -1,19 +1,16 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.AbstractNet import AbstractNet
-from slicerl.FFNN import Head
 import tensorflow as tf
 from tensorflow.keras import Sequential, Model, Input
 from tensorflow.keras.layers import (
     Layer,
     Dense,
-    Conv1D,
-    BatchNormalization,
     Concatenate,
     MultiHeadAttention,
-    LeakyReLU,
     LayerNormalization,
 )
 from tensorflow.keras.activations import sigmoid, tanh
+from slicerl.AbstractNet import AbstractNet
+from slicerl.FFNN import Head
 
 
 def add_extension(name):

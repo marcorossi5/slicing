@@ -1,14 +1,15 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.Event import Event
-
-import json, gzip, sys, csv
+import gzip
+import sys
+import csv
 from abc import ABC, abstractmethod
 import numpy as np
+from slicerl.Event import Event
 
 # ======================================================================
 class Reader(object):
     """
-    Reader for files consisting of a sequence of json objects.
+    Reader for files consisting of a sequence of csv objects.
     Any pure string object is considered to be part of a header (even if it appears at the end!)
     """
 
@@ -83,7 +84,7 @@ class Reader(object):
             return None
         except ValueError:
             print(
-                "# got to end with ValueError (empty json entry) around event",
+                "# got to end with ValueError (empty csv entry) around event",
                 self.n,
                 file=sys.stderr,
             )
