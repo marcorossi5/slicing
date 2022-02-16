@@ -33,9 +33,11 @@ def add_extension(name):
     l[-2] += ext
     return ":".join(l[:-1])
 
+
 # ======================================================================
 class ReduceMax(Layer):
-    """ Reduce max layer. """
+    """Reduce max layer."""
+
     def __init__(self, axis=-1, **kwargs):
         """
         Parameters
@@ -45,12 +47,13 @@ class ReduceMax(Layer):
         super(ReduceMax, self).__init__(**kwargs)
         self.axis = axis
         self.op = lambda x: tf.reduce_max(x, axis=self.axis)
-    
+
     def call(self, x):
         return self.op(x)
-    
+
     def get_config(self):
         return {"axis": self.axis}
+
 
 # ======================================================================
 class MyGRU(Layer):

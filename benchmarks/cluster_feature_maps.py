@@ -18,7 +18,7 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from slicerl.config import config_tf
+from slicerl.utils.config import config_tf
 from slicerl.utils.utils import load_runcard, modify_runcard
 from slicerl.build_dataset import build_dataset_from_np
 from slicerl.build_model import load_network

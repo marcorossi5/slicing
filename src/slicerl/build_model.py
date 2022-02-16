@@ -12,7 +12,7 @@ from slicerl.diagnostics import (
     plot_histogram,
     plot_graph,
 )
-from slicerl.config import set_manual_seed
+from slicerl.utils.config import set_manual_seed
 
 import os
 from copy import deepcopy

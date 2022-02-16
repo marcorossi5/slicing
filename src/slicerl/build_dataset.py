@@ -1,7 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 from multiprocessing import Event
 from threading import currentThread
-from slicerl.config import NP_DTYPE
+from slicerl.utils.config import NP_DTYPE
 from slicerl.read_data import load_Events_from_file, load_Events_from_files
 from slicerl.Event import get_cluster_features
 

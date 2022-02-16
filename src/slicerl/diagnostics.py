@@ -1,5 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.config import NP_DTYPE_INT
+from slicerl.utils.config import NP_DTYPE_INT
 
 import matplotlib as mpl
 from matplotlib import pyplot as plt

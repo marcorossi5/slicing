@@ -1,4 +1,4 @@
-from slicerl.tools import bfs
+from slicerl.utils.tools import bfs
 import numpy as np
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input

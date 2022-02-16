@@ -1,6 +1,6 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.config import float_me
-from slicerl.tools import onehot
+from slicerl.utils.config import float_me
+from slicerl.utils.tools import onehot
 
 import numpy as np
 import tensorflow as tf

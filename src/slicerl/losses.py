@@ -1,5 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.config import EPS_TF, float_me
+from slicerl.utils.configflow import EPS_TF, float_me
 
 import numpy as np
 import tensorflow as tf
