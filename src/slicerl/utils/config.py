@@ -60,4 +60,4 @@ def config_init():
         should_load_dataset=args.load_dataset_test,
         should_save_dataset=args.save_dataset_test,
     )
-    return args
+    return args, setup

@@ -6,7 +6,7 @@ from slicerl.utils.utils import save_runcard
 
 def main():
     ss = tm()
-    args = config_init()
+    args, setup = config_init()
 
     if args.runcard:
         from slicerl.build_dataset import (
@@ -25,7 +25,7 @@ def main():
 
         start = tm()
         print("[+] Training best model:")
-        just_train_path = setup["dataset_dir"].parent / "training"
+        just_train_path = setup["train"]["dataset_dir"].parent / "training"
         if args.just_train:
             generators = build_dataset_from_np(setup, just_train_path)
         else:
