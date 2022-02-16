@@ -15,7 +15,7 @@ from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 
 from hyperopt import STATUS_OK
 
-from slicerl.utils.config import set_manual_seed
+from slicerl.utils.configflow import set_manual_seed
 from slicerl.AbstractNet import get_prediction
 from slicerl.CMNet import CMNet
 from slicerl.losses import dice_loss

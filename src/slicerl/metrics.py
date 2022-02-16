@@ -6,7 +6,7 @@ from tensorflow.keras.metrics import (
     CategoricalCrossentropy,
     CategoricalAccuracy,
 )
-from slicerl.utils.config import float_me
+from slicerl.utils.configflow import float_me
 
 # ======================================================================
 class F1score(Metric):
