@@ -4,6 +4,7 @@
 """
 import os
 import shutil
+import tensorflow as tf
 from slicerl.utils.utils import (
     get_cmd_args,
     check_cmd_args,
@@ -14,10 +15,26 @@ from slicerl.utils.utils import (
 )
 
 
+def preconfig_tf(setup):
+    """
+    Set the host device for tensorflow. The CUDA_VISIBLE_DEVICES variable must
+    be set before prior to allocating any tensors or executing any tf ops.
+    """
+    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
+    gpus = tf.config.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+    if setup["debug"]:
+        print("[+] Run all tf functions eagerly")
+        tf.config.run_functions_eagerly(True)
+        # tf.data.experimental.enable_debug_mode()
+
+
+# ======================================================================
 def config_init():
     args = get_cmd_args()
     check_cmd_args(args)
-    
+
     setup = {"debug": args.debug}
     if args.runcard:
         setup.update(load_runcard(args.runcard))
@@ -30,11 +47,7 @@ def config_init():
         raise ValueError("Check inputs, you shouldn't be here !")
 
     modify_runcard(setup)
-
-    # the CUDA_VISIBLE_DEVICES variable must be set before importing tensorflow
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
-    from slicerl.utils.configflow import config_tf
-    config_tf(setup)
+    preconfig_tf(setup)
 
     # check dataset directory structure
     check_dataset_directory(

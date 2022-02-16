@@ -15,6 +15,7 @@ def main():
             save_dataset_np,
         )
         from slicerl.build_model import build_and_train_model
+
         if setup.get("scan"):
             from slicerl.hopt.hopt import run_hyperparameter_scan
 
