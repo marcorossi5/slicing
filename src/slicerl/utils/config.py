@@ -2,8 +2,8 @@
     This module reads the command line options and initializes the directory
     structure.
 """
+import os
 import shutil
-from slicerl.utils.configflow import config_tf
 from slicerl.utils.utils import (
     get_cmd_args,
     check_cmd_args,
@@ -30,6 +30,10 @@ def config_init():
         raise ValueError("Check inputs, you shouldn't be here !")
 
     modify_runcard(setup)
+
+    # the CUDA_VISIBLE_DEVICES variable must be set before importing tensorflow
+    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
+    from slicerl.utils.configflow import config_tf
     config_tf(setup)
 
     # check dataset directory structure

@@ -25,7 +25,6 @@ EPS_TF = float_me(EPS)
 
 def config_tf(setup):
     """Set the host device for tensorflow."""
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
     gpus = tf.config.list_physical_devices("GPU")
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
