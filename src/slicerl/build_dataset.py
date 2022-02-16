@@ -154,8 +154,8 @@ class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
             - shuffle: bool, wether to shuffle inputs on epoch end
             - seed: int, the seed of the random generator shuffling on epoch end
         """
-        self.inputs = inputs
-        self.targets = targets
+        self.bal_inputs = inputs
+        self.bal_targets = targets
         self.batch_size = batch_size
         self.seed = seed
         self.shuffle = shuffle
@@ -183,13 +183,13 @@ class MHAEventDatasetFromNp(tf.keras.utils.Sequence):
             - np.array: target label of shape (1,)
         """
         ii = self.perm[idx]
-        batch_x = self.inputs[ii][None]
-        batch_y = self.targets[ii : ii + 1]
+        batch_x = self.bal_inputs[ii][None]
+        batch_y = self.bal_targets[ii : ii + 1]
         return batch_x, batch_y
 
     # ----------------------------------------------------------------------
     def __len__(self):
-        return ceil(len(self.inputs) / self.batch_size)
+        return ceil(len(self.bal_inputs) / self.batch_size)
 
 
 # ======================================================================

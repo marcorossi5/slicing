@@ -33,6 +33,7 @@ def main():
                 setup,
                 should_load_dataset=args.load_dataset,
                 should_save_dataset=args.save_dataset,
+                debug=args.debug,
             )
             if args.save_train_np:
                 save_dataset_np(generators, just_train_path)
