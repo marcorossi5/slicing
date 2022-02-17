@@ -97,7 +97,7 @@ def build_network(setup):
     initial_weights = Path(iw) if iw is not None else iw
     if initial_weights:
         if initial_weights.is_file():
-            logger.info(f"Found Initial weights configuration at {initial_weights} ... ")
+            logger.info(f"Found initial weights configuration at {initial_weights} ")
         else:
             raise FileNotFoundError(f"{initial_weights} no such file or directory")
     return load_network(setup, initial_weights)

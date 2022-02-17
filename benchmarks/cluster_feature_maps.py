@@ -112,28 +112,30 @@ def plot_features(feats, y_true, fname, mis=None, t=0.2, ffeat=0):
     plt.close()
 
 
-def main(setup):
+def main(n_layers, setup):
     """
     Main function: loads the validation set, the network and plots the
     histograms.
 
     Parameters
     ----------
+        - n_layers: int, the number of layers to extract the features from
         - setup: dict, the loaded settings
     """
+    
     # load dataset
     dataset_dir = Path("../dataset/training")
     val_generator = build_dataset_from_np(setup, dataset_dir)[1]
 
     # load network
     network = load_network(setup, setup["output"] / setup["test"]["checkpoint"])
-    stack = tf.keras.Sequential([l for l in network.layers if "mha_0" in l.name])
+    stack = tf.keras.Sequential([l for l in network.layers[:n_layers]])
     # stack.add(ReduceMax(axis=1, name="reduce_max"))
     stack.build((1, None, setup["model"]["f_dims"]))
     stack.summary()
 
     # forward pass
-    fname = setup["output"] / "cluster_features.npy"
+    fname = setup["output"] / f"layer{n_layers}_cluster_features.npy"
     if fname.is_file():
         y_pred = np.load(fname, allow_pickle=True)
     else:
@@ -155,7 +157,7 @@ def main(setup):
         y_pred,
         y_true,
         best_feat,
-        setup["output"] / f"plots/cluster_best_feature.png",
+        setup["output"] / f"plots/layer{n_layers}_cluster_best_feature.png",
     )
 
     # histogramming
@@ -164,7 +166,7 @@ def main(setup):
         plot_features(
             feats,
             y_true,
-            setup["output"] / f"plots/cluster_features{i}-{i+15}.png",
+            setup["output"] / f"plots/layer{n_layers}_cluster_features{i}-{i+15}.png",
             mis=mis,
             ffeat=i,
         )
@@ -173,6 +175,7 @@ def main(setup):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=Path, help="the model folder")
+    parser.add_argument("--layers", type=int, help="the number of layers", default=1)
     args = parser.parse_args()
 
     # load the runcard
@@ -181,5 +184,5 @@ if __name__ == "__main__":
     preconfig_tf(setup)
 
     start = tm()
-    main(setup)
+    main(args.layers, setup)
     print(f"Program done in {tm()-start}s")
