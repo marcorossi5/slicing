@@ -13,6 +13,7 @@ from slicerl.utils.utils import (
     initialize_output_folder,
     check_dataset_directory,
     load_runcard,
+    save_runcard,
     modify_runcard,
 )
 
@@ -49,6 +50,7 @@ def config_init():
         initialize_output_folder(args.output, args.force, setup.get("scan"))
         setup["output"] = args.output
         shutil.copyfile(args.runcard, args.output / "input-runcard.yaml")
+        save_runcard(args.output / "runcard.yaml", setup)
     elif args.model:
         setup = load_runcard(args.model / "runcard.yaml")
     else:
