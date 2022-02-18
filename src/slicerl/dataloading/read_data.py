@@ -6,7 +6,7 @@ import csv
 from abc import ABC, abstractmethod
 import numpy as np
 from slicerl import PACKAGE
-from slicerl.Event import Event
+from slicerl.dataloading.Event import Event
 
 logger = logging.getLogger(PACKAGE)
 

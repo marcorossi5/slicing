@@ -17,9 +17,9 @@ from hyperopt import STATUS_OK
 
 from slicerl import PACKAGE
 from slicerl.utils.configflow import set_manual_seed
-from slicerl.AbstractNet import get_prediction
-from slicerl.CMNet import CMNet
-from slicerl.losses import dice_loss
+from slicerl.networks.AbstractNet import get_prediction
+from slicerl.networks.CMNet import CMNet
+from slicerl.utils.losses import dice_loss
 from slicerl.diagnostics import (
     plot_slice_size,
     plot_multiplicity,

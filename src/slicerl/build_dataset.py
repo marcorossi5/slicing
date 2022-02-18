@@ -5,8 +5,8 @@ from tqdm import tqdm
 import tensorflow as tf
 import numpy as np
 from slicerl import PACKAGE
-from slicerl.read_data import load_Events_from_file, load_Events_from_files
-from slicerl.Event import get_cluster_features
+from slicerl.dataloading.read_data import load_Events_from_file, load_Events_from_files
+from slicerl.dataloading.Event import get_cluster_features
 
 logger = logging.getLogger(PACKAGE)
 

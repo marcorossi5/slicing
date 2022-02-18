@@ -15,7 +15,7 @@ from time import time as tm
 import numpy as np
 import matplotlib.pyplot as plt
 from slicerl.utils.utils import load_runcard
-from slicerl.read_data import load_Events_from_files
+from slicerl.dataloading.read_data import load_Events_from_files
 
 # ======================================================================
 def get_plane_purities(plane, min_cluster_hits=1):

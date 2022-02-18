@@ -9,8 +9,8 @@ from tensorflow.keras.layers import (
     LayerNormalization,
 )
 from tensorflow.keras.activations import sigmoid, tanh
-from slicerl.AbstractNet import AbstractNet
-from slicerl.FFNN import Head
+from slicerl.networks.AbstractNet import AbstractNet
+from slicerl.networks.FFNN import Head
 
 
 def add_extension(name):

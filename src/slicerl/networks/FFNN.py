@@ -1,5 +1,5 @@
 # This file is part of SliceRL by M. Rossi
-from slicerl.AbstractNet import AbstractNet
+from slicerl.networks.AbstractNet import AbstractNet
 from tensorflow.keras.layers import Dense, BatchNormalization, Dropout, Concatenate
 from tensorflow.keras import Input, Model, Sequential
 from tensorflow.keras.activations import sigmoid

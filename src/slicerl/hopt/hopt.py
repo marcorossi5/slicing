@@ -44,7 +44,7 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
 
     # disable scan for final fit
     best_setup["scan"] = False
-    from slicerl.plot_hyperopt import plot_hyperopt
+    from slicerl.hopt.plot_hyperopt import plot_hyperopt
 
     plot_hyperopt(log)
     return best_setup
