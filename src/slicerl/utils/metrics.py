@@ -7,6 +7,7 @@ from tensorflow.keras.metrics import (
 )
 from .configflow import float_me
 
+
 class F1score(Metric):
     """Implementation of F1 score."""
 

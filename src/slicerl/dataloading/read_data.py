@@ -227,6 +227,34 @@ def load_Events_from_files(
 
 
 # ======================================================================
+def load_events(fn, nev, min_hits):
+    """Loads event from file into a list of Event objects. Supported inputs are
+    either a single file name or a list of file names.
+
+    Parameters
+    ----------
+        - fn: str or list, events file names
+        - nev: int, number of events to take from each file
+        - min_hits : int, minimum hits per slice for dataset inclusion
+
+    Returns
+    -------
+        - list of Event objects
+
+    Raises
+    ------
+        - NotImplementedError if fn is not str, list or tuple
+    """
+    if isinstance(fn, str):
+        events = load_Events_from_file(fn, nev, min_hits)
+    elif isinstance(fn, list) or isinstance(fn, tuple):
+        events = load_Events_from_files(fn, nev, min_hits)
+    else:
+        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
+    return events
+
+
+# ======================================================================
 def save_Event_list_to_file(events, filename):
     """
     Utility function to save Event.particles lists to file. Each line represents

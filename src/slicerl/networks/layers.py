@@ -1,7 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 """ This module contains all the implemented custom layers. """
 import tensorflow as tf
-from tensroflow.keras import Sequential
+from tensorflow.keras import Sequential
 from tensorflow.keras.activations import sigmoid, tanh
 from tensorflow.keras.layers import (
     Layer,
@@ -145,21 +145,25 @@ class TransformerEncoder(Layer):
 # ======================================================================
 # Feed-forward layers
 class Head(Layer):
-    """Class defining Spatial Encoding Attention Convolutional Layer."""
+    """Implementation of stacking of feed-forward layers."""
 
     def __init__(
         self,
         filters,
-        nb_head,
-        dropout_idxs,
-        dropout,
+        dropout_idxs=None,
+        dropout=None,
         activation="relu",
         name="head",
         **kwargs,
     ):
+        """
+        Parameters
+        ----------
+            - filters: list, the number of filters for each dense layer
+
+        """
         super(Head, self).__init__(name=name, **kwargs)
         self.filters = filters
-        self.nb_head = nb_head
         self.dropout_idxs = dropout_idxs
         self.dropout = dropout
         self.activation = activation
@@ -170,14 +174,14 @@ class Head(Layer):
                 Dense(
                     filters,
                     activation=self.activation,
-                    name=f"dense_{self.nb_head}_{i}",
+                    name=f"dense_{i}",
                 )
             )
 
-            if i in self.dropout_idxs:
-                pass
-                # lyrs.append(BatchNormalization(name=f"bn_{self.nb_head}_{i}"))
-                # lyrs.append(Dropout(self.dropout, name=f"do_{self.nb_head}_{i}"))
+            # if i in self.dropout_idxs:
+            #     pass
+            #     # lyrs.append(BatchNormalization(name=f"bn_{self.nb_head}_{i}"))
+            #     # lyrs.append(Dropout(self.dropout, name=f"do_{self.nb_head}_{i}"))
 
         self.fc = Sequential(lyrs, name=name)
 
@@ -202,7 +206,6 @@ class Head(Layer):
         config = super(Head, self).get_config()
         config.update(
             {
-                "nb_head": self.nb_head,
                 "dropout": self.dropout,
                 "activation": self.activation,
             }

@@ -39,13 +39,14 @@ def load_runcard(runcard_file):
 
 
 # ======================================================================
-def save_runcard(fname, setup):
+def save_runcard(fname, setup, modify=True):
     with open(fname, "w") as f:
         # yaml is not able to save the Path objects
         # TODO: overload the yaml class
-        setup["output"] = setup["output"].as_posix()
-        setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix()
-        setup["test"]["dataset_dir"] = setup["test"]["dataset_dir"].as_posix()
+        if modify:
+            setup["output"] = setup["output"].as_posix()
+            setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix()
+            setup["test"]["dataset_dir"] = setup["test"]["dataset_dir"].as_posix()
         yaml.dump(setup, f, indent=4)
         modify_runcard(setup)
 

@@ -2,4 +2,4 @@
 "numpy >= 1.19.2",
 "matplotlib >= 3.3.0",
 "hyperopt",
-"knn"
+"tensorflow >= 2.3"

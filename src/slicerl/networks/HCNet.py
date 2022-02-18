@@ -3,18 +3,32 @@ import logging
 import tensorflow as tf
 from tensorflow.keras import Input
 from tensorflow.keras.layers import Concatenate
-from tensorflow.keras.activations import relu, sigmoid
+from tensorflow.keras.activations import relu, softmax
 from slicerl import PACKAGE
-from .AbstractNet import AbstractNet, BatchCumulativeNetwork
+from .AbstractNet import BatchCumulativeNetwork
 from .layers import TransformerEncoder, Head
 
-logger = logging.getLogger(PACKAGE + ".CMNet")
+logger = logging.getLogger(PACKAGE + ".HCNet")
 
 
-class CMNet(AbstractNet, BatchCumulativeNetwork):
+class HCNet(BatchCumulativeNetwork):
+    """
+    Class deifining HC-Net: Hitlevel Clustering Network.
+
+    In this approach the network is trained to predict the slice index at the
+    hit level: input is a point cloud in 2D with additional features per hit
+    of shape (1,[nb hits],nb feats), output is a tensor of shape
+    ([nb hits],units) containing probabilities that an hit belongs to a specific
+    slice. The indices of the slices are numbered with decreasingly in size.
+
+    Note: since the number of hits may vary depending on the cluster pairs,
+    multiple forward passes cannot be parallelized in a batch. Training
+    gradients can nonetheless be avaraged over multiple examples.
+    """
+
     """
     Class deifining CM-Net: Cluster merging network.
-
+    
     In this approach the network is trained as a binary classifier. Input is
     the union of points coming from a pair of 2D clusters accompained with a
     fixed size vector of features for each hit, of shape
@@ -28,11 +42,12 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
 
     def __init__(
         self,
+        units=128,
         f_dims=2,
         nb_mha_heads=5,
-        mha_filters=[64, 128],
+        mha_filters=[16, 32],
         nb_fc_heads=5,
-        fc_filters=[64, 32, 16, 8, 4, 2, 1],
+        fc_filters=[48, 64],
         batch_size=1,
         activation=relu,
         use_bias=True,
@@ -43,6 +58,7 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
         """
         Parameters
         ----------
+            - units: int, the number of output classes
             - f_dims: int, number of point cloud feature dimensions
             - nb_mha_heads: int, the number of heads in the `MultiHeadAttention` layer
             - mha_filters: list, the output units for each `MultiHeadAttention` in the stack
@@ -54,9 +70,10 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
             - verbose: str, wether to print extra training information
             - name: str, the name of the neural network instance
         """
-        super(CMNet, self).__init__(name=name, **kwargs)
+        super(HCNet, self).__init__(name=name, **kwargs)
 
         # store args
+        self.units = units
         self.f_dims = f_dims
         self.nb_mha_heads = nb_mha_heads
         self.mha_filters = mha_filters
@@ -68,10 +85,11 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
         self.verbose = verbose
 
         # adapt the output if requested
-        if self.fc_filters[-1] != 1:
+        if self.units != self.fc_filters[-1]:
             logger.warning(
-                f"CM-Net last layer must have one neuron only, but found "
-                f"{self.fc_filters[-1]}: adapting last layer ..."
+                f"Units (found {self.units}) are not compatible with requested "
+                f"number of neurons in last layer (found {self.fc_filters[-1]}): "
+                f"adapting last layer ..."
             )
             self.fc_filters.append(self.units)
 
@@ -90,12 +108,11 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
             )
             for ih in range(self.nb_fc_heads)
         ]
-        self.concat = Concatenate(axis=-1, name="cat")
 
         # explicitly build network weights
-        build_with_shape = (None, self.f_dims)
-        self.input_layer = Input(shape=build_with_shape, name="clusters_hits")
-        super(CMNet, self).build((1,) + build_with_shape)
+        self.inputs_shape = (None, self.f_dims)
+        self.input_layer = Input(shape=self.inputs_shape, name="clusters_hits")
+        super(HCNet, self).build((1,) + self.inputs_shape)
 
     # ----------------------------------------------------------------------
     def call(self, x):
@@ -106,15 +123,15 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
 
         Returns
         -------
-            tf.Tensor, merging probability of shape=(1,)
+            tf.Tensor, hit class prbabilities of shape=(1,N,units)
         """
         for mha in self.mhas:
             x = self.activation(mha(x))
-
-        x = tf.reduce_max(x, axis=1)
 
         results = []
         for head in self.heads:
             results.append(head(x))
 
-        return tf.reduce_mean(sigmoid(self.concat(results)), axis=-1)
+        stack = tf.stack(results, axis=-1)
+        reduced = tf.reduce_mean(stack, axis=-1)
+        return softmax(reduced)

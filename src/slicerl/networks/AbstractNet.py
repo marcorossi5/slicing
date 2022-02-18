@@ -64,19 +64,25 @@ class AbstractNet(Model):
     """
     Network abstract class.
 
-    The daughter class must define the `input_shape` attribute to use the model
-    method.    
+    The daughter class must define the `input_layer` attribute to use the model
+    method. This should contain the output of tf.keras.Input function.
     """
 
-    def __init__(self, f_dims, name, **kwargs):
-        self.f_dims = f_dims
-        self.inputs_shape = None
+    def __init__(self, name, **kwargs):
+        self.inputs_layer = None
         super(AbstractNet, self).__init__(name=name, **kwargs)
-        self.add_batch_dim = lambda x: (None,) + x
 
     # ----------------------------------------------------------------------
     def model(self):
-        return Model(inputs=self.inputs_shape, outputs=self.call(self.inputs_shape), name=self.name)
+        if self.inputs_layer is not None:
+            ValueError(
+                "AbstractNet daughter class missed to override the inputs_layer attribute"
+            )
+        return Model(
+            inputs=self.inputs_layer,
+            outputs=self.call(self.inputs_layer),
+            name=self.name,
+        )
 
 
 # ======================================================================
@@ -105,7 +111,7 @@ class BatchCumulativeNetwork(Model):
     this class overrides the Model.train_sted method, see the train_step method
     docstring.
 
-    The daughter class must define 
+    The daughter class must define
     """
 
     def build(self, input_shape):

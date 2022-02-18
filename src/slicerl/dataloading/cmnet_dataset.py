@@ -1,16 +1,14 @@
 # This file is part of SliceRL by M. Rossi
 import logging
-from math import ceil
 from tqdm import tqdm
-import tensorflow as tf
+from math import ceil
 import numpy as np
+import tensorflow as tf
 from slicerl import PACKAGE
-from slicerl.dataloading.read_data import load_Events_from_file, load_Events_from_files
-from slicerl.dataloading.Event import get_cluster_features
+from .read_data import load_events
+from .Event import get_cluster_features
 
 logger = logging.getLogger(PACKAGE)
-
-plane_to_idx = {"U": 0, "V": 1, "W": 2}
 
 
 class EventDataset(tf.keras.utils.Sequence):
@@ -279,7 +277,7 @@ def split_dataset_by_event(data, split=0.5):
     """
     Parameters
     ----------
-        - data  : list, [inputs, targets, c indices] for RandLA-Net to split
+        - data  : list, [inputs, targets, c indices] to split
         - split : list, [validation, test] percentages
 
     Returns
@@ -448,34 +446,6 @@ def generate_inputs_and_targets_mha(event, min_hits=1):
 
 
 # ======================================================================
-def load_events(fn, nev, min_hits):
-    """Loads event from file into a list of Event objects. Supported inputs are
-    either a single file name or a list of file names.
-
-    Parameters
-    ----------
-        - fn: str or list, events file names
-        - nev: int, number of events to take from each file
-        - min_hits : int, minimum hits per slice for dataset inclusion
-
-    Returns
-    -------
-        - list of Event objects
-
-    Raises
-    ------
-        - NotImplementedError if fn is not str, list or tuple
-    """
-    if isinstance(fn, str):
-        events = load_Events_from_file(fn, nev, min_hits)
-    elif isinstance(fn, list) or isinstance(fn, tuple):
-        events = load_Events_from_files(fn, nev, min_hits)
-    else:
-        raise NotImplementedError(f"please provide string or list, not {type(fn)}")
-    return events
-
-
-# ======================================================================
 def get_generator(
     events,
     inputs,
@@ -569,65 +539,7 @@ def generate_dataset(
 
 
 # ======================================================================
-def load_dataset(dataset_dir):
-    """
-    Load dataset from directory.
-
-    Parameters
-    ----------
-        - dataset_dir: Path, directory where the dataset is stored
-
-    Returns
-    -------
-        - list, network inputs
-        - list, network targets
-        - list, adj matrix indices
-        - list, cluster thresholds for inference
-    """
-    row_splits = np.load(dataset_dir / "event_row_splits.npy")
-    splittings = np.cumsum(row_splits[:-1])
-    split_fn = lambda x: np.split(x, splittings, axis=0)
-
-    # load files
-    inputs = np.load(dataset_dir / "inputs.npy")
-    targets = np.load(dataset_dir / "targets.npy")
-    c_indices = np.load(dataset_dir / "c_indices.npy")
-    fname = dataset_dir / "cthresholds.npy"
-    cthresholds = np.load(fname).astype(int) if fname.is_file() else []
-
-    # check if inputs are consistents
-    assert sum(row_splits) == len(
-        inputs
-    ), f"Dataset loading failes: input arrays first axis lengths should match, found {sum(row_splits)} and {len(inputs)}"
-    assert len(inputs) == len(targets)
-    return split_fn(inputs), split_fn(targets), split_fn(c_indices), cthresholds
-
-
-# ======================================================================
-def save_dataset(dataset_dir, inputs, targets, c_indices, cthresholds):
-    """
-    Save dataset in directory.
-
-    Parameters
-    ----------
-        - dataset_dir: Path, directory where the dataset is stored
-        - inputs: list
-        - targets: list
-        - c_indices: list, adj matrix indices
-        - cthresholds: list
-    """
-    row_splits = np.array([len(tgt) for tgt in targets])
-
-    np.save(dataset_dir / "inputs.npy", np.concatenate(inputs))
-    np.save(dataset_dir / "targets.npy", np.concatenate(targets))
-    np.save(dataset_dir / "c_indices.npy", np.concatenate(c_indices))
-    if cthresholds:
-        np.save(dataset_dir / "cthresholds.npy", np.array(cthresholds))
-    np.save(dataset_dir / "event_row_splits.npy", row_splits)
-
-
-# ======================================================================
-def build_dataset(
+def _build_dataset(
     fn,
     batch_size,
     nev=-1,
@@ -713,7 +625,7 @@ def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=Fa
     batch_size = setup["model"]["batch_size"]
     dataset_dir = setup["train"]["dataset_dir"]
     split_by = setup["train"]["split_by"]
-    return build_dataset(
+    return _build_dataset(
         fn,
         batch_size,
         nev=nev,
@@ -743,7 +655,7 @@ def build_dataset_test(setup, should_save_dataset=False, should_load_dataset=Fal
     cthreshold = setup["test"]["cthreshold"]
     dataset_dir = setup["test"]["dataset_dir"]
 
-    return build_dataset(
+    return _build_dataset(
         fn,
         batch_size,
         nev=nev,
@@ -753,23 +665,6 @@ def build_dataset_test(setup, should_save_dataset=False, should_load_dataset=Fal
         should_load_dataset=should_load_dataset,
         dataset_dir=dataset_dir,
     )
-
-
-# ======================================================================
-def save_dataset_np(generators, folder):
-    """
-    Parameters
-    ----------
-        - generators: tuple, (train, val) generators of MHAEventDataset objects
-        - folder: Path
-    """
-    train, val = generators
-    train_inputs = np.array(train.inputs, dtype=object)
-    val_inputs = np.array(val.inputs, dtype=object)
-    np.save(folder / "train_inputs.npy", train_inputs)
-    np.save(folder / "train_targets.npy", train.targets)
-    np.save(folder / "val_inputs.npy", val_inputs)
-    np.save(folder / "val_targets.npy", val.targets)
 
 
 # ======================================================================
@@ -802,26 +697,78 @@ def build_dataset_from_np(setup, folder):
 
 
 # ======================================================================
-def dummy_dataset(nb_feats):
+def load_dataset(dataset_dir):
     """
-    Return a dummy dataset to build the model first when loading.
+    Load dataset from directory.
 
-    Note
-    ----
-    Do NOT use this generator for the whole inference pipeline. The cluster
-    indices are dummy float values, not integers.
+    Parameters
+    ----------
+        - dataset_dir: Path, directory where the dataset is stored
+
+    Returns
+    -------
+        - list, network inputs
+        - list, network targets
+        - list, adj matrix indices
+        - list, cluster thresholds for inference
     """
-    B = 32
-    inputs = [np.random.rand(B * 50, nb_feats) for i in range(2)]
-    targets = [np.random.rand(B * 50) for i in range(2)]
-    data = (None, [inputs, targets, targets])
-    return EventDataset(
-        data,
-        batch_size=B,
-        is_training=True,
-        should_split_by_data=False,
-        should_balance=False,
-    )
+    row_splits = np.load(dataset_dir / "event_row_splits.npy")
+    splittings = np.cumsum(row_splits[:-1])
+    split_fn = lambda x: np.split(x, splittings, axis=0)
+
+    # load files
+    inputs = np.load(dataset_dir / "inputs.npy")
+    targets = np.load(dataset_dir / "targets.npy")
+    c_indices = np.load(dataset_dir / "c_indices.npy")
+    fname = dataset_dir / "cthresholds.npy"
+    cthresholds = np.load(fname).astype(int) if fname.is_file() else []
+
+    # check if inputs are consistents
+    assert sum(row_splits) == len(
+        inputs
+    ), f"Dataset loading failes: input arrays first axis lengths should match, found {sum(row_splits)} and {len(inputs)}"
+    assert len(inputs) == len(targets)
+    return split_fn(inputs), split_fn(targets), split_fn(c_indices), cthresholds
+
+
+# ======================================================================
+def save_dataset(dataset_dir, inputs, targets, c_indices, cthresholds):
+    """
+    Save dataset in directory.
+
+    Parameters
+    ----------
+        - dataset_dir: Path, directory where the dataset is stored
+        - inputs: list
+        - targets: list
+        - c_indices: list, adj matrix indices
+        - cthresholds: list
+    """
+    row_splits = np.array([len(tgt) for tgt in targets])
+
+    np.save(dataset_dir / "inputs.npy", np.concatenate(inputs))
+    np.save(dataset_dir / "targets.npy", np.concatenate(targets))
+    np.save(dataset_dir / "c_indices.npy", np.concatenate(c_indices))
+    if cthresholds:
+        np.save(dataset_dir / "cthresholds.npy", np.array(cthresholds))
+    np.save(dataset_dir / "event_row_splits.npy", row_splits)
+
+
+# ======================================================================
+def save_dataset_np(generators, folder):
+    """
+    Parameters
+    ----------
+        - generators: tuple, (train, val) generators of MHAEventDataset objects
+        - folder: Path
+    """
+    train, val = generators
+    train_inputs = np.array(train.inputs, dtype=object)
+    val_inputs = np.array(val.inputs, dtype=object)
+    np.save(folder / "train_inputs.npy", train_inputs)
+    np.save(folder / "train_targets.npy", train.targets)
+    np.save(folder / "val_inputs.npy", val_inputs)
+    np.save(folder / "val_targets.npy", val.targets)
 
 
 # ======================================================================

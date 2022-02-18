@@ -16,6 +16,7 @@ from .utils import (
     save_runcard,
     modify_runcard,
 )
+from .configflow import set_manual_seed
 
 logger = logging.getLogger(PACKAGE)
 
@@ -50,7 +51,7 @@ def config_init():
         initialize_output_folder(args.output, args.force, setup.get("scan"))
         setup["output"] = args.output
         shutil.copyfile(args.runcard, args.output / "input-runcard.yaml")
-        save_runcard(args.output / "runcard.yaml", setup)
+        save_runcard(args.output / "runcard.yaml", setup, modify=False)
     elif args.model:
         setup = load_runcard(args.model / "runcard.yaml")
     else:
@@ -70,4 +71,6 @@ def config_init():
         should_load_dataset=args.load_dataset_test,
         should_save_dataset=args.save_dataset_test,
     )
+
+    set_manual_seed(12345)
     return args, setup

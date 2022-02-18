@@ -1,9 +1,8 @@
 # This file is part of SliceRL by M. Rossi
 import logging
+from pathlib import Path
 from copy import deepcopy
 from time import time as tm
-from pathlib import Path
-import tensorflow as tf
 import tensorflow.keras.backend as tfK
 from tensorflow.keras.callbacks import (
     TensorBoard,
@@ -11,15 +10,13 @@ from tensorflow.keras.callbacks import (
     ReduceLROnPlateau,
     EarlyStopping,
 )
-from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 
 from hyperopt import STATUS_OK
 
 from slicerl import PACKAGE
 from slicerl.utils.configflow import set_manual_seed
 from slicerl.networks.AbstractNet import get_prediction
-from slicerl.networks.CMNet import CMNet
-from slicerl.utils.losses import dice_loss
+from slicerl.networks.load_networks import load_and_compile_network
 from slicerl.diagnostics import (
     plot_slice_size,
     plot_multiplicity,
@@ -31,80 +28,6 @@ logger = logging.getLogger(PACKAGE)
 logger_hopt = logging.getLogger(PACKAGE + ".hopt")
 
 
-def load_network(setup, checkpoint_filepath=None):
-    """
-    Load network from config dic, compile and, if necessary, load weights.
-
-    Parameters
-    ----------
-        - setup               : dict, config dict
-        - checkpoint_filepath : Path, model checkpoint path
-
-    Returns
-    -------
-        - SeacNet
-    """
-    net_dict = {
-        "batch_size": setup["model"]["batch_size"],
-        "f_dims": setup["model"]["f_dims"],
-        "use_bias": setup["model"]["use_bias"],
-        "activation": lambda x: tf.keras.activations.relu(x, alpha=0.2),
-    }
-    net = CMNet(name="CMNet", **net_dict)
-
-    lr = setup["train"]["lr"]
-    if setup["train"]["optimizer"] == "Adam":
-        opt = Adam(learning_rate=lr)
-    elif setup["train"]["optimizer"] == "SGD":
-        opt = SGD(learning_rate=lr)
-    elif setup["train"]["optimizer"] == "RMSprop":
-        opt = RMSprop(learning_rate=lr)
-    elif setup["train"]["optimizer"] == "Adagrad":
-        opt = Adagrad(learning_rate=lr)
-
-    if setup["train"]["loss"] == "xent":
-        loss = tf.keras.losses.BinaryCrossentropy(name="xent")
-    elif setup["train"]["loss"] == "hinge":
-        loss = tf.keras.losses.Hinge(name="hinge")
-    elif setup["train"]["loss"] == "dice":
-        loss = dice_loss
-    else:
-        raise NotImplementedError("Loss function not implemented")
-
-    net.compile(
-        loss=loss,
-        optimizer=opt,
-        metrics=[
-            tf.keras.metrics.BinaryAccuracy(name="acc"),
-            tf.keras.metrics.Precision(name="prec"),
-            tf.keras.metrics.Recall(name="rec"),
-        ],
-        run_eagerly=setup.get("debug"),
-    )
-    # if not setup["scan"]:
-    #     # net.model().summary()
-    #     net.summary()
-    #     tf.keras.utils.plot_model(net.model(), to_file="../CMNet.png", show_shapes=True)
-
-    if checkpoint_filepath:
-        net.load_weights(checkpoint_filepath.as_posix())
-
-    return net
-
-
-# ======================================================================
-def build_network(setup):
-    iw = setup["train"]["initial_weights"]
-    initial_weights = Path(iw) if iw is not None else iw
-    if initial_weights:
-        if initial_weights.is_file():
-            logger.info(f"Found initial weights configuration at {initial_weights} ")
-        else:
-            raise FileNotFoundError(f"{initial_weights} no such file or directory")
-    return load_network(setup, initial_weights)
-
-
-# ======================================================================
 def train_network(setup, net, generators):
     if setup["scan"]:
         batch_size = setup["model"]["batch_size"]
@@ -160,7 +83,6 @@ def train_network(setup, net, generators):
         )
 
     callbacks.append(tboard)
-
     logger.info(f"Train for {setup['train']['epochs']} epochs ...")
     net.fit(
         train_generator,
@@ -204,7 +126,14 @@ def build_and_train_model(setup, generators):
     """
     tfK.clear_session()
     set_manual_seed(12345)
-    net = build_network(setup)
+    iw = setup["train"]["initial_weights"]
+    checkpoint_filepath = Path(iw) if iw is not None else iw
+    if checkpoint_filepath:
+        if checkpoint_filepath.is_file():
+            logger.info(f"Found initial weights configuration at {checkpoint_filepath}")
+        else:
+            raise FileNotFoundError(f"{checkpoint_filepath} no such file or directory")
+    net = load_and_compile_network(setup, checkpoint_filepath)
     return train_network(setup, net, generators)
 
 
@@ -212,9 +141,8 @@ def build_and_train_model(setup, generators):
 def inference(setup, test_generator, no_graphics=False):
     tfK.clear_session()
     logger.info("Done with training, load best weights")
-    fname = setup["test"]["checkpoint"]
-    checkpoint_filepath = setup["output"].joinpath(fname)
-    net = load_network(setup, checkpoint_filepath)
+    checkpoint_filepath = setup["output"] / setup["test"]["checkpoint"]
+    net = load_and_compile_network(setup, checkpoint_filepath)
 
     # shut down the last two compontents
     # w = net.heads[0].layers[-3].weights[0]
