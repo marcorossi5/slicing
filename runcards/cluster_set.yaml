@@ -3,7 +3,8 @@ gpu: "0"
 dataset:
   split: 0.9
 model:
-  net_type: CM # FF
+  net_type: CM # CM | HC
+  units: 64
   batch_size: 32
   test_batch_size: 32
   f_dims: 6 # 89
@@ -35,7 +36,7 @@ train:
     - data/prod4_train/prod4_p6GeV_run44121960_100evts.csv.gz
     - data/prod4_train/prod4_7GeV_run20915159_100evts.csv.gz
   nev: -1
-  min_hits: 5
+  min_hits: 15
   hist_freq: 10
   loss: xent # xent | hinge | dice
   epochs: 30
