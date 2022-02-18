@@ -1,4 +1,5 @@
 # This file is part of SliceRL by M. Rossi
+" This module implements function to visualize training and inference results. "
 import logging
 import matplotlib as mpl
 from matplotlib import pyplot as plt
@@ -8,7 +9,6 @@ from slicerl import PACKAGE
 logger = logging.getLogger(PACKAGE + ".diagnostics")
 
 THRESHOLD = 0.9
-
 
 # available cmaps
 """
@@ -156,7 +156,7 @@ l = len(colors)
 vcmap = "plasma"
 vnorm = mpl.colors.Normalize(vmin=0.0, vmax=1.0)
 
-# ======================================================================
+
 def print_stats(name, data, mass_ref, output_folder="./"):
     """Print statistics on the mass distribution."""
     r_plain = np.array(data) - mass_ref
@@ -404,8 +404,12 @@ def print_beam_metrics(beam_metrics):
     logger.info(
         f"  isCorrect: {stats[0].sum()}/{nb_tests}, {stats[0].sum()/nb_tests*100:.2f}%"
     )
-    logger.info(f"  isLost: {stats[1].sum()}/{nb_tests}, {stats[1].sum()/nb_tests*100:.2f}%")
-    logger.info(f"  isSplit: {stats[2].sum()}/{nb_tests}, {stats[2].sum()/nb_tests*100:.2f}%")
+    logger.info(
+        f"  isLost: {stats[1].sum()}/{nb_tests}, {stats[1].sum()/nb_tests*100:.2f}%"
+    )
+    logger.info(
+        f"  isSplit: {stats[2].sum()}/{nb_tests}, {stats[2].sum()/nb_tests*100:.2f}%"
+    )
 
     # print("- Filtering out small slices (< 5 mc hits)")
     # print(

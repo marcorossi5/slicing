@@ -4,11 +4,9 @@ import tensorflow as tf
 from tensorflow.keras.metrics import (
     Metric,
     CategoricalCrossentropy,
-    CategoricalAccuracy,
 )
-from slicerl.utils.configflow import float_me
+from .configflow import float_me
 
-# ======================================================================
 class F1score(Metric):
     """Implementation of F1 score."""
 
@@ -40,6 +38,7 @@ class WCCEMetric(CategoricalCrossentropy):
         wgt = np.exp(-x / self.scale).reshape([1, 1, -1])
         self.wgt = float_me(wgt)
 
+    # ----------------------------------------------------------------------
     def update_state(self, y_true, y_pred, sample_weight=None):
         weighted_true = y_true * self.wgt
         return super().update_state(weighted_true, y_pred, sample_weight)
@@ -65,6 +64,7 @@ class WAccMetric(Metric):
         # store the probability normalization
         self.normalization = self.add_weight(name="normalization", initializer="zeros")
 
+    # ----------------------------------------------------------------------
     def update_state(self, y_true, y_pred, sample_weight):
         y_pred_max = tf.argmax(y_pred, axis=-1)
         y_true_max = tf.argmax(y_true, axis=-1)
@@ -80,9 +80,11 @@ class WAccMetric(Metric):
         self.hits.assign_add(tf.reduce_sum(values))
         self.normalization.assign_add(tf.reduce_sum(y_true))
 
+    # ----------------------------------------------------------------------
     def result(self):
         return tf.reduce_sum(self.hits) / tf.reduce_sum(self.normalization)
 
+    # ----------------------------------------------------------------------
     def reset_states(self):
         # The state of the metric will be reset at the start of each epoch.
         self.hits.assign(0.0)

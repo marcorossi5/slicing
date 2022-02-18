@@ -7,10 +7,9 @@ from tensorflow.keras.losses import (
     CategoricalCrossentropy,
     Reduction,
 )
-from slicerl.utils.configflow import EPS_TF, float_me
+from .configflow import EPS_TF, float_me
 
 
-# ======================================================================
 def dice_loss(y_true, y_pred):
     """Implementation of Dice loss."""
     iy_true = 1 - y_true
@@ -36,6 +35,7 @@ class WeightedL1:
         wgt = np.exp(-x / self.scale).reshape([1, 1, -1])
         self.wgt = float_me(wgt)
 
+    # ----------------------------------------------------------------------
     def __call__(self, y_true, y_pred):
         """
         Parameters

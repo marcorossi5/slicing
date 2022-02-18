@@ -30,6 +30,7 @@ from slicerl.diagnostics import (
 logger = logging.getLogger(PACKAGE)
 logger_hopt = logging.getLogger(PACKAGE + ".hopt")
 
+
 def load_network(setup, checkpoint_filepath=None):
     """
     Load network from config dic, compile and, if necessary, load weights.
@@ -110,7 +111,9 @@ def train_network(setup, net, generators):
         loss = setup["train"]["loss"]
         lr = setup["train"]["lr"]
         opt = setup["train"]["optimizer"]
-        logging.info(f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}")
+        logging.info(
+            f"{{batch_size: {batch_size}, loss: {loss}, lr: {lr}, opt: {opt}}}"
+        )
 
     train_generator, val_generator = generators
 

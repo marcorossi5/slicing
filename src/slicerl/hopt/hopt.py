@@ -1,4 +1,5 @@
 import logging
+
 # This file is part of SliceRL by M. Rossi
 import pickle
 import pprint
@@ -8,6 +9,7 @@ from hyperopt.mongoexp import MongoTrials
 from slicerl import PACKAGE
 
 logger = logging.getLogger(PACKAGE + ".hopt")
+
 
 def run_hyperparameter_scan(search_space, load_data_fn, function):
     """Running a hyperparameter scan using hyperopt."""

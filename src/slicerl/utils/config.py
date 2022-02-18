@@ -7,7 +7,7 @@ import shutil
 import logging
 import tensorflow as tf
 from slicerl import PACKAGE
-from slicerl.utils.utils import (
+from .utils import (
     get_cmd_args,
     check_cmd_args,
     initialize_output_folder,
@@ -17,8 +17,8 @@ from slicerl.utils.utils import (
     modify_runcard,
 )
 
-
 logger = logging.getLogger(PACKAGE)
+
 
 def preconfig_tf(setup):
     """

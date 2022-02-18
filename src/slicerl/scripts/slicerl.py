@@ -7,6 +7,7 @@ from slicerl.utils.utils import save_runcard
 
 logger = logging.getLogger(PACKAGE)
 
+
 def main():
     ss = tm()
     args, setup = config_init()
@@ -21,6 +22,7 @@ def main():
 
         if setup.get("scan"):
             from slicerl.hopt.hopt import run_hyperparameter_scan
+
             setup = run_hyperparameter_scan(
                 setup, build_dataset_train, build_and_train_model
             )

@@ -8,8 +8,8 @@ from hyperopt import hp
 import yaml
 from slicerl import PACKAGE
 
-
 logger = logging.getLogger(PACKAGE)
+
 
 def makedir(folder):
     """Create directory."""

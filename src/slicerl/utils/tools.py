@@ -5,7 +5,7 @@ from collections import deque
 import numpy as np
 import tensorflow as tf
 from slicerl import PACKAGE
-from slicerl.utils.configflow import EPS, EPS_TF, float_me
+from .configflow import EPS, EPS_TF, float_me
 
 logger = logging.getLogger(PACKAGE)
 

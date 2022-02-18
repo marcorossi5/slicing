@@ -12,7 +12,7 @@ logger = logging.getLogger(PACKAGE)
 
 plane_to_idx = {"U": 0, "V": 1, "W": 2}
 
-# ======================================================================
+
 class EventDataset(tf.keras.utils.Sequence):
     """Class defining dataset."""
 
@@ -689,9 +689,7 @@ def build_dataset(
 
 
 # ======================================================================
-def build_dataset_train(
-    setup, should_load_dataset=False, should_save_dataset=False
-):
+def build_dataset_train(setup, should_load_dataset=False, should_save_dataset=False):
     """
     Wrapper function to build dataset for training. Implements validation
     splitting according to config file.

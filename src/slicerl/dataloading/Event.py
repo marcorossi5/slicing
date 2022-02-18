@@ -26,7 +26,7 @@ VIEW_TO_ONEHOT_IDX = {
 
 SWAP = np.array([[0, -1], [1, 0]])
 
-# ======================================================================
+
 class Event:
     """Event class wrapping different PlaneView information."""
 

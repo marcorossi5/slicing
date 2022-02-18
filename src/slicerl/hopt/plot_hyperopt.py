@@ -24,7 +24,7 @@ def build_dataframe(trials, bestid):
     return df, bestdf
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_scans(df, bestdf, trials, bestid, file):
     logger.info("Plotting scan results...")
     # plot loss
@@ -67,7 +67,7 @@ def plot_scans(df, bestdf, trials, bestid, file):
     plt.savefig(f"{file}", bbox_inches="tight")
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_correlations(df, file):
     logger.info("Plotting correlations...")
     plt.figure(figsize=(20, 20))
@@ -84,7 +84,7 @@ def plot_correlations(df, file):
     plt.savefig(f"{file}", bbox_inches="tight")
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_pairs(df, file):
     logger.info("Plotting pairs")
     plt.figure(figsize=(50, 50))
@@ -92,7 +92,7 @@ def plot_pairs(df, file):
     plt.savefig(f"{file}", bbox_inches="tight")
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 def plot_hyperopt(trials_fname):
     """
     Params

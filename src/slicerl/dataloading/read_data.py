@@ -6,11 +6,11 @@ import csv
 from abc import ABC, abstractmethod
 import numpy as np
 from slicerl import PACKAGE
-from slicerl.dataloading.Event import Event
+from .Event import Event
 
 logger = logging.getLogger(PACKAGE)
 
-# ======================================================================
+
 class Reader(object):
     """
     Reader for files consisting of a sequence of csv objects.
