@@ -1,5 +1,0 @@
-"yaml",
-"numpy >= 1.19.2",
-"matplotlib >= 3.3.0",
-"hyperopt",
-"tensorflow >= 2.3"

@@ -1,5 +1,4 @@
 # This file is part of SliceRL by M. Rossi
-from operator import is_
 from . import cmnet_dataset as cmset
 from . import hcnet_dataset as hcset
 

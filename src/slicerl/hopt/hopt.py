@@ -1,6 +1,5 @@
-import logging
-
 # This file is part of SliceRL by M. Rossi
+import logging
 import pickle
 import pprint
 from time import time as tm

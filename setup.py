@@ -4,6 +4,15 @@ from __future__ import print_function
 import sys
 from setuptools import setup, find_packages
 
+requirements = [
+    "pyyaml",
+    "numpy >= 1.19.2",
+    "matplotlib >= 3.3.0",
+    "seaborn",
+    "hyperopt",
+    "tensorflow >= 2.3"
+]
+
 if sys.version_info < (3, 6):
     print("SliceRL requires Python 3.6 or later", file=sys.stderr)
     sys.exit(1)
@@ -32,9 +41,5 @@ setup(
         "Topic :: Scientific/Engineering :: Physics",
     ],
     python_requires=">=3.6",
-    install_requires=[
-        "numpy >= 1.19.2",
-        "matplotlib >= 3.3.0",
-        # "yaml"
-    ],
+    install_requires=requirements,
 )
