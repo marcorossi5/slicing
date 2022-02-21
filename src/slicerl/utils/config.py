@@ -23,17 +23,20 @@ def preconfig_tf(setup):
     """
     Set the host device for tensorflow.
     """
-    gpus = tf.config.list_physical_devices('GPU')
+    gpus = tf.config.list_physical_devices("GPU")
     if len(gpus) == 0:
         return
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
-    gpus = setup.get('gpu')
+    gpus = setup.get("gpu")
     if gpus is not None:
         if isinstance(gpus, int):
             gpus = [gpus]
-        gpus = [tf.config.PhysicalDevice(f'/physical_device:GPU:{gpu}', 'GPU') for gpu in gpus]
-        tf.config.set_visible_devices(gpus, 'GPU')
+        gpus = [
+            tf.config.PhysicalDevice(f"/physical_device:GPU:{gpu}", "GPU")
+            for gpu in gpus
+        ]
+        tf.config.set_visible_devices(gpus, "GPU")
         logger.warning(f"Host device: GPU {gpus}")
     else:
         logger.warning("Host device: CPU")
@@ -80,5 +83,6 @@ def config_init():
     )
 
     from .configflow import set_manual_seed
+
     set_manual_seed(12345)
     return args, setup

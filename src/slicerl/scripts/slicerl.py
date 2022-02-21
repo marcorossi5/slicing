@@ -9,7 +9,7 @@ logger = logging.getLogger(PACKAGE)
 
 
 def main():
-    """ SliceRL entry point. """
+    """SliceRL entry point."""
     ss = tm()
     args, setup = config_init()
     from slicerl.build_model import build_and_train_model, inference
@@ -19,9 +19,7 @@ def main():
 
     if args.runcard:
         if setup.get("scan"):
-            setup = run_hyperparameter_scan(
-                setup, build_dataset, build_and_train_model
-            )
+            setup = run_hyperparameter_scan(setup, build_dataset, build_and_train_model)
 
         start = tm()
         logger.info("Training best model")

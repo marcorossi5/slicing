@@ -101,11 +101,11 @@ class SelfAttentionWrapper(SelfAttention):
         ----------
             - units: int, output feature dimensionality
             - num_heads: int, number of heads in MultiHeadAttention layers
-        
+
         Note
         ----
         The input feature dimensionality should be exactly divisible by the
-        number of heads.       
+        number of heads.
         """
         super(SelfAttentionWrapper, self).__init__(
             units, num_heads, attention_dropout, **kwargs
@@ -156,7 +156,9 @@ class TransformerEncoder(Layer):
         elif self.attention_type == "favor+":
             self.mha = SelfAttentionWrapper(units, self.mha_heads, name="mha")
         else:
-            raise NotImplementedError(f"Attention type {self.attention_type} not implemented")
+            raise NotImplementedError(
+                f"Attention type {self.attention_type} not implemented"
+            )
         super(TransformerEncoder, self).build(input_shape)
 
     # ----------------------------------------------------------------------

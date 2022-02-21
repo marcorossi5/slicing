@@ -16,9 +16,13 @@ def build_dataset(
         if from_np_path is not None:
             return cmset.build_dataset_from_np(setup, from_np_path)
         if is_training:
-            return cmset.build_dataset_train(setup, should_save_dataset, should_load_dataset)
+            return cmset.build_dataset_train(
+                setup, should_save_dataset, should_load_dataset
+            )
         else:
-            return cmset.build_dataset_test(setup, should_save_dataset, should_load_dataset)
+            return cmset.build_dataset_test(
+                setup, should_save_dataset, should_load_dataset
+            )
     elif modeltype == "HC":
         return hcset.build_dataset(setup, is_training=is_training)
     else:

@@ -15,7 +15,7 @@ from hyperopt import STATUS_OK
 
 from slicerl import PACKAGE
 from slicerl.utils.configflow import set_manual_seed
-from slicerl.networks.AbstractNet import get_prediction
+from slicerl.networks.inference import get_prediction
 from slicerl.networks.load_networks import load_and_compile_network
 from slicerl.diagnostics import (
     plot_slice_size,
@@ -146,18 +146,6 @@ def inference(setup, test_generator, no_graphics=False):
     checkpoint_filepath = setup["output"] / setup["test"]["checkpoint"]
     net = load_and_compile_network(setup, checkpoint_filepath)
 
-    # shut down the last two compontents
-    # w = net.heads[0].layers[-3].weights[0]
-    # new_w = tf.constant([[0.], [1.]])
-    # w.assign(w*new_w)
-
-    # use just the needed events
-    # nev = 50 if setup["test"]["nev"] == -1 else setup["test"]["nev"]
-
-    # test_generator.targets = test_generator.targets[250:250 + nev]
-    # test_generator.inputs = test_generator.inputs[250:250 + nev]
-    # test_generator.cthresholds = test_generator.cthresholds[250:250 + nev]
-
     y_pred = get_prediction(
         net,
         test_generator,
@@ -166,7 +154,19 @@ def inference(setup, test_generator, no_graphics=False):
     )
 
     test_generator.events = y_pred
+
+    import matplotlib.pyplot as plt
+    from slicerl.diagnostics import cmap, norm
+    for plane in test_generator.events[0].planes:
+        plt.subplot(121)
+        plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.status, cmap=cmap, norm=norm)
+        plt.subplot(122)
+        plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.ordered_mc_idx, cmap=cmap, norm=norm )
+        plt.show()
+        exit()
     for i, ev in enumerate(test_generator.events):
+        # TODO: make diagnostics subfolder and jsut call a make_plots wrap function
+        # clean this module !!!
         do_visual_checks(ev, i, setup["output"], no_graphics)
         if i > 10:
             break

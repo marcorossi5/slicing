@@ -1,5 +1,7 @@
 # This file is part of SliceRL by M. Rossi
 import logging
+from tqdm import tqdm
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Input
 from tensorflow.keras.activations import relu, softmax
@@ -94,7 +96,9 @@ class HCNet(BatchCumulativeNetwork):
 
         # attention layers
         self.mhas = [
-            TransformerEncoder(dout, self.nb_mha_heads, attention_type="favor+",  name=f"mha_{ih}")
+            TransformerEncoder(
+                dout, self.nb_mha_heads, attention_type="favor+", name=f"mha_{ih}"
+            )
             for ih, dout in enumerate(self.mha_filters)
         ]
 
@@ -134,3 +138,24 @@ class HCNet(BatchCumulativeNetwork):
         stack = tf.stack(results, axis=-1)
         reduced = tf.reduce_mean(stack, axis=-1)
         return softmax(reduced)
+
+
+# ======================================================================
+# HC-Net inference
+def inference(network, test_generator, batch_size):
+    """
+    HC-Net prediction over a iterable of inputs
+
+    Parameters
+    ----------
+        - network: AbstractNet, network to get predictions
+        - test_generator: EventDataset, generator for inference
+        - batch_size: int
+
+    Returns
+    -------
+        - list, of np.array predictions, each of shape=(nb hits, nb feats)
+    """
+    inputs = test_generator.inputs
+    preds = [network.predict(ii[None], batch_size, verbose=0)[0] for ii in tqdm(inputs)]
+    return np.array(preds, dtype=object)
