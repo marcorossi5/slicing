@@ -123,22 +123,23 @@ class TransformerEncoder(Layer):
     implementation of the Attention mechanism for better memory management.
     """
 
-    def __init__(self, units, mha_heads, **kwargs):
+    def __init__(self, units, mha_heads, attention_type, **kwargs):
         """
         Parameters
         ----------
             - units: int, output feature dimensionality
             - mha_heads: int, number of heads in MultiHeadAttention layers
+            - attention_type: str, available options original | favor+
         """
         super(TransformerEncoder, self).__init__(**kwargs)
         self.units = units
         self.mha_heads = mha_heads
+        self.attention_type = attention_type
 
         self.norm0 = LayerNormalization(axis=-1, name="ln_0")
 
-        self.mlp = Sequential(
-            [Dense(units, activation="relu"), Dense(units, activation=None)], name="mlp"
-        )
+        self.fc0 = Dense(units, activation="relu", name="mlp_0")
+        self.fc1 = Dense(units, activation="relu", name="mlp_1")
 
         # self.conv = Conv1D(units, name="conv")
         self.norm1 = LayerNormalization(axis=-1, name="ln_1")
@@ -150,7 +151,12 @@ class TransformerEncoder(Layer):
         ----------
         """
         units = input_shape[-1]
-        self.mha = SelfAttentionWrapper(units, self.mha_heads, name="mha")
+        if self.attention_type == "original":
+            self.mha = MultiHeadAttention(self.mha_heads, units, name="mha")
+        elif self.attention_type == "favor+":
+            self.mha = SelfAttentionWrapper(units, self.mha_heads, name="mha")
+        else:
+            raise NotImplementedError(f"Attention type {self.attention_type} not implemented")
         super(TransformerEncoder, self).build(input_shape)
 
     # ----------------------------------------------------------------------
@@ -165,10 +171,15 @@ class TransformerEncoder(Layer):
             - tf.Tensor, output tensor of shape=(B, L, d_out)
         """
         # residual and multi head attention
-        x += self.mha(x)
+        if self.attention_type == "original":
+            x += self.mha(x, x)
+        else:
+            x += self.mha(x)
         # layer normalization
         x = self.norm0(x)
-        return self.norm1(self.mlp(x))
+        x = self.fc1(self.fc0(x))
+        output = self.norm1(x)
+        return output
 
     # ----------------------------------------------------------------------
     def get_config(self):
@@ -216,23 +227,23 @@ class Head(Layer):
             #     # lyrs.append(BatchNormalization(name=f"bn_{self.nb_head}_{i}"))
             #     # lyrs.append(Dropout(self.dropout, name=f"do_{self.nb_head}_{i}"))
 
-        self.fc = Sequential(lyrs, name=name)
+        self.fc = lyrs
 
     # ----------------------------------------------------------------------
-    def call(self, inputs):
+    def call(self, x):
         """
         Layer forward pass.
 
         Parameters
         ----------
-            - inputs : list of tf.Tensors, tensors describing spatial and
-                       feature point cloud of shapes=[(B,N,dims), (B,N,f_dims)]
-
+            - x : list of input tf.Tensors
         Returns
         -------
-            tf.Tensor of shape=(B,N,K,do)
+            - tf.Tensor of shape=(B,N,K,do)
         """
-        return self.fc(inputs)
+        for l in self.fc:
+            x = l(x)
+        return x
 
     # ----------------------------------------------------------------------
     def get_config(self):

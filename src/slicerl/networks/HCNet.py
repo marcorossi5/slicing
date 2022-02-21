@@ -94,7 +94,7 @@ class HCNet(BatchCumulativeNetwork):
 
         # attention layers
         self.mhas = [
-            TransformerEncoder(dout, self.nb_mha_heads, name=f"mha_{ih}")
+            TransformerEncoder(dout, self.nb_mha_heads, attention_type="favor+",  name=f"mha_{ih}")
             for ih, dout in enumerate(self.mha_filters)
         ]
 
