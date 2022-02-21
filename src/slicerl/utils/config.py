@@ -2,7 +2,6 @@
     This module reads the command line options and initializes the directory
     structure.
 """
-import os
 import shutil
 import logging
 import tensorflow as tf
@@ -16,24 +15,30 @@ from .utils import (
     save_runcard,
     modify_runcard,
 )
-from .configflow import set_manual_seed
 
 logger = logging.getLogger(PACKAGE)
 
 
 def preconfig_tf(setup):
     """
-    Set the host device for tensorflow. The CUDA_VISIBLE_DEVICES variable must
-    be set before prior to allocating any tensors or executing any tf ops.
+    Set the host device for tensorflow. 
     """
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
-    gpus = tf.config.list_physical_devices("GPU")
+    gpus = tf.config.list_physical_devices('GPU')
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
+    gpus = setup.get('gpu')
+    if gpus is not None:
+        if isinstance(gpus, int):
+            gpus = [gpus]
+        gpus = [tf.config.PhysicalDevice(f'/physical_device:GPU:{gpu}', 'GPU') for gpu in gpus]
+        tf.config.set_visible_devices(gpus, 'GPU')
+        logger.warning(f"Host device: GPU {gpus}")
+    else:
+        logger.warning("Host device: CPU")
+
     if setup.get("debug"):
         logger.warning("Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
-        # tf.data.experimental.enable_debug_mode()
 
 
 # ======================================================================
@@ -72,5 +77,6 @@ def config_init():
         should_save_dataset=args.save_dataset_test,
     )
 
+    from .configflow import set_manual_seed
     set_manual_seed(12345)
     return args, setup

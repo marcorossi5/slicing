@@ -40,7 +40,7 @@ def train_network(setup, net, generators):
 
     train_generator, val_generator = generators
 
-    logdir = setup["output"].joinpath(f"logs/{tm()}")
+    logdir = setup["output"] / f"logs/{tm()}"
     checkpoint_filepath = setup["output"].joinpath(f"network.h5").as_posix()
     callbacks = [
         ModelCheckpoint(
@@ -96,7 +96,8 @@ def train_network(setup, net, generators):
         net.load_weights(checkpoint_filepath)
         loss, acc, prec, rec = net.evaluate(val_generator, verbose=0)
         logger_hopt.info(
-            f"Evaluate model instance: [loss: {loss:.5f}, acc: {acc:.5f}, prec: {prec:.5f}, rec: {rec:.5f}]"
+            f"Evaluate model instance: [loss: {loss:.5f}, acc: {acc:.5f}, "
+            f"prec: {prec:.5f}, rec: {rec:.5f}]"
         )
         res = {
             "loss": -acc,
@@ -192,7 +193,7 @@ def inference(setup, test_generator, no_graphics=False):
             pc_pndr,
             pc_test,
             i,
-            setup["output"].joinpath("plots"),
+            setup["output"] / "plots",
         )
     """
 
@@ -364,7 +365,7 @@ def do_visual_checks(ev, evno, output_dir, no_graphics):
     )
 
     if no_graphics:
-        fname = output_dir.joinpath(f"plots/visual_check_{evno}.png")
+        fname = output_dir / f"plots/visual_check_{evno}.png"
         plt.savefig(fname, dpi=300, bbox_inches="tight")
         plt.close()
     plt.show()
