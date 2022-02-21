@@ -21,9 +21,11 @@ logger = logging.getLogger(PACKAGE)
 
 def preconfig_tf(setup):
     """
-    Set the host device for tensorflow. 
+    Set the host device for tensorflow.
     """
     gpus = tf.config.list_physical_devices('GPU')
+    if len(gpus) == 0:
+        return
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
     gpus = setup.get('gpu')

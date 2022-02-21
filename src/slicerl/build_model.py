@@ -135,6 +135,7 @@ def build_and_train_model(setup, generators):
         else:
             raise FileNotFoundError(f"{checkpoint_filepath} no such file or directory")
     net = load_and_compile_network(setup, checkpoint_filepath)
+    net.summary()
     return train_network(setup, net, generators)
 
 
