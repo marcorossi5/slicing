@@ -2,7 +2,6 @@
 import logging
 import tensorflow as tf
 from tensorflow.keras import Input
-from tensorflow.keras.layers import Concatenate
 from tensorflow.keras.activations import relu, softmax
 from slicerl import PACKAGE
 from .AbstractNet import BatchCumulativeNetwork
@@ -44,7 +43,7 @@ class HCNet(BatchCumulativeNetwork):
         self,
         units=128,
         f_dims=2,
-        nb_mha_heads=5,
+        nb_mha_heads=2,
         mha_filters=[16, 32],
         nb_fc_heads=5,
         fc_filters=[48, 64],

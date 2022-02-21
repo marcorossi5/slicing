@@ -61,7 +61,7 @@ def run_test_hcnet():
         "f_dims": f_dims,
         "units": units,
         "nb_mha_heads": 3,
-        "mha_filters": [12, 18],
+        "mha_filters": [12, 24],
         "nb_fc_heads": 3,
         "fc_filters": [8, 4],
         "name": "HC-Net",

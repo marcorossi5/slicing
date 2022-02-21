@@ -11,19 +11,19 @@ logger = logging.getLogger(PACKAGE)
 
 def get_metrics_cm():
     return [
-            tf.keras.metrics.BinaryAccuracy(name="acc"),
-            tf.keras.metrics.Precision(name="prec"),
-            tf.keras.metrics.Recall(name="rec"),
-        ]
+        tf.keras.metrics.BinaryAccuracy(name="acc"),
+        tf.keras.metrics.Precision(name="prec"),
+        tf.keras.metrics.Recall(name="rec"),
+    ]
 
 
 # ======================================================================
 def get_metrics_hc(nb_classes):
     return [
-            tf.keras.metrics.SparseCategoricalAccuracy(name="acc"),
-            tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, name="top5"),
-            # tf.keras.metrics.MeanIoU(nb_classes, name="MIoU")
-        ]
+        tf.keras.metrics.SparseCategoricalAccuracy(name="acc"),
+        tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, name="top5"),
+        # tf.keras.metrics.MeanIoU(nb_classes, name="MIoU")
+    ]
 
 
 # ======================================================================
@@ -65,7 +65,7 @@ def load_network_cm(setup):
         loss = dice_loss
     else:
         raise NotImplementedError("Loss function not implemented")
-    
+
     return network, loss
 
 
@@ -104,7 +104,7 @@ def load_and_compile_network(setup, checkpoint_filepath):
         network, loss = load_network_hc(setup)
     else:
         raise NotImplementedError(f"Modeltype not implemented, got {modeltype}")
-    
+
     metrics = get_metrics(modeltype, setup)
 
     network.compile(
@@ -113,7 +113,7 @@ def load_and_compile_network(setup, checkpoint_filepath):
         metrics=metrics,
         run_eagerly=setup.get("debug"),
     )
-    
+
     if checkpoint_filepath:
         network.load_weights(checkpoint_filepath.as_posix())
     return network

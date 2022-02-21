@@ -9,6 +9,7 @@ from tensorflow.keras.layers import (
     MultiHeadAttention,
     LayerNormalization,
 )
+from slicerl.fast_attention.fast_attention import SelfAttention
 
 # General-op layers
 class ReduceMax(Layer):
@@ -87,8 +88,40 @@ class MyGRU(Layer):
 
 # ======================================================================
 # Attention layers
+
+
+class SelfAttentionWrapper(SelfAttention):
+    """
+    A convenience wrapper for the SelfAttention layer.
+    """
+
+    def __init__(self, units, num_heads, attention_dropout=None, **kwargs):
+        """
+        Parameters
+        ----------
+            - units: int, output feature dimensionality
+            - num_heads: int, number of heads in MultiHeadAttention layers
+        
+        Note
+        ----
+        The input feature dimensionality should be exactly divisible by the
+        number of heads.       
+        """
+        super(SelfAttentionWrapper, self).__init__(
+            units, num_heads, attention_dropout, **kwargs
+        )
+
+    def call(self, query_input, bias=None, training=None, **kwargs):
+        return super(SelfAttentionWrapper, self).call(
+            query_input, bias, training, **kwargs
+        )
+
+
 class TransformerEncoder(Layer):
-    """Implementation of ViT Encoder layer."""
+    """
+    Implementation of ViT Encoder layer. This block exploits the fast
+    implementation of the Attention mechanism for better memory management.
+    """
 
     def __init__(self, units, mha_heads, **kwargs):
         """
@@ -117,7 +150,7 @@ class TransformerEncoder(Layer):
         ----------
         """
         units = input_shape[-1]
-        self.mha = MultiHeadAttention(self.mha_heads, units, name="mha")
+        self.mha = SelfAttentionWrapper(units, self.mha_heads, name="mha")
         super(TransformerEncoder, self).build(input_shape)
 
     # ----------------------------------------------------------------------
@@ -132,7 +165,7 @@ class TransformerEncoder(Layer):
             - tf.Tensor, output tensor of shape=(B, L, d_out)
         """
         # residual and multi head attention
-        x += self.mha(x, x)
+        x += self.mha(x)
         # layer normalization
         x = self.norm0(x)
         return self.norm1(self.mlp(x))

@@ -1,0 +1,1 @@
+""" The fast attention implementation by Google Research Authors. """
