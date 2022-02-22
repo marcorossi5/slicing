@@ -59,9 +59,9 @@ def config_init():
     if args.runcard:
         setup.update(load_runcard(args.runcard))
         initialize_output_folder(args.output, args.force, setup.get("scan"))
-        setup["output"] = args.output
+        setup["output"] = args.output.as_posix()
         shutil.copyfile(args.runcard, args.output / "input-runcard.yaml")
-        save_runcard(args.output / "runcard.yaml", setup)
+        save_runcard(args.output / "runcard.yaml", setup, modify=False)
     elif args.model:
         setup = load_runcard(args.model / "runcard.yaml")
     else:
