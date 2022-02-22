@@ -112,28 +112,26 @@ def train_network(setup, net, generators):
 
 
 # ======================================================================
-def build_and_train_model(setup, generators):
+def build_and_train_model(setup, generators, seed=12345):
     """
     Train a model. If setup['scan'] is True, then perform hyperparameter search.
 
     Parameters
     ----------
-        - setup      : dict
-        - generators : list, of EventDataset with train and val generators
+        - setup: dict
+        - generators: list, of EventDataset with train and val generators
+        - seed: int, random generator seed for reproducibility
 
     Retruns
     -------
         network model if scan is False, else dict with loss and status keys.
     """
     tfK.clear_session()
-    set_manual_seed(12345)
+    set_manual_seed(seed)
     iw = setup["train"]["initial_weights"]
     checkpoint_filepath = Path(iw) if iw is not None else iw
-    if checkpoint_filepath:
-        if checkpoint_filepath.is_file():
-            logger.info(f"Found initial weights configuration at {checkpoint_filepath}")
-        else:
-            raise FileNotFoundError(f"{checkpoint_filepath} no such file or directory")
+    if checkpoint_filepath and not checkpoint_filepath.is_file():
+        raise FileNotFoundError(f"{checkpoint_filepath} no such file or directory")
     net = load_and_compile_network(setup, checkpoint_filepath)
     net.summary()
     return train_network(setup, net, generators)
@@ -144,6 +142,8 @@ def inference(setup, test_generator, no_graphics=False):
     tfK.clear_session()
     logger.info("Done with training, load best weights")
     checkpoint_filepath = setup["output"] / setup["test"]["checkpoint"]
+    if checkpoint_filepath and not checkpoint_filepath.is_file():
+        raise FileNotFoundError(f"{checkpoint_filepath} no such file or directory")
     net = load_and_compile_network(setup, checkpoint_filepath)
 
     y_pred = get_prediction(
@@ -155,15 +155,15 @@ def inference(setup, test_generator, no_graphics=False):
 
     test_generator.events = y_pred
 
-    import matplotlib.pyplot as plt
-    from slicerl.diagnostics import cmap, norm
-    for plane in test_generator.events[0].planes:
-        plt.subplot(121)
-        plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.status, cmap=cmap, norm=norm)
-        plt.subplot(122)
-        plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.ordered_mc_idx, cmap=cmap, norm=norm )
-        plt.show()
-        exit()
+    # import matplotlib.pyplot as plt
+    # from slicerl.diagnostics import cmap, norm
+    # for plane in test_generator.events[0].planes:
+    #     plt.subplot(121)
+    #     plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.status, cmap=cmap, norm=norm, s=3)
+    #     plt.subplot(122)
+    #     plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.ordered_mc_idx, cmap=cmap, norm=norm, s=3)
+    #     plt.show()
+    exit()
     for i, ev in enumerate(test_generator.events):
         # TODO: make diagnostics subfolder and jsut call a make_plots wrap function
         # clean this module !!!

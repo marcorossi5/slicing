@@ -53,7 +53,7 @@ def load_network_cm(setup):
         "batch_size": setup["model"]["batch_size"],
         "f_dims": setup["model"]["f_dims"],
         "use_bias": setup["model"]["use_bias"],
-        "activation": lambda x: tf.keras.activations.relu(x, alpha=0.2),
+        "activation": lambda x: tf.keras.activations.relu(x, alpha=0.),
     }
     network = CMNet(name="CM-Net", **net_dict)
 
@@ -84,7 +84,7 @@ def load_network_hc(setup):
 
 
 # ======================================================================
-def load_and_compile_network(setup, checkpoint_filepath):
+def load_and_compile_network(setup, checkpoint_filepath=None):
     modeltype = setup["model"]["net_type"]
 
     # optimizer
@@ -114,6 +114,7 @@ def load_and_compile_network(setup, checkpoint_filepath):
         run_eagerly=setup.get("debug"),
     )
 
-    if checkpoint_filepath:
-        network.load_weights(checkpoint_filepath.as_posix())
+    # if checkpoint_filepath:
+    #     logger.info(f"Loading weights at {checkpoint_filepath}")
+    #     network.load_weights(checkpoint_filepath)
     return network

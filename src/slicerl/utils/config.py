@@ -84,5 +84,5 @@ def config_init():
 
     from .configflow import set_manual_seed
 
-    set_manual_seed(12345)
+    set_manual_seed(args.seed)
     return args, setup

@@ -38,7 +38,7 @@ def main():
                 logger.info(f"Saving dataset to {from_np_path}")
                 save_dataset_np(generators, from_np_path)
                 exit()
-        build_and_train_model(setup, generators)
+        build_and_train_model(setup, generators, args.seed)
         save_runcard(setup["output"] / "runcard.yaml", setup)
         logger.info(f"Training done in {tm()-start} s")
 

@@ -199,6 +199,7 @@ class Head(Layer):
         dropout_idxs=None,
         dropout=None,
         activation="relu",
+        kernel_initializer=tf.keras.initializers.GlorotUniform,
         name="head",
         **kwargs,
     ):
@@ -220,6 +221,7 @@ class Head(Layer):
                 Dense(
                     filters,
                     activation=self.activation,
+                    kernel_initializer=kernel_initializer,
                     name=f"dense_{i}",
                 )
             )

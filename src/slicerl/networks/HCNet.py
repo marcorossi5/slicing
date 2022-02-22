@@ -4,6 +4,7 @@ from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Input
+from tensorflow.keras.layers import Dense
 from tensorflow.keras.activations import relu, softmax
 from slicerl import PACKAGE
 from .AbstractNet import BatchCumulativeNetwork
@@ -45,15 +46,16 @@ class HCNet(BatchCumulativeNetwork):
         self,
         units=128,
         f_dims=2,
-        nb_mha_heads=2,
-        mha_filters=[16, 32],
-        nb_fc_heads=5,
-        fc_filters=[48, 64],
+        nb_mha_heads=1,
+        mha_filters=[32],
+        # mha_filters=list(range(8,34,4)),
+        nb_fc_heads=1,
+        fc_filters=[64],
         batch_size=1,
         activation=relu,
         use_bias=True,
         verbose=False,
-        name="CM-Net",
+        name="HC-Net",
         **kwargs,
     ):
         """
@@ -93,6 +95,8 @@ class HCNet(BatchCumulativeNetwork):
                 f"adapting last layer ..."
             )
             self.fc_filters.append(self.units)
+        
+        self.pre_fc = Dense(16, name='pre')
 
         # attention layers
         self.mhas = [
@@ -107,6 +111,7 @@ class HCNet(BatchCumulativeNetwork):
             Head(
                 self.fc_filters,
                 activation=self.activation,
+                kernel_initializer=tf.keras.initializers.get('GlorotNormal'),
                 name=f"head_{ih}",
             )
             for ih in range(self.nb_fc_heads)
@@ -118,16 +123,17 @@ class HCNet(BatchCumulativeNetwork):
         super(HCNet, self).build((1,) + self.inputs_shape)
 
     # ----------------------------------------------------------------------
-    def call(self, x):
+    def call(self, inputs):
         """
         Parameters
         ----------
-            - x: tf.Tensor, point cloud of hits of shape=(1,[nb hits],f_dims)
+            - inputs: tf.Tensor, point cloud of hits of shape=(1,[nb hits],f_dims)
 
         Returns
         -------
             tf.Tensor, hit class prbabilities of shape=(1,N,units)
         """
+        x = self.pre_fc(inputs)
         for mha in self.mhas:
             x = self.activation(mha(x))
 

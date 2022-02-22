@@ -157,6 +157,12 @@ def get_cmd_args():
         action="store_true",
         help="Just train with ../dataset/train folder",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=12345,
+        help="random generator seed for reproducibility"
+    )
     return parser.parse_args()
 
 

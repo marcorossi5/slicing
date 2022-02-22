@@ -54,7 +54,18 @@ class EventDataset(tf.keras.utils.Sequence):
             for i, event in enumerate(self.__events):
                 for j, plane in enumerate(event.planes):
                     y_sparse = y_pred.all_y_pred[3*i + j]
-                    plane.status = np.amax(y_sparse, axis=1)
+                    plane.status = np.argmax(y_sparse, axis=1)
+
+                    # import matplotlib.pyplot as plt
+                    # plt.subplot(2,1,1)
+                    # for y in y_sparse[:20]:
+                    #     plt.plot(range(64), y, lw=0.5)
+                    # idx = np.argmax(y_sparse,axis=1)
+                    # bins = np.linspace(-0.5, 63.5, 65)
+                    # h, _ = np.histogram(idx, bins=bins)
+                    # plt.subplot(2,1,2)
+                    # plt.hist(bins[:-1], bins, weights=h)
+                    # plt.show()
         else:
             raise ValueError(
                 "Cannot set events attribute, found None"
@@ -83,8 +94,9 @@ def _build_dataset(fn, nev, min_hits, should_split=False, split=None):
 
     for ev in events:
         for plane in ev.planes:
-            norm = len(set(plane.ordered_cluster_idx))
-            norm_clusters = plane.ordered_cluster_idx / norm
+            norm_clusters = plane.ordered_cluster_idx
+            # norm = len(set(plane.ordered_cluster_idx))
+            # norm_clusters = plane.ordered_cluster_idx / norm
             inputs.append(
                 np.concatenate([plane.point_cloud, [norm_clusters]], axis=0).T
             )
