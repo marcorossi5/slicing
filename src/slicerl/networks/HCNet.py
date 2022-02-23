@@ -163,7 +163,7 @@ class HCNet(BatchCumulativeNetwork):
 
 # ======================================================================
 # HC-Net inference
-def inference(network, test_generator, batch_size):
+def inference(network, test_generator):
     """
     HC-Net prediction over a iterable of inputs
 
@@ -171,12 +171,11 @@ def inference(network, test_generator, batch_size):
     ----------
         - network: AbstractNet, network to get predictions
         - test_generator: EventDataset, generator for inference
-        - batch_size: int
 
     Returns
     -------
         - list, of np.array predictions, each of shape=(nb hits, nb feats)
     """
     inputs = test_generator.inputs
-    preds = [network.predict(ii[None], batch_size, verbose=0)[0] for ii in tqdm(inputs)]
+    preds = [network.predict(ii[None], verbose=0)[0] for ii in tqdm(inputs)]
     return np.array(preds, dtype=object)

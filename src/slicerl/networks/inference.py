@@ -52,12 +52,12 @@ class Predictions:
 
 
 # ======================================================================
-def get_prediction(network, test_generator, batch_size, threshold=0.5):
+def get_prediction(network, test_generator, threshold=0.5):
     """Inference Wrapper function."""
     if isinstance(network, CMNet.CMNet):
-        outputs = CMNet.inference(network, test_generator, batch_size, threshold)
+        outputs = CMNet.inference(network, test_generator, threshold)
     elif isinstance(network, HCNet.HCNet):
-        outputs = HCNet.inference(network, test_generator, batch_size)
+        outputs = HCNet.inference(network, test_generator)
     else:
         raise NotImplementedError(f"Model not implemented, got {type(network)}")
     return Predictions(outputs)

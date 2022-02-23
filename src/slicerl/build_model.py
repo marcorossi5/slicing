@@ -149,7 +149,6 @@ def inference(setup, test_generator, no_graphics=False):
     y_pred = get_prediction(
         net,
         test_generator,
-        setup["model"]["test_batch_size"],
         threshold=setup["model"]["threshold"],
     )
 

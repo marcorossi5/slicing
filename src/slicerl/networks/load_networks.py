@@ -21,6 +21,7 @@ def get_metrics_cm():
 def get_metrics_hc(nb_classes):
     return [
         tf.keras.metrics.SparseCategoricalAccuracy(name="acc"),
+        tf.keras.metrics.SparseTopKCategoricalAccuracy(k=3, name="top3"),
         tf.keras.metrics.SparseTopKCategoricalAccuracy(k=5, name="top5"),
         # tf.keras.metrics.MeanIoU(nb_classes, name="MIoU")
     ]
@@ -36,7 +37,7 @@ def get_metrics(modeltype, setup):
 
 # ======================================================================
 def get_activation(act):
-    """ Get activation from string. """
+    """Get activation from string."""
     try:
         fn = tf.keras.activations.get(act)
         activation = lambda x: fn(x)
@@ -63,7 +64,7 @@ def load_network_cm(msetup, loss_str):
         - Network
         - loss
     """
-    
+
     net_dict = {
         "f_dims": msetup["f_dims"],
         "nb_mha_heads": msetup["nb_mha_heads"],
@@ -154,5 +155,4 @@ def load_and_compile_network(setup, checkpoint_filepath=None):
     if checkpoint_filepath:
         logger.info(f"Loading weights at {checkpoint_filepath}")
         network.load_weights(checkpoint_filepath)
-    exit()
     return network

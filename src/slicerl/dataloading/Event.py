@@ -184,17 +184,6 @@ class PlaneView:
         self.PDG = self.calohits[10]  # parent mc particle PDG array
         self.pfo_index = self.calohits[11]  # parent pfo index attribute
 
-        # import matplotlib.pyplot as plt
-        # from slicerl.diagnostics import cmap, norm
-        # plt.figure()
-        # plt.title("ProtoDUNE-SP simulation preliminary: U plane slices (MC truths)")
-        # plt.xlabel("x [cm]")
-        # plt.ylabel("z [cm]")
-        # plt.scatter(original_hits[1]*1000, original_hits[2]*1000, s=1, c=original_hits[7]%128, cmap=cmap, norm=norm)
-        # plt.savefig("mc_slices.png", dpi=300, bbox_inches='tight')
-        # plt.show()
-        # exit()
-
     # ----------------------------------------------------------------------
     def __len__(self):
         return self.nb_calohits

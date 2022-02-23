@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 import numpy as np
 import tensorflow as tf
 from slicerl import PACKAGE
@@ -35,12 +36,12 @@ class EventDataset(tf.keras.utils.Sequence):
     # ----------------------------------------------------------------------
     def __len__(self):
         return len(self.inputs)
-    
+
     # ----------------------------------------------------------------------
     @property
     def events(self):
         return self.__events
-    
+
     # ----------------------------------------------------------------------
     @events.setter
     def events(self, y_pred):
@@ -53,7 +54,7 @@ class EventDataset(tf.keras.utils.Sequence):
         if self.__events:
             for i, event in enumerate(self.__events):
                 for j, plane in enumerate(event.planes):
-                    y_sparse = y_pred.all_y_pred[3*i + j]
+                    y_sparse = y_pred.all_y_pred[3 * i + j]
                     plane.status = np.argmax(y_sparse, axis=1)
 
                     # just a debugging plot
@@ -74,13 +75,16 @@ class EventDataset(tf.keras.utils.Sequence):
 
 
 # ======================================================================
-def _build_dataset(fn, nev, min_hits, should_split=False, split=None):
+def _build_dataset(
+    fn, nev, min_hits, should_split=False, split=None, should_standardize=None
+):
     """
     Parameters
     ----------
         - setup: dict
         - should_split: bool, wether to hold out validation set
         - split: float, split percentage in the [0,1] range
+        - should_standardize: standardize hit features plane by plane
 
     Returns
     -------
@@ -95,6 +99,12 @@ def _build_dataset(fn, nev, min_hits, should_split=False, split=None):
     for ev in events:
         for plane in ev.planes:
             norm_clusters = plane.ordered_cluster_idx
+            feats = deepcopy(plane.point_cloud)
+            if should_standardize:
+                feats[0] = (feats[0] - feats[0].mean()) / feats[0].std()
+                feats[1:3] = feats[1:3] - feats[1:3].mean(1, keepdims=True)
+                norm_clusters = (norm_clusters - norm_clusters.mean())
+
             # norm = len(set(plane.ordered_cluster_idx))
             # norm_clusters = plane.ordered_cluster_idx / norm
             inputs.append(
@@ -121,32 +131,26 @@ def _build_dataset(fn, nev, min_hits, should_split=False, split=None):
         val_trg = targets[perm[nb_split:]]
 
         # events are not returned when training
-        return EventDataset([None, train_inp, train_trg]), EventDataset([None, val_inp, val_trg])
+        return EventDataset([None, train_inp, train_trg]), EventDataset(
+            [None, val_inp, val_trg]
+        )
     return EventDataset([events, inputs, targets], shuffle=False)
 
 
 # ======================================================================
-def build_dataset_train(setup):
-    fn = setup["train"]["fn"]
-    nev = setup["train"]["nev"]
-    min_hits = setup["train"]["min_hits"]
-    split = setup["dataset"]["split"]
-
-    return _build_dataset(fn, nev, min_hits, should_split=True, split=split)
-
-
-# ======================================================================
-def build_dataset_test(setup):
-    fn = setup["test"]["fn"]
-    nev = setup["test"]["nev"]
-    min_hits = setup["test"]["min_hits"]
-
-    return _build_dataset(fn, nev, min_hits, should_split=False)
-
-
-# ======================================================================
 def build_dataset(setup, is_training=None):
-    if is_training:
-        return build_dataset_train(setup)
-    else:
-        return build_dataset_test(setup)
+    key = "train" if is_training else "test"
+    fn = setup[key]["fn"]
+    nev = setup[key]["nev"]
+    min_hits = setup[key]["min_hits"]
+    split = setup["dataset"]["split"]
+    should_split = is_training and (0 < split < 1)
+    should_standardize = setup["dataset"]["standardize"]
+    return _build_dataset(
+        fn,
+        nev,
+        min_hits,
+        should_split=should_split,
+        split=split,
+        should_standardize=should_standardize,
+    )

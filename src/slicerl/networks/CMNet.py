@@ -127,7 +127,7 @@ class CMNet(AbstractNet, BatchCumulativeNetwork):
 
 # ======================================================================
 # CM-Net inference
-def inference(network, test_generator, batch_size, threshold=0.5):
+def inference(network, test_generator, threshold=0.5):
     """
     CM-Net prediction over a iterable of inputs
 
@@ -135,7 +135,6 @@ def inference(network, test_generator, batch_size, threshold=0.5):
     ----------
         - network: AbstractNet, network to get predictions
         - test_generator: EventDataset, generator for inference
-        - batch_size: int
         - threshold: float, interpret as positive if network prediction is
                      above threshold
 
@@ -160,7 +159,7 @@ def inference(network, test_generator, batch_size, threshold=0.5):
     for inp, nb_planes_clusters, cthreshold in zipped:
         # predict cluster pair connections
         pred = [
-            network.predict(ii[None], batch_size, verbose=0).flatten()
+            network.predict(ii[None], verbose=0).flatten()
             for ii in tqdm(inp)
         ]
         pred = np.concatenate(pred)
