@@ -155,14 +155,14 @@ def inference(setup, test_generator, no_graphics=False):
 
     test_generator.events = y_pred
 
-    # import matplotlib.pyplot as plt
-    # from slicerl.diagnostics import cmap, norm
-    # for plane in test_generator.events[0].planes:
-    #     plt.subplot(121)
-    #     plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.status, cmap=cmap, norm=norm, s=3)
-    #     plt.subplot(122)
-    #     plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.ordered_mc_idx, cmap=cmap, norm=norm, s=3)
-    #     plt.show()
+    import matplotlib.pyplot as plt
+    from slicerl.diagnostics import cmap, norm
+    for plane in test_generator.events[0].planes:
+        plt.subplot(121)
+        plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.status, cmap=cmap, norm=norm, s=3)
+        plt.subplot(122)
+        plt.scatter(plane.calohits[1], plane.calohits[2], c=plane.ordered_mc_idx, cmap=cmap, norm=norm, s=3)
+        plt.show()
     exit()
     for i, ev in enumerate(test_generator.events):
         # TODO: make diagnostics subfolder and jsut call a make_plots wrap function

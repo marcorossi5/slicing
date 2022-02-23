@@ -55,7 +55,7 @@ def create_projection_matrix(m, d, seed=0, scaling=0, struct_mode=False):
     if struct_mode:
       q = create_products_of_givens_rotations(d, seed)
     else:
-      unstructured_block = tf.random.normal((d, d), seed=current_seed)
+      unstructured_block = tf.random.normal((d, d)) # , seed=current_seed)
       q, _ = tf.linalg.qr(unstructured_block)
       q = tf.transpose(q)
     block_list.append(q)
@@ -65,7 +65,7 @@ def create_projection_matrix(m, d, seed=0, scaling=0, struct_mode=False):
     if struct_mode:
       q = create_products_of_givens_rotations(d, seed)
     else:
-      unstructured_block = tf.random.normal((d, d), seed=current_seed)
+      unstructured_block = tf.random.normal((d, d)) # , seed=current_seed)
       q, _ = tf.linalg.qr(unstructured_block)
       q = tf.transpose(q)
     block_list.append(q[0:remaining_rows])
@@ -73,7 +73,7 @@ def create_projection_matrix(m, d, seed=0, scaling=0, struct_mode=False):
   current_seed += 1
 
   if scaling == 0:
-    multiplier = tf.norm(tf.random.normal((m, d), seed=current_seed), axis=1)
+    multiplier = tf.norm(tf.random.normal((m, d)), axis=1)
   elif scaling == 1:
     multiplier = tf.math.sqrt(float(d)) * tf.ones((m))
   else:
@@ -158,7 +158,7 @@ def softmax_kernel_transformation(data,
   Args:
     data: input data tensor of the shape [B, L, H, D], where: B - batch
       dimension, L - attention dimensions, H - heads, D - features.
-    is_query: indicates whether input data is a query oor key tensor.
+    is_query: indicates whether input data is a query or key tensor.
     projection_matrix: random Gaussian matrix of shape [M, D], where M stands
       for the number of random features and each D x D sub-block has pairwise
       orthogonal rows.

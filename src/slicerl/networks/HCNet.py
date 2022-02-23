@@ -47,8 +47,10 @@ class HCNet(BatchCumulativeNetwork):
         units=128,
         f_dims=2,
         nb_mha_heads=1,
-        mha_filters=[32],
-        # mha_filters=list(range(8,34,4)),
+        mha_filters=[16, 32, 64],
+        kernel_transformation="softmax",
+        projection_matrix_type="random",
+        nb_random_features=128,
         nb_fc_heads=1,
         fc_filters=[64],
         batch_size=1,
@@ -65,6 +67,9 @@ class HCNet(BatchCumulativeNetwork):
             - f_dims: int, number of point cloud feature dimensions
             - nb_mha_heads: int, the number of heads in the `MultiHeadAttention` layer
             - mha_filters: list, the output units for each `MultiHeadAttention` in the stack
+            - kernel_transformation: str, available options softmax | relu
+            - projection_matrix_type: str, available options random | None
+            - nb_random_features: int, favor+ random features number
             - nb_fc_heads: int, the number of `Head` layers to be concatenated
             - fc_filters: list, the output units for each `Head` in the stack
             - batch_size: int, the effective batch size for gradient descent
@@ -80,6 +85,9 @@ class HCNet(BatchCumulativeNetwork):
         self.f_dims = f_dims
         self.nb_mha_heads = nb_mha_heads
         self.mha_filters = mha_filters
+        self.kernel_transformation = kernel_transformation
+        self.projection_matrix_type = projection_matrix_type
+        self.nb_random_features = nb_random_features
         self.nb_fc_heads = nb_fc_heads
         self.fc_filters = fc_filters
         self.batch_size = int(batch_size)
@@ -95,13 +103,20 @@ class HCNet(BatchCumulativeNetwork):
                 f"adapting last layer ..."
             )
             self.fc_filters.append(self.units)
-        
-        self.pre_fc = Dense(16, name='pre')
+
+        # pre encoder layer
+        self.pre_fc = Dense(16, name="pre")
 
         # attention layers
         self.mhas = [
             TransformerEncoder(
-                dout, self.nb_mha_heads, attention_type="favor+", name=f"mha_{ih}"
+                dout,
+                self.nb_mha_heads,
+                attention_type="favor+",
+                kernel_transformation=self.kernel_transformation,
+                projection_matrix_type=self.projection_matrix_type,
+                nb_random_features=self.nb_random_features,
+                name=f"mha_{ih}",
             )
             for ih, dout in enumerate(self.mha_filters)
         ]
@@ -111,7 +126,7 @@ class HCNet(BatchCumulativeNetwork):
             Head(
                 self.fc_filters,
                 activation=self.activation,
-                kernel_initializer=tf.keras.initializers.get('GlorotNormal'),
+                # kernel_initializer="GlorotNormal",
                 name=f"head_{ih}",
             )
             for ih in range(self.nb_fc_heads)

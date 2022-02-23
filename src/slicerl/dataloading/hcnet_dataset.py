@@ -56,10 +56,10 @@ class EventDataset(tf.keras.utils.Sequence):
                     y_sparse = y_pred.all_y_pred[3*i + j]
                     plane.status = np.argmax(y_sparse, axis=1)
 
+                    # just a debugging plot
                     # import matplotlib.pyplot as plt
                     # plt.subplot(2,1,1)
-                    # for y in y_sparse[:20]:
-                    #     plt.plot(range(64), y, lw=0.5)
+                    # plt.plot(y_sparse[:30,].T, lw=0.5)
                     # idx = np.argmax(y_sparse,axis=1)
                     # bins = np.linspace(-0.5, 63.5, 65)
                     # h, _ = np.histogram(idx, bins=bins)

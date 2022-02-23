@@ -9,7 +9,11 @@ from tensorflow.keras.layers import (
     MultiHeadAttention,
     LayerNormalization,
 )
-from slicerl.fast_attention.fast_attention import SelfAttention
+from slicerl.fast_attention.fast_attention import (
+    SelfAttention,
+    relu_kernel_transformation,
+    softmax_kernel_transformation,
+)
 
 # General-op layers
 class ReduceMax(Layer):
@@ -88,27 +92,54 @@ class MyGRU(Layer):
 
 # ======================================================================
 # Attention layers
-
-
 class SelfAttentionWrapper(SelfAttention):
     """
     A convenience wrapper for the SelfAttention layer.
     """
 
-    def __init__(self, units, num_heads, attention_dropout=None, **kwargs):
+    def __init__(
+        self,
+        units,
+        num_heads,
+        attention_dropout=None,
+        kernel_transformation="softmax",
+        projection_matrix_type="random",
+        nb_random_features=128,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
             - units: int, output feature dimensionality
             - num_heads: int, number of heads in MultiHeadAttention layers
+            - attention_dropout: float, dropout percentage
+            - kernel_transformation: str, available options relu | softmax
+            - projection_matrix_type: str, random or identity if None
+            - nb_random_features: int, favor+ random features number
 
         Note
         ----
         The input feature dimensionality should be exactly divisible by the
         number of heads.
         """
+        if kernel_transformation == "softmax":
+            kt = softmax_kernel_transformation
+        elif kernel_transformation == "relu":
+            kt = relu_kernel_transformation
+        else:
+            raise NotImplementedError(
+                "Kernel transformation not implemented"
+                f", found {kernel_transformation}"
+            )
+
         super(SelfAttentionWrapper, self).__init__(
-            units, num_heads, attention_dropout, **kwargs
+            units,
+            num_heads,
+            attention_dropout,
+            kernel_transformation=kt,
+            projection_matrix_type=projection_matrix_type,
+            nb_random_features=nb_random_features,
+            **kwargs,
         )
 
     def call(self, query_input, bias=None, training=None, **kwargs):
@@ -123,18 +154,33 @@ class TransformerEncoder(Layer):
     implementation of the Attention mechanism for better memory management.
     """
 
-    def __init__(self, units, mha_heads, attention_type, **kwargs):
+    def __init__(
+        self,
+        units,
+        mha_heads,
+        attention_type,
+        kernel_transformation="softmax",
+        projection_matrix_type="random",
+        nb_random_features=128,
+        **kwargs,
+    ):
         """
         Parameters
         ----------
             - units: int, output feature dimensionality
             - mha_heads: int, number of heads in MultiHeadAttention layers
             - attention_type: str, available options original | favor+
+            - kernel_transformation: str, available options relu | softmax
+            - projection_matrix_type: str, random or identity if None
+            - nb_random_features: int, favor+ random features number
         """
         super(TransformerEncoder, self).__init__(**kwargs)
         self.units = units
         self.mha_heads = mha_heads
         self.attention_type = attention_type
+        self.kernel_transformation = kernel_transformation
+        self.projection_matrix_type = projection_matrix_type
+        self.nb_random_features = nb_random_features
 
         self.norm0 = LayerNormalization(axis=-1, name="ln_0")
 
@@ -154,7 +200,14 @@ class TransformerEncoder(Layer):
         if self.attention_type == "original":
             self.mha = MultiHeadAttention(self.mha_heads, units, name="mha")
         elif self.attention_type == "favor+":
-            self.mha = SelfAttentionWrapper(units, self.mha_heads, name="mha")
+            self.mha = SelfAttentionWrapper(
+                units,
+                self.mha_heads,
+                kernel_transformation=self.kernel_transformation,
+                projection_matrix_type=self.projection_matrix_type,
+                nb_random_features=self.nb_random_features,
+                name="mha",
+            )
         else:
             raise NotImplementedError(
                 f"Attention type {self.attention_type} not implemented"
@@ -199,7 +252,7 @@ class Head(Layer):
         dropout_idxs=None,
         dropout=None,
         activation="relu",
-        kernel_initializer=tf.keras.initializers.GlorotUniform,
+        kernel_initializer="GlorotUniform",
         name="head",
         **kwargs,
     ):
@@ -214,6 +267,7 @@ class Head(Layer):
         self.dropout_idxs = dropout_idxs
         self.dropout = dropout
         self.activation = activation
+        self.kernel_initializer = tf.keras.initializers.get(kernel_initializer)
         lyrs = []
 
         for i, filters in enumerate(self.filters):
@@ -221,7 +275,7 @@ class Head(Layer):
                 Dense(
                     filters,
                     activation=self.activation,
-                    kernel_initializer=kernel_initializer,
+                    kernel_initializer=self.kernel_initializer,
                     name=f"dense_{i}",
                 )
             )
