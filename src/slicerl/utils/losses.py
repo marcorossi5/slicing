@@ -7,7 +7,7 @@ from tensorflow.keras.losses import (
     CategoricalCrossentropy,
     SparseCategoricalCrossentropy,
     Reduction,
-    KLDivergence
+    KLDivergence,
 )
 from .configflow import EPS_TF, float_me, int_me
 from .tools import onehot_tf
@@ -206,7 +206,9 @@ class CombinedLoss(Loss):
             shape=() otherwise.
         """
         cxe = self.xent(y_true, y_pred)
-        size_true = tf.reduce_sum(onehot_tf(int_me(y_true), self.nb_classes), axis=1) + EPS_TF
+        size_true = (
+            tf.reduce_sum(onehot_tf(int_me(y_true), self.nb_classes), axis=1) + EPS_TF
+        )
         size_pred = tf.reduce_sum(y_pred, axis=1) + EPS_TF
         half = (size_true + size_pred) * 0.5
         l_loss = 0.5 * (self.l_loss(size_true, half) + self.l_loss(size_pred, half))

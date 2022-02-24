@@ -82,27 +82,30 @@ def augment_dataset(feats, nb_rotations):
     ----------
         - feats: np.array, of shape=(nb coordinates, nb points)
         - nb_rotations: int, number of rotations to apply to inputs
-    
+
     Returns
     -------
         - list: the augmented inputs
     """
-    r = lambda t: np.array(
-        [[np.cos(t), -np.sin(t)],
-         [np.sin(t), np.cos(t)]]
-    )
-    ts = np.linspace(0, 2*np.pi, nb_rotations + 2)[:-1]
-    rots = np.transpose(r(ts), [2,0,1])
+    r = lambda t: np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]])
+    ts = np.linspace(0, 2 * np.pi, nb_rotations + 2)[:-1]
+    rots = np.transpose(r(ts), [2, 0, 1])
     coords = np.einsum("ab,rac->rcb", feats[1:3], rots)
-    energies = np.repeat(np.expand_dims(feats[:1], 0), nb_rotations, axis=0)
-    extras = np.repeat(np.expand_dims(feats[3:], 0), nb_rotations, axis=0)
+    energies = np.repeat(np.expand_dims(feats[:1], 0), nb_rotations + 1, axis=0)
+    extras = np.repeat(np.expand_dims(feats[3:], 0), nb_rotations + 1, axis=0)
     new_feats = np.concatenate([energies, coords, extras], axis=1)
-    return list(np.transpose(new_feats, [0,2,1]))
+    return list(np.transpose(new_feats, [0, 2, 1]))
 
 
 # ======================================================================
 def _build_dataset(
-    fn, nev, min_hits, should_split=False, split=None, should_standardize=None, nb_rotations=0,
+    fn,
+    nev,
+    min_hits,
+    should_split=False,
+    split=None,
+    should_standardize=None,
+    nb_rotations=0,
 ):
     """
     Parameters
@@ -132,12 +135,12 @@ def _build_dataset(
             feats = deepcopy(plane.point_cloud)
             if should_standardize:
                 feats[0] = (feats[0] - feats[0].mean()) / feats[0].std()
-                norm_clusters = (norm_clusters - norm_clusters.mean())
+                norm_clusters = norm_clusters - norm_clusters.mean()
             inp = np.concatenate([plane.point_cloud, [norm_clusters]], axis=0)
-            
+
             if nb_rotations:
                 inputs.extend(augment_dataset(inp, nb_rotations))
-                targets.extend([plane.ordered_mc_idx]*nb_rotations)
+                targets.extend([plane.ordered_mc_idx] * nb_rotations)
             else:
                 inputs.append(inp.T)
                 targets.append(plane.ordered_mc_idx)

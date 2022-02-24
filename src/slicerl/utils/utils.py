@@ -161,7 +161,7 @@ def get_cmd_args():
         "--seed",
         type=int,
         default=12345,
-        help="random generator seed for reproducibility"
+        help="random generator seed for reproducibility",
     )
     return parser.parse_args()
 

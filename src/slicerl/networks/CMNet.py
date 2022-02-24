@@ -158,10 +158,7 @@ def inference(network, test_generator, threshold=0.5):
     zipped = zip(inputs, nb_clusters_list, test_cthresholds)
     for inp, nb_planes_clusters, cthreshold in zipped:
         # predict cluster pair connections
-        pred = [
-            network.predict(ii[None], verbose=0).flatten()
-            for ii in tqdm(inp)
-        ]
+        pred = [network.predict(ii[None], verbose=0).flatten() for ii in tqdm(inp)]
         pred = np.concatenate(pred)
         # pred = np.load("../output/test/pred.npy")
         np.save("../output/test/pred.npy", pred)

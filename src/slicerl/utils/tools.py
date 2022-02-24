@@ -186,7 +186,9 @@ def onehot_tf(ind, depth):
     -------
         np.array, one-hot encoded array of shape=(ind.shape + (depth,))
     """
-    return tf.raw_ops.OneHot(indices=ind, depth=depth, on_value=1., off_value=0., axis=-1)
+    return tf.raw_ops.OneHot(
+        indices=ind, depth=depth, on_value=1.0, off_value=0.0, axis=-1
+    )
 
 
 # ======================================================================
