@@ -102,7 +102,7 @@ def augment_dataset(feats, nb_rotations):
 
 # ======================================================================
 def _build_dataset(
-    fn, nev, min_hits, should_split=False, split=None, should_standardize=None, nb_augment=0,
+    fn, nev, min_hits, should_split=False, split=None, should_standardize=None, nb_rotations=0,
 ):
     """
     Parameters
@@ -114,7 +114,7 @@ def _build_dataset(
         - should_split: bool, wether to hold out validation set
         - split: float, split percentage in the [0,1] range
         - should_standardize: bool, wether to standardize hit features plane by plane
-        - nb_augment: int, number of augmentations (hit coordinates rotations)
+        - nb_rotations: int, number of augmentations (hit coordinates rotations)
 
     Returns
     -------
@@ -135,9 +135,9 @@ def _build_dataset(
                 norm_clusters = (norm_clusters - norm_clusters.mean())
             inp = np.concatenate([plane.point_cloud, [norm_clusters]], axis=0)
             
-            if nb_augment:
-                inputs.extend(augment_dataset(inp, nb_augment))
-                targets.extend([plane.ordered_mc_idx]*nb_augment)
+            if nb_rotations:
+                inputs.extend(augment_dataset(inp, nb_rotations))
+                targets.extend([plane.ordered_mc_idx]*nb_rotations)
             else:
                 inputs.append(inp.T)
                 targets.append(plane.ordered_mc_idx)
@@ -176,7 +176,7 @@ def build_dataset(setup, is_training=None):
     split = setup["dataset"]["split"]
     should_split = is_training and (0 < split < 1)
     should_standardize = setup["dataset"]["standardize"]
-    nb_augment = setup["dataset"]["augment"] if is_training else 0
+    nb_rotations = setup["dataset"]["nb_rotations"] if is_training else 0
     return _build_dataset(
         fn,
         nev,
@@ -184,5 +184,5 @@ def build_dataset(setup, is_training=None):
         should_split=should_split,
         split=split,
         should_standardize=should_standardize,
-        nb_augment=nb_augment,
+        nb_rotations=nb_rotations,
     )

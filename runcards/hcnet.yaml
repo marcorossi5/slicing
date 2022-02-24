@@ -3,7 +3,7 @@ gpu: "0"
 dataset:
   split: 0.9
   standardize: true
-  augmentation: 16 # number of hit coordinates rotations (0 if no augmentation)
+  nb_rotations: 16 # number of hit coordinates rotations (0 if no augmentation)
 model:
   net_type: HC # CM | HC
   threshold: 0.9 # for inference
