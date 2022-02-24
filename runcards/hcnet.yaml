@@ -2,6 +2,8 @@
 gpu: "0"
 dataset:
   split: 0.9
+  standardize: true
+  augmentation: 16 # number of hit coordinates rotations (0 if no augmentation)
 model:
   net_type: HC # CM | HC
   threshold: 0.9 # for inference
@@ -9,16 +11,16 @@ model:
   f_dims: 6 # 89
   nb_mha_heads: 1
   mha_filters:
+    - 8
     - 16
     - 32
-    - 64
-  kernel_transformation: softmax # softmax | relu
-  projection_matrix_type: random # random | null
+  kernel_transformation: relu # softmax | relu
+  projection_matrix_type: null # random | null
   nb_random_features: 128
-  nb_fc_heads: 5
+  nb_fc_heads: 1
   fc_filters:
     - 64
-  batch_size: 4
+  batch_size: 8
   activation: lrelu
   use_bias: true
 test:
@@ -43,7 +45,7 @@ train:
     - data/prod4_train/prod4_p6GeV_run44121960_100evts.csv.gz
     - data/prod4_train/prod4_7GeV_run20915159_100evts.csv.gz
   nev: -1
-  min_hits: 15
+  min_hits: 3
   hist_freq: 10
   epochs: 50
   lr: 0.005

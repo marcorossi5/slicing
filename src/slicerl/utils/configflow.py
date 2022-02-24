@@ -9,7 +9,8 @@ TF_DTYPE = tf.float32
 NP_DTYPE_INT = np.int32
 NP_DTYPE = np.float32
 
-EPS = np.finfo(NP_DTYPE).eps
+# EPS = np.finfo(NP_DTYPE).eps
+EPS = 1e-6
 
 
 def float_me(x):

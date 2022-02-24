@@ -76,8 +76,33 @@ class EventDataset(tf.keras.utils.Sequence):
 
 
 # ======================================================================
+def augment_dataset(feats, nb_rotations):
+    """
+    Parameters
+    ----------
+        - feats: np.array, of shape=(nb coordinates, nb points)
+        - nb_rotations: int, number of rotations to apply to inputs
+    
+    Returns
+    -------
+        - list: the augmented inputs
+    """
+    r = lambda t: np.array(
+        [[np.cos(t), -np.sin(t)],
+         [np.sin(t), np.cos(t)]]
+    )
+    ts = np.linspace(0, 2*np.pi, nb_rotations + 2)[:-1]
+    rots = np.transpose(r(ts), [2,0,1])
+    coords = np.einsum("ab,rac->rcb", feats[1:3], rots)
+    energies = np.repeat(np.expand_dims(feats[:1], 0), nb_rotations, axis=0)
+    extras = np.repeat(np.expand_dims(feats[3:], 0), nb_rotations, axis=0)
+    new_feats = np.concatenate([energies, coords, extras], axis=1)
+    return list(np.transpose(new_feats, [0,2,1]))
+
+
+# ======================================================================
 def _build_dataset(
-    fn, nev, min_hits, should_split=False, split=None, should_standardize=None
+    fn, nev, min_hits, should_split=False, split=None, should_standardize=None, nb_augment=0,
 ):
     """
     Parameters
@@ -88,7 +113,8 @@ def _build_dataset(
         - depth: int, depth of targets one hot encoding
         - should_split: bool, wether to hold out validation set
         - split: float, split percentage in the [0,1] range
-        - should_standardize: standardize hit features plane by plane
+        - should_standardize: bool, wether to standardize hit features plane by plane
+        - nb_augment: int, number of augmentations (hit coordinates rotations)
 
     Returns
     -------
@@ -106,15 +132,15 @@ def _build_dataset(
             feats = deepcopy(plane.point_cloud)
             if should_standardize:
                 feats[0] = (feats[0] - feats[0].mean()) / feats[0].std()
-                feats[1:3] = feats[1:3] - feats[1:3].mean(1, keepdims=True)
                 norm_clusters = (norm_clusters - norm_clusters.mean())
-
-            # norm = len(set(plane.ordered_cluster_idx))
-            # norm_clusters = plane.ordered_cluster_idx / norm
-            inputs.append(
-                np.concatenate([plane.point_cloud, [norm_clusters]], axis=0).T
-            )
-            targets.append(plane.ordered_mc_idx)
+            inp = np.concatenate([plane.point_cloud, [norm_clusters]], axis=0)
+            
+            if nb_augment:
+                inputs.extend(augment_dataset(inp, nb_augment))
+                targets.extend([plane.ordered_mc_idx]*nb_augment)
+            else:
+                inputs.append(inp.T)
+                targets.append(plane.ordered_mc_idx)
 
     inputs = np.array(inputs, dtype=object)
     targets = np.array(targets, dtype=object)
@@ -150,6 +176,7 @@ def build_dataset(setup, is_training=None):
     split = setup["dataset"]["split"]
     should_split = is_training and (0 < split < 1)
     should_standardize = setup["dataset"]["standardize"]
+    nb_augment = setup["dataset"]["augment"] if is_training else 0
     return _build_dataset(
         fn,
         nev,
@@ -157,4 +184,5 @@ def build_dataset(setup, is_training=None):
         should_split=should_split,
         split=split,
         should_standardize=should_standardize,
+        nb_augment=nb_augment,
     )

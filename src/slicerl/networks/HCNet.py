@@ -105,7 +105,7 @@ class HCNet(BatchCumulativeNetwork):
             self.fc_filters.append(self.units)
 
         # pre encoder layer
-        self.pre_fc = Dense(16, name="pre")
+        # self.pre_fc = Dense(16, name="pre")
 
         # attention layers
         self.mhas = [
@@ -148,7 +148,8 @@ class HCNet(BatchCumulativeNetwork):
         -------
             tf.Tensor, hit class prbabilities of shape=(1,N,units)
         """
-        x = self.pre_fc(inputs)
+        x = inputs
+        # x = self.pre_fc(inputs)
         for mha in self.mhas:
             x = self.activation(mha(x))
 
