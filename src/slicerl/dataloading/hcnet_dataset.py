@@ -140,7 +140,7 @@ def _build_dataset(
 
             if nb_rotations:
                 inputs.extend(augment_dataset(inp, nb_rotations))
-                targets.extend([plane.ordered_mc_idx] * nb_rotations)
+                targets.extend([plane.ordered_mc_idx] * (nb_rotations + 1))
             else:
                 inputs.append(inp.T)
                 targets.append(plane.ordered_mc_idx)
