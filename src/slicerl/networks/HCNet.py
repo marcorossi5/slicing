@@ -179,4 +179,5 @@ def inference(network, test_generator):
     """
     inputs = test_generator.inputs
     preds = [network.predict(ii[None], verbose=0)[0] for ii in tqdm(inputs)]
-    return np.array(preds, dtype=object)
+    preds =  np.array(preds, dtype=object)
+    return preds

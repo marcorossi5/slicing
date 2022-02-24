@@ -9,7 +9,7 @@ from .read_data import load_events
 logger = logging.getLogger(PACKAGE)
 
 
-class EventDataset(tf.keras.utils.Sequence):
+class HCEventDataset(tf.keras.utils.Sequence):
     def __init__(
         self,
         inputs,
@@ -52,26 +52,16 @@ class EventDataset(tf.keras.utils.Sequence):
             - y_pred: Predictions, object storing network predictions
         """
         logger.info("Setting events")
+        self.y_pred = y_pred # store the last predicted values
         if self.__events:
             for i, event in enumerate(self.__events):
                 for j, plane in enumerate(event.planes):
                     y_sparse = y_pred.all_y_pred[3 * i + j]
                     plane.status = np.argmax(y_sparse, axis=1)
-
-                    # just a debugging plot
-                    # import matplotlib.pyplot as plt
-                    # plt.subplot(2,1,1)
-                    # plt.plot(y_sparse[:30,].T, lw=0.5)
-                    # idx = np.argmax(y_sparse,axis=1)
-                    # bins = np.linspace(-0.5, 63.5, 65)
-                    # h, _ = np.histogram(idx, bins=bins)
-                    # plt.subplot(2,1,2)
-                    # plt.hist(bins[:-1], bins, weights=h)
-                    # plt.show()
         else:
             raise ValueError(
                 "Cannot set events attribute, found None"
-                " (is the EventDataset generator in training mode?)"
+                " (is the HCEventDataset generator in training mode?)"
             )
 
 
@@ -121,10 +111,16 @@ def _build_dataset(
 
     Returns
     -------
-        - tuple, of EventDataset objects if should_split is True. Single
-          EventDataset object otherwise.
+        - tuple, of HCEventDataset objects if should_split is True. Single
+          HCEventDataset object otherwise.
     """
     events = load_events(fn, nev, min_hits)
+
+    # logging
+    if should_standardize:
+        logger.info("Standardizing input hit energies and cluster indices")
+    if nb_rotations:
+        logger.info(f"Augmenting dataset with {nb_rotations} rotations")
 
     inputs = []
     targets = []
@@ -139,6 +135,7 @@ def _build_dataset(
             inp = np.concatenate([plane.point_cloud, [norm_clusters]], axis=0)
 
             if nb_rotations:
+                logger.info(f"Augmenting dataset with {nb_rotations} rotations")
                 inputs.extend(augment_dataset(inp, nb_rotations))
                 targets.extend([plane.ordered_mc_idx] * (nb_rotations + 1))
             else:
@@ -153,6 +150,7 @@ def _build_dataset(
 
     # split dataset
     if should_split:
+        logger.info(f"Splitting training dataset: {1-split} validation holdout percentage")
         nb_events = len(inputs)
         perm = np.random.permutation(nb_events)
         nb_split = int(split * nb_events)
@@ -164,10 +162,10 @@ def _build_dataset(
         val_trg = targets[perm[nb_split:]]
 
         # events are not returned when training
-        return EventDataset([None, train_inp, train_trg]), EventDataset(
+        return HCEventDataset([None, train_inp, train_trg]), HCEventDataset(
             [None, val_inp, val_trg]
         )
-    return EventDataset([events, inputs, targets], shuffle=False)
+    return HCEventDataset([events, inputs, targets], shuffle=False)
 
 
 # ======================================================================

@@ -49,7 +49,7 @@ def main():
         should_save_dataset=args.save_dataset_test,
     )
     inference(setup, test_generator, no_graphics=args.no_graphics)
-    logger.info(f"[+] Program done in {tm()-ss} s")
+    logger.info(f"Program done in {tm()-ss} s")
 
 
 if __name__ == "__main__":
