@@ -153,10 +153,10 @@ class Events(Image):
         """
         Parameters
         ----------
-            infile       : str, input file name
-            nmax         : int, max number of events to load
-            min_hits     : int, consider slices with more than min_hits Calohits only
-            load_results : bool, wether to load results from a previous slicing
+            - infile: str, input file name
+            - nmax: int, max number of events to load
+            - min_hits: int, consider slices with more than min_hits Calohits only
+            - load_results: bool, wether to load results from a previous slicing
                            inference or not.
         """
         Image.__init__(self, infile, nmax, load_results)
@@ -180,11 +180,11 @@ def load_Events_from_file(
 
     Parameters
     ----------
-        - filename     : str, file to load events from
-        - nev          : int, number of events to load
-        - min_hits     : int, consider slices with more than min_hits Calohits only
-        - max_hits     : int, max hits to be processed by network
-        - load_results : bool, wether to load results from a previous slicing
+        - filename: str, file to load events from
+        - nev: int, number of events to load
+        - min_hits: int, consider slices with more than min_hits Calohits only
+        - max_hits: int, max hits to be processed by network
+        - load_results: bool, wether to load results from a previous slicing
                            inference or not.
 
     Returns
@@ -207,11 +207,11 @@ def load_Events_from_files(
 
     Parameters
     ----------
-        - filename     : list, list of files to load events from
-        - nev          : int, number of events to load
-        - min_hits     : int, consider slices with more than min_hits Calohits only
-        - max_hits     : int, max hits to be processed by network
-        - load_results : bool, wether to load results from a previous slicing
+        - filename: list, list of files to load events from
+        - nev: int, number of events to load
+        - min_hits: int, consider slices with more than min_hits Calohits only
+        - max_hits: int, max hits to be processed by network
+        - load_results: bool, wether to load results from a previous slicing
                            inference or not.
 
     Returns
@@ -235,7 +235,7 @@ def load_events(fn, nev, min_hits):
     ----------
         - fn: str or list, events file names
         - nev: int, number of events to take from each file
-        - min_hits : int, minimum hits per slice for dataset inclusion
+        - min_hits: int, minimum hits per slice for dataset inclusion
 
     Returns
     -------
@@ -264,8 +264,8 @@ def save_Event_list_to_file(events, filename):
 
     Parameters
     ----------
-        - events   : list, list of Event objects
-        - filename : str
+        - events: list, of Event objects
+        - filename: str, the output path
     """
     with gzip.open(filename, "wb") as wfp:
         for event in events:

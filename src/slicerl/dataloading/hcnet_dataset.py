@@ -3,6 +3,7 @@ from copy import deepcopy
 import numpy as np
 import tensorflow as tf
 from slicerl import PACKAGE
+from slicerl.utils.tools import onehot
 from .read_data import load_events
 
 logger = logging.getLogger(PACKAGE)
@@ -81,7 +82,10 @@ def _build_dataset(
     """
     Parameters
     ----------
-        - setup: dict
+        - fn: list, events file names
+        - nev: int, number of events to take from each file
+        - min_hits: int, minimum hits per slice for dataset inclusion
+        - depth: int, depth of targets one hot encoding
         - should_split: bool, wether to hold out validation set
         - split: float, split percentage in the [0,1] range
         - should_standardize: standardize hit features plane by plane

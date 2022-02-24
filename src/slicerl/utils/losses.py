@@ -5,9 +5,13 @@ import tensorflow.keras.backend as K
 from tensorflow.keras.losses import (
     Loss,
     CategoricalCrossentropy,
+    SparseCategoricalCrossentropy,
     Reduction,
+    MeanSquaredError,
+    MeanAbsoluteError,
 )
-from .configflow import EPS_TF, float_me
+from .configflow import EPS_TF, float_me, int_me
+from .tools import onehot_tf
 
 
 def dice_loss(y_true, y_pred):
@@ -24,11 +28,6 @@ def dice_loss(y_true, y_pred):
 # ======================================================================
 class WeightedL1:
     def __init__(self, scale=50, nb_classes=128):
-        """
-        Parameters
-        ----------
-
-        """
         self.scale = scale
         self.nb_classes = nb_classes
         x = np.linspace(0, self.nb_classes - 1, self.nb_classes)
@@ -40,8 +39,8 @@ class WeightedL1:
         """
         Parameters
         ----------
-            - y_true : tf.Tensor, ground truths of shape=(B,N,nb_classes)
-            - y_pred : tf.Tensor, predictions of shape=(B,N,nb_classes)
+            - y_true: tf.Tensor, ground truths of shape=(B,N,nb_classes)
+            - y_pred: tf.Tensor, predictions of shape=(B,N,nb_classes)
 
         Returns
         -------
@@ -119,8 +118,8 @@ class WeightedCategoricalCrossEntropy(CategoricalCrossentropy):
         """
         Parameters
         ----------
-            - y_true : tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
-            - y_pred : tf.Tensor, output tensor of shape=(B,N,nb_classes)
+            - y_true: tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
+            - y_pred: tf.Tensor, output tensor of shape=(B,N,nb_classes)
 
         Returns
         -------
@@ -154,8 +153,8 @@ class FocalCrossentropy(Loss):
         """
         Parameters
         ----------
-            - y_true : tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
-            - y_pred : tf.Tensor, output tensor of shape=(B,N,nb_classes)
+            - y_true: tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
+            - y_pred: tf.Tensor, output tensor of shape=(B,N,nb_classes)
 
         Returns
         -------
@@ -167,43 +166,51 @@ class FocalCrossentropy(Loss):
 
 # ======================================================================
 class CombinedLoss(Loss):
-    """Categorical crossentropy plus L1 on slice size."""
+    """Categorical crossentropy plus L2 on slice size."""
 
     def __init__(
         self,
+        nb_classes,
+        weight=1e-4,
         from_logits=False,
-        scale=50,
-        nb_classes=128,
-        alpha=1.0,
-        gamma=2.0,
         reduction=Reduction.AUTO,
-        name="xent-l1",
+        name="xent-l2",
     ):
+        """
+        Parameters
+        ----------
+            - nb_classes: int, depth of the on-hot encoding
+            - weight: float, relative weight in loss function contributions
+        """
         super().__init__(reduction=reduction, name=name)
-        self.xent = CategoricalCrossentropy(
-            from_logits=from_logits, name=name, reduction=Reduction.NONE
+        self.nb_classes = nb_classes
+        self.weight = weight
+        self.xent = SparseCategoricalCrossentropy(
+            from_logits=from_logits, name=name, reduction=reduction
         )
-        self.L1 = WeightedL1(scale=scale, nb_classes=nb_classes)
+        # self.L1 = WeightedL1(scale=scale, nb_classes=nb_classes)
+        # self.l_loss = MeanSquaredError()
+        self.l_loss = MeanAbsoluteError(reduction=reduction)
 
     # ----------------------------------------------------------------------
     def call(self, y_true, y_pred):
         """
         Parameters
         ----------
-            - y_true : tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
-            - y_pred : tf.Tensor, output tensor of shape=(B,N,nb_classes)
+            - y_true: tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
+            - y_pred: tf.Tensor, output tensor of shape=(B,N,nb_classes)
 
         Returns
         -------
             tf.Tensor, loss tensor of shape=(B,N) if `reduction` is `NONE`,
             shape=() otherwise.
         """
-        fxe = self.xent(y_true, y_pred)
-
-        size_true = tf.reduce_sum(y_true, axis=1)
+        cxe = self.xent(y_true, y_pred)
+        size_true = tf.reduce_sum(onehot_tf(int_me(y_true), self.nb_classes), axis=1)
         size_pred = tf.reduce_sum(y_pred, axis=1)
-        mae = self.L1(size_true, size_pred)
-        return fxe + mae
+        l_loss = self.l_loss(size_true, size_pred)
+        loss = cxe + self.weight * l_loss
+        return loss
 
 
 # ======================================================================
@@ -233,8 +240,8 @@ class CombinedFocalLoss(Loss):
         """
         Parameters
         ----------
-            - y_true : tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
-            - y_pred : tf.Tensor, output tensor of shape=(B,N,nb_classes)
+            - y_true: tf.Tensor, ground truth tensor of shape=(B,N,nb_classes)
+            - y_pred: tf.Tensor, output tensor of shape=(B,N,nb_classes)
 
         Returns
         -------
@@ -250,16 +257,14 @@ class CombinedFocalLoss(Loss):
 
 
 # ======================================================================
-
-
 def get_loss(setup, nb_classes):
     """
     Get the loss to train the model on:
 
     Parameters
     ---------
-        - setup      : dict containing loss info
-        - mb_classes : int, number of output classes
+        - setup: dict containing loss info
+        - mb_classes: int, number of output classes
 
     Returns
     -------
@@ -274,10 +279,10 @@ def get_loss(setup, nb_classes):
         gamma = setup.get("gamma")
         name = "focal_xent"
         return FocalCrossentropy(from_logits=from_logits, gamma=gamma, name=name)
-    elif setup.get("loss") == "xent_l1":
+    elif setup.get("loss") == "xent_l2":
         from_logits = setup.get("from_logits")
         scale = setup.get("wgt")
-        name = "xent-l1"
+        name = "xent-l2"
         return CombinedLoss(
             from_logits=from_logits,
             scale=scale,

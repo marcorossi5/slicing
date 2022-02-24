@@ -4,7 +4,7 @@ from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad
 from slicerl import PACKAGE
 from slicerl.networks.CMNet import CMNet
 from slicerl.networks.HCNet import HCNet
-from slicerl.utils.losses import dice_loss
+from slicerl.utils.losses import dice_loss, CombinedLoss
 
 logger = logging.getLogger(PACKAGE)
 
@@ -117,7 +117,8 @@ def load_network_hc(msetup):
         "use_bias": msetup["use_bias"],
     }
     network = HCNet(name="HC-Net", **net_dict)
-    loss = tf.keras.losses.SparseCategoricalCrossentropy()
+    # loss = tf.keras.losses.CategoricalCrossentropy()
+    loss = CombinedLoss(nb_classes=msetup["units"], weight=5e-3)
     return network, loss
 
 

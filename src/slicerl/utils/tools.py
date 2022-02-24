@@ -25,14 +25,14 @@ def confusion_matrix_per_event(y_true, y_pred):
 
     Parameters
     ----------
-        - y_true : list, of ground truths graphs arrays each of shape=(N,1+K)
-        - y_true : list, of predicted graphs arrays each of shape=(N,1+K)
+        - y_true: list, of ground truths graphs arrays each of shape=(N,1+K)
+        - y_true: list, of predicted graphs arrays each of shape=(N,1+K)
 
     Returns
-      - tp      true positives ratio
-      - fp      false positives ratio
-      - fn      false negatives ratio
-      - tn      true negatives ratio
+      - tp: np.array, true positives ratio of shape=(N,)
+      - fp: np.array, false positives ratio of shape=(N,)
+      - fn: np.array, false negatives ratio of shape=(N,)
+      - tn: np.array, true negatives ratio of shape=(N,)
     """
     # flatten arrays
     y_true = y_true.flatten()
@@ -158,12 +158,12 @@ def efficiency_rejection_rate_loss(x, y):
 # ======================================================================
 def onehot(ind, depth):
     """
-    One-hot encoding on the last axis
+    One-hot encoding on the last axis.
 
     Parameters
     ----------
-        - ind   : np.array, array of indices of int dtype
-        - depth : int, length of the one-hot encoding axis
+        - ind: np.array, array of indices of int dtype
+        - depth: int, length of the one-hot encoding axis
 
     Returns
     -------
@@ -173,13 +173,30 @@ def onehot(ind, depth):
 
 
 # ======================================================================
+def onehot_tf(ind, depth):
+    """
+    One-hot encoding on the last axis with tensorflow.
+
+    Parameters
+    ----------
+        - ind: np.array, array of indices of int dtype
+        - depth: int, length of the one-hot encoding axis
+
+    Returns
+    -------
+        np.array, one-hot encoded array of shape=(ind.shape + (depth,))
+    """
+    return tf.raw_ops.OneHot(indices=ind, depth=depth, on_value=1., off_value=0., axis=-1)
+
+
+# ======================================================================
 def onehot_to_indices(onehot):
     """
     From one-hot encoding to indices on the last axis
 
     Parameters
     ----------
-        - one_hot : np.array, array of one-hot encoded
+        - one_hot: np.array, array of one-hot encoded
 
     Returns
     -------
@@ -213,10 +230,10 @@ def bfs(sl, visited, root, graph):
 
     Parameters
     ----------
-        - sl   : set, of points in the same slice
-        - visited : set, of already visited nodes
-        - root    : int, index of root search node
-        - graph   : list, of same slice neighbours indices
+        - sl: set, of points in the same slice
+        - visited: set, of already visited nodes
+        - root: int, index of root search node
+        - graph: list, of same slice neighbours indices
     """
     queue = deque([root])
     sl.add(root)
