@@ -1,5 +1,5 @@
-import logging
 # This file is part of SliceRL by M. Rossi
+import logging
 import pickle
 import pprint
 from time import time as tm
@@ -8,6 +8,7 @@ from hyperopt.mongoexp import MongoTrials
 from slicerl import PACKAGE
 
 logger = logging.getLogger(PACKAGE + ".hopt")
+
 
 def run_hyperparameter_scan(search_space, load_data_fn, function):
     """Running a hyperparameter scan using hyperopt."""
@@ -23,7 +24,7 @@ def run_hyperparameter_scan(search_space, load_data_fn, function):
         env_setup = search_space.get("expurl_env")
         trials = Trials()
 
-    wrap_fn = lambda x: function(x, load_data_fn(x))
+    wrap_fn = lambda x: function(x, load_data_fn(x, is_training=True))
 
     best = fmin(
         wrap_fn,

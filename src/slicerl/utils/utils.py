@@ -8,8 +8,8 @@ from hyperopt import hp
 import yaml
 from slicerl import PACKAGE
 
-
 logger = logging.getLogger(PACKAGE)
+
 
 def makedir(folder):
     """Create directory."""
@@ -39,13 +39,14 @@ def load_runcard(runcard_file):
 
 
 # ======================================================================
-def save_runcard(fname, setup):
+def save_runcard(fname, setup, modify=True):
     with open(fname, "w") as f:
         # yaml is not able to save the Path objects
         # TODO: overload the yaml class
-        setup["output"] = setup["output"].as_posix()
-        setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix()
-        setup["test"]["dataset_dir"] = setup["test"]["dataset_dir"].as_posix()
+        if modify:
+            setup["output"] = setup["output"].as_posix()
+            setup["train"]["dataset_dir"] = setup["train"]["dataset_dir"].as_posix()
+            setup["test"]["dataset_dir"] = setup["test"]["dataset_dir"].as_posix()
         yaml.dump(setup, f, indent=4)
         modify_runcard(setup)
 
@@ -155,6 +156,12 @@ def get_cmd_args():
         "--just_train",
         action="store_true",
         help="Just train with ../dataset/train folder",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=12345,
+        help="random generator seed for reproducibility",
     )
     return parser.parse_args()
 

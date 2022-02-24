@@ -1,170 +1,43 @@
 # This file is part of SliceRL by M. Rossi
+import logging
+from tqdm import tqdm
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras import Sequential, Model, Input
-from tensorflow.keras.layers import (
-    Layer,
-    Dense,
-    Concatenate,
-    MultiHeadAttention,
-    LayerNormalization,
-)
-from tensorflow.keras.activations import sigmoid, tanh
-from slicerl.networks.AbstractNet import AbstractNet
-from slicerl.networks.FFNN import Head
+from tensorflow.keras import Input
+from tensorflow.keras.layers import Concatenate
+from tensorflow.keras.activations import relu, sigmoid
+from slicerl import PACKAGE
+from slicerl.utils.tools import bfs
+from .AbstractNet import AbstractNet, BatchCumulativeNetwork
+from .layers import TransformerEncoder, Head
+
+logger = logging.getLogger(PACKAGE + ".CMNet")
 
 
-def add_extension(name):
+class CMNet(AbstractNet, BatchCumulativeNetwork):
     """
-    Adds extension to cumulative variables while looping over it.
+    Class deifining CM-Net: Cluster merging network.
 
-    Parameters
-    ----------
-        - name: str, the weight name to be extended
+    In this approach the network is trained as a binary classifier. Input is
+    the union of points coming from a pair of 2D clusters accompained with a
+    fixed size vector of features for each hit, of shape
+    ([nb hits in clusters],nb feats). Output is the probability that the two
+    clusters belong to the same slice.
 
-    Returns
-    -------
-        - str, the extended weight name
+    Note: since the number of hits may vary depending on the cluster pairs,
+    multiple forward passes cannot be parallelized in a batch. Training
+    gradients can nonetheless be avaraged over multiple examples.
     """
-    ext = "_cum"
-    l = name.split(":")
-    l[-2] += ext
-    return ":".join(l[:-1])
-
-
-# ======================================================================
-class ReduceMax(Layer):
-    """Reduce max layer."""
-
-    def __init__(self, axis=-1, **kwargs):
-        """
-        Parameters
-        ----------
-            - axis: the axis to reduce. Default is the last axis
-        """
-        super(ReduceMax, self).__init__(**kwargs)
-        self.axis = axis
-        self.op = lambda x: tf.reduce_max(x, axis=self.axis)
-
-    def call(self, x):
-        return self.op(x)
-
-    def get_config(self):
-        return {"axis": self.axis}
-
-
-# ======================================================================
-class MyGRU(Layer):
-    """Implementation of the GRU layer."""
-
-    def __init__(self, units, mha_heads, **kwargs):
-        """
-        Parameters
-        ----------
-            - units: int, output feature dimensionality
-        """
-        super(MyGRU, self).__init__(**kwargs)
-        self.units = units
-        self.wr = Dense(units, name="wr", activation=None)
-        self.hr = Dense(units, name="hr", activation=None, use_bias=False)
-
-        self.wz = Dense(units, name="wz", activation=None)
-        self.hz = Dense(units, name="hz", activation=None, use_bias=False)
-
-        self.wn = Dense(units, name="wn", activation=None)
-        self.hn = Dense(units, name="hn", activation=None)
-
-        self.act = sigmoid
-        self.n_act = tanh
-
-        self.mha_heads = mha_heads
-        self.mha = MultiHeadAttention(
-            self.mha_heads, units, output_shape=units, name="mha"
-        )
-
-    def call(self, x):
-        """
-        Parameters
-        ----------
-            - x: tf.Tensor, input tensor of shape=(B, L, d_in)
-
-        Returns
-        -------
-            - tf.Tensor, output tensor of shape=(B, L, d_out)
-        """
-        h = self.mha(x, x)
-        rt = self.act(self.wr(x) + self.hr(h))
-        zt = self.act(self.wz(x) + self.hz(h))
-        nt = self.n_act(self.wn(x) + rt * self.hn(h))
-        return (1 - zt) * nt + zt * h
-
-    def get_config(self):
-        return {"units": self.units, "mha_heads": self.mha_heads}
-
-
-# ======================================================================
-class TransformerEncoder(Layer):
-    """Implementation of ViT Encoder layer."""
-
-    def __init__(self, units, mha_heads, **kwargs):
-        """
-        Parameters
-        ----------
-            - units: int, output feature dimensionality
-            - mha_heads: int, number of heads in MultiHeadAttention layers
-        """
-        super(TransformerEncoder, self).__init__(**kwargs)
-        self.units = units
-        self.mha_heads = mha_heads
-
-        self.norm0 = LayerNormalization(axis=-1, name="ln_0")
-
-        self.mlp = Sequential(
-            [Dense(units, activation="relu"), Dense(units, activation=None)], name="mlp"
-        )
-
-        # self.conv = Conv1D(units, name="conv")
-        self.norm1 = LayerNormalization(axis=-1, name="ln_1")
-
-    def build(self, input_shape):
-        """
-        Parameters
-        ----------
-        """
-        units = input_shape[-1]
-        self.mha = MultiHeadAttention(self.mha_heads, units, name="mha")
-        super(TransformerEncoder, self).build(input_shape)
-
-    def call(self, x):
-        """
-        Parameters
-        ----------
-            - x: tf.Tensor, input tensor of shape=(B, L, d_in)
-
-        Returns
-        -------
-            - tf.Tensor, output tensor of shape=(B, L, d_out)
-        """
-        # residual and multi head attention
-        x += self.mha(x, x)
-        # layer normalization
-        x = self.norm0(x)
-        return self.norm1(self.mlp(x))
-
-    def get_config(self):
-        return {"units": self.units, "mha_heads": self.mha_heads}
-
-
-# ======================================================================
-class CMNet(AbstractNet):
-    """Class deifining CM-Net: Cluster merging network."""
 
     def __init__(
         self,
-        batch_size=1,
         f_dims=2,
-        fc_heads=5,
-        mha_heads=5,
-        activation="relu",
+        nb_mha_heads=5,
+        mha_filters=[64, 128],
+        nb_fc_heads=5,
+        fc_filters=[64, 32, 16, 8, 4, 2, 1],
+        batch_size=1,
+        activation=relu,
         use_bias=True,
         verbose=False,
         name="CM-Net",
@@ -173,83 +46,73 @@ class CMNet(AbstractNet):
         """
         Parameters
         ----------
-            - f_dims     : int, point cloud feature dimensions
-            - activation : str, default layer activation
-            - use_bias   : bool, wether to use bias or not
+            - f_dims: int, number of point cloud feature dimensions
+            - nb_mha_heads: int, the number of heads in the `MultiHeadAttention` layer
+            - mha_filters: list, the output units for each `MultiHeadAttention` in the stack
+            - nb_fc_heads: int, the number of `Head` layers to be concatenated
+            - fc_filters: list, the output units for each `Head` in the stack
+            - batch_size: int, the effective batch size for gradient descent
+            - activation: str, default keras layer activation
+            - use_bias: bool, wether to use bias or not
+            - verbose: str, wether to print extra training information
+            - name: str, the name of the neural network instance
         """
-        super(CMNet, self).__init__(f_dims=f_dims, name=name, **kwargs)
+        super(CMNet, self).__init__(name=name, **kwargs)
 
         # store args
-        self.batch_size = int(batch_size)
         self.f_dims = f_dims
-        self.fc_heads = fc_heads
-        self.mha_heads = mha_heads
+        self.nb_mha_heads = nb_mha_heads
+        self.mha_filters = mha_filters
+        self.nb_fc_heads = nb_fc_heads
+        self.fc_filters = fc_filters
+        self.batch_size = int(batch_size)
         self.activation = activation
         self.use_bias = use_bias
         self.verbose = verbose
 
-        self.mha_filters = [64, 128]
-        self.mhas = []
-        # self.mha_ifilters = [self.fc_heads] + self.mha_filters[:-1]
-        for ih, dout in enumerate(self.mha_filters):
-            # self.mhas.append(MyGRU(dout, self.mha_heads, name=f"mha_{ih}"))
-            self.mhas.append(TransformerEncoder(dout, self.mha_heads, name=f"mha_{ih}"))
-
-        # self.cumulative_gradients = None
-        self.cumulative_counter = tf.constant(0)
-
-        # store some useful parameters for the fc layers
-        self.fc_filters = [64, 32, 16, 8, 4, 2, 1]
-        # self.dropout_idxs = [0, 1]
-        self.dropout_idxs = []
-        self.dropout = 0.2
-        self.heads = []
-        for ih in range(self.fc_heads):
-            self.heads.append(
-                Head(
-                    self.fc_filters,
-                    ih,
-                    self.dropout_idxs,
-                    self.dropout,
-                    activation=self.activation,
-                    name=f"head_{ih}",
-                )
+        # adapt the output if requested
+        if self.fc_filters[-1] != 1:
+            logger.warning(
+                f"CM-Net last layer must have one neuron only, but found "
+                f"{self.fc_filters[-1]}: adapting last layer ..."
             )
+            self.fc_filters.append(self.units)
+
+        # attention layers
+        self.mhas = [
+            TransformerEncoder(
+                dout, self.nb_mha_heads, attention_type="original", name=f"mha_{ih}"
+            )
+            for ih, dout in enumerate(self.mha_filters)
+        ]
+
+        # feed-forward layers
+        self.heads = [
+            Head(
+                self.fc_filters,
+                activation=self.activation,
+                name=f"head_{ih}",
+            )
+            for ih in range(self.nb_fc_heads)
+        ]
         self.concat = Concatenate(axis=-1, name="cat")
 
-        self.build()
-
-        self.cumulative_gradients = [
-            tf.Variable(
-                tf.zeros_like(this_var),
-                trainable=False,
-                name=add_extension(this_var.name),
-            )
-            for this_var in self.trainable_variables
-        ]
-        self.cumulative_counter = tf.Variable(
-            tf.constant(0), trainable=False, name="cum_counter"
-        )
+        # explicitly build network weights
+        build_with_shape = (None, self.f_dims)
+        self.input_layer = Input(shape=build_with_shape, name="clusters_hits")
+        super(CMNet, self).build((1,) + build_with_shape)
 
     # ----------------------------------------------------------------------
-    def build(self):
-        """Explicitly build the weights."""
-        super(CMNet, self).build((None, None, self.f_dims))
-
-    # ----------------------------------------------------------------------
-    def call(self, inputs):
+    def call(self, x):
         """
         Parameters
         ----------
-            - inputs : list of tf.Tensors, point cloud of shape=(B,N,dims) and
-                       feature point cloud of shape=(B,N,f_dims)
+            - x: tf.Tensor, point cloud of hits of shape=(1,[nb hits],f_dims)
 
         Returns
         -------
-            tf.Tensor, output tensor of shape=(B,N,nb_classes)
+            tf.Tensor, merging probability of shape=(1,)
         """
-        x = inputs
-        # x = tf.expand_dims(inputs, 0)
         for mha in self.mhas:
             x = self.activation(mha(x))
 
@@ -261,107 +124,153 @@ class CMNet(AbstractNet):
 
         return tf.reduce_mean(sigmoid(self.concat(results)), axis=-1)
 
-    # ----------------------------------------------------------------------
-    def model(self):
-        inputs = Input(shape=(None, self.f_dims), name="pc")
-        return Model(inputs=inputs, outputs=self.call(inputs), name=self.name)
 
-    # ----------------------------------------------------------------------
-    def reset_cumulator(self):
-        """
-        Reset counter and gradients cumulator gradients.
-        """
+# ======================================================================
+# CM-Net inference
+def inference(network, test_generator, threshold=0.5):
+    """
+    CM-Net prediction over a iterable of inputs
 
-        for i in range(len(self.cumulative_gradients)):
-            self.cumulative_gradients[i].assign(
-                tf.zeros_like(self.trainable_variables[i])
-            )
-        self.cumulative_counter.assign(tf.constant(1))
+    Parameters
+    ----------
+        - network: AbstractNet, network to get predictions
+        - test_generator: EventDataset, generator for inference
+        - threshold: float, interpret as positive if network prediction is
+                     above threshold
 
-    # ----------------------------------------------------------------------
-    def increment_counter(self):
-        """
-        Reset counter and gradients cumulator gradients.
-        """
-        self.cumulative_counter.assign_add(tf.constant(1))
-
-    # ----------------------------------------------------------------------
-    def train_step(self, data):
-        """
-        The network accumulates the gradients according to batch size, to allow
-        gradient averaging over multiple inputs. The aim is to reduce the loss
-        function fluctuations.
-        """
-        # Unpack the data. Its structure depends on your model and
-        # on what you pass to `fit()`.
-        x, y = data
-
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)  # Forward pass
-            # Compute the loss value
-            # (the loss function is configured in `compile()`)
-            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
-
-        if self.verbose:
-            reset_2 = (self.cumulative_counter + 1) % self.batch_size == 0
-            tf.cond(
-                reset_2,
-                lambda: print_loss(x, y, y_pred, loss),
-                lambda: False,
-            )
-
-        reset = self.cumulative_counter % self.batch_size == 0
-        tf.cond(reset, self.reset_cumulator, self.increment_counter)
-
-        # Compute gradients
-        trainable_vars = self.trainable_variables
-
-        gradients = tape.gradient(loss, trainable_vars)
-        for i, grad in enumerate(gradients):
-            self.cumulative_gradients[i].assign_add(grad / self.batch_size)
-
-        # Update weights
-        reset = self.cumulative_counter % self.batch_size == 0
-
-        if self.verbose:
-            reset_1 = (self.cumulative_counter - 1) % self.batch_size == 0
-            tf.cond(
-                reset_1,
-                lambda: print_gradients(zip(self.cumulative_gradients, trainable_vars)),
-                lambda: False,
-            )
-
-        tf.cond(
-            reset,
-            lambda: self.optimizer.apply_gradients(
-                zip(self.cumulative_gradients, trainable_vars)
-            ),
-            lambda: False,
+    Returns
+    -------
+        - np.array, network predictions of shape=()
+        - list, of np.arrays graph adjacency matrices, each of shape=()
+        - list, of sets representing the slices
+    """
+    inputs = test_generator.inputs
+    test_cthresholds = test_generator.cthresholds
+    nb_clusters_list = test_generator.nb_clusters_list
+    y_pred = []
+    preds = []
+    all_slices = []
+    if nb_clusters_list is None:
+        raise ValueError(
+            "Total number of cluster is unknown, did you forget to pass a valid generator for inference?"
         )
+    # zipped = tqdm(zip(inputs, nb_clusters_list, test_cthresholds))
+    zipped = zip(inputs, nb_clusters_list, test_cthresholds)
+    for inp, nb_planes_clusters, cthreshold in zipped:
+        # predict cluster pair connections
+        pred = [network.predict(ii[None], verbose=0).flatten() for ii in tqdm(inp)]
+        pred = np.concatenate(pred)
+        # pred = np.load("../output/test/pred.npy")
+        np.save("../output/test/pred.npy", pred)
+        # pred = net.predict(inp, batch_size, verbose=0).flatten()
 
-        # Update metrics (includes the metric that tracks the loss)
-        self.compiled_metrics.update_state(y, y_pred)
-        # Return a dict mapping metric names to current value
-        return {m.name: m.result() for m in self.metrics}
+        y_pred.append(pred)
+        # nb_clusters = (1 + np.sqrt(1 + 8 * len(pred))) / 2
+        nb_clusters = sum(nb_planes_clusters)
+        # assert nb_clusters.is_integer()
+        # nb_clusters = int(nb_clusters)
+        adj = np.zeros([nb_clusters, nb_clusters])
+        # build a block diagonal matrix
+        k = 0
+        ped = 0
+        import sys
+
+        np.set_printoptions(linewidth=700, precision=1, threshold=sys.maxsize)
+        for nb_plane_clusters, cts in zip(nb_planes_clusters, cthreshold):
+            for i in range(nb_plane_clusters):
+                for j in range(i):
+                    if i == j:
+                        continue
+                    adj[ped + i, ped + j] = pred[k]
+                    k += 1
+            # prevent large cluster mixing due to small clusters connections
+            clear_plane_large_small_interactions(adj, ped, nb_plane_clusters, cts)
+            clear_plane_small_small_interactions(adj, ped, nb_plane_clusters, cts)
+            ped += nb_plane_clusters
+        adj += adj.T + np.eye(nb_clusters)
+        preds.append(adj)
+        # threshold to find positive and negative edges
+        pred = adj > threshold
+        graph = [set(np.argwhere(merge)[:, 0]) for merge in pred]
+        # BFS (breadth first search)
+        visited = set()  # the all visited set
+        slices = []
+        for node in range(len(graph)):
+            if node in visited:
+                continue
+            sl = set()  # the current sl only
+            bfs(sl, visited, node, graph)
+            slices.append(sl)
+        all_slices.append(slices)
+        # print_prediction(adj, all_slices)
+    return y_pred, preds, all_slices
 
 
-def print_loss(x, y, y_pred, loss):
-    # tf.print(", x:", tf.reduce_mean(x), tf.math.reduce_std(x), ", y:", y, ", y_pred:", y_pred, ", loss:", loss)
-    tf.print(y, y_pred)
-    return True
+# ======================================================================
+def print_prediction(adj, slices):
+    """Prints to std output the adj matrix and all the slices."""
+    import sys
+
+    nb_clusters = len(adj)
+    logger.debug(f"Number of clusters: {nb_clusters}")
+    adj_mod = np.concatenate([np.arange(nb_clusters).reshape(1, -1), adj], axis=0)
+    extra_line = np.concatenate([[-1], np.arange(nb_clusters)])
+    adj_mod = np.concatenate([extra_line.reshape(-1, 1), adj_mod], axis=1)
+
+    lw = 400
+    np.set_printoptions(precision=2, suppress=True, threshold=sys.maxsize, linewidth=lw)
+    # logger.debug(adj_mod)
+    logger.debug(adj)
+
+    pred = (adj > 0.5).astype(int)
+    logger.debug(pred)
+    # edges = np.argwhere(pred)
+    # m = edges[:, 0] > edges[:, 1]
+    # logger.debug(edges[m])
+
+    for sl in slices:
+        logger.debug(sl)
 
 
-def print_gradients(gradients):
-    for g, t in gradients:
-        tf.print(
-            "Param:",
-            g.name,
-            ", value:",
-            tf.reduce_mean(t),
-            tf.math.reduce_std(t),
-            ", grad:",
-            tf.reduce_mean(g),
-            tf.math.reduce_std(g),
-        )
-    tf.print("---------------------------")
-    return True
+# ======================================================================
+def clear_plane_large_small_interactions(adj, ped, nb_clusters, cts):
+    """
+    Modifies the adjecency matrix to allow at maximum one interaction with large
+    clusters for small size ones. This prevents clusters that has low size to
+    cause merging of higher order clusters. This is done on a plane view basis.
+    In place operation.
+
+    Parameters
+    ----------
+        - adj: np.array, adjecency matrix of shape=(nb_all_clusters, nb_all_clusters)
+        - ped: int, start index of the plane submatrix
+        - nb_clusters: int, number of clusters in plane view
+        - cts: list, starting indices of the different cluster size levels
+    """
+    bins = list(ped + np.array(cts + [nb_clusters]))
+    for ct1, ct2 in zip(bins, bins[1:]):
+        block = np.s_[ct1:ct2, ped:ct1]
+        m = np.amax(adj[block], axis=-1, keepdims=True)
+        mask = (adj[block] == m).astype(float)
+        adj[block] = mask * m
+
+
+# ======================================================================
+def clear_plane_small_small_interactions(adj, ped, nb_clusters, cts):
+    """
+    Modifies the adjecency matrix to disallow small to small clusters
+    interactions. As a result, one small cluster can be linked to a big cluster
+    only. This is done on a plane view basis. In place operation.
+
+    Parameters
+    ----------
+        - adj: np.array, adjecency matrix of shape=(nb_all_clusters, nb_all_clusters)
+        - ped: int, start index of the plane submatrix
+        - nb_clusters: int, number of clusters in plane view
+        - cts: list, starting indices of the different cluster size levels
+    """
+    istart = ped + cts[-1]
+    iend = ped + nb_clusters
+    nb_small_clusters = nb_clusters - cts[-1]
+    block = np.s_[istart:iend, istart:iend]
+    adj[block] = np.zeros([nb_small_clusters, nb_small_clusters])

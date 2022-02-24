@@ -9,17 +9,19 @@ TF_DTYPE = tf.float32
 NP_DTYPE_INT = np.int32
 NP_DTYPE = np.float32
 
+# EPS = np.finfo(NP_DTYPE).eps
+EPS = 1e-6
+
 
 def float_me(x):
     return tf.cast(x, dtype=TF_DTYPE)
 
 
+EPS_TF = float_me(EPS)
+
+
 def int_me(x):
     return tf.cast(x, dtype=TF_DTYPE_INT)
-
-
-EPS = np.finfo(np.float32).eps
-EPS_TF = float_me(EPS)
 
 
 def set_manual_seed(seed):

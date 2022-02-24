@@ -2,12 +2,11 @@
     This module reads the command line options and initializes the directory
     structure.
 """
-import os
 import shutil
 import logging
 import tensorflow as tf
 from slicerl import PACKAGE
-from slicerl.utils.utils import (
+from .utils import (
     get_cmd_args,
     check_cmd_args,
     initialize_output_folder,
@@ -17,22 +16,34 @@ from slicerl.utils.utils import (
     modify_runcard,
 )
 
-
 logger = logging.getLogger(PACKAGE)
+
 
 def preconfig_tf(setup):
     """
-    Set the host device for tensorflow. The CUDA_VISIBLE_DEVICES variable must
-    be set before prior to allocating any tensors or executing any tf ops.
+    Set the host device for tensorflow.
     """
-    os.environ["CUDA_VISIBLE_DEVICES"] = setup.get("gpu")
     gpus = tf.config.list_physical_devices("GPU")
+    if len(gpus) == 0:
+        return
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
+    gpus = setup.get("gpu")
+    if gpus is not None:
+        if isinstance(gpus, int):
+            gpus = [gpus]
+        gpus = [
+            tf.config.PhysicalDevice(f"/physical_device:GPU:{gpu}", "GPU")
+            for gpu in gpus
+        ]
+        tf.config.set_visible_devices(gpus, "GPU")
+        logger.warning(f"Host device: GPU {gpus}")
+    else:
+        logger.warning("Host device: CPU")
+
     if setup.get("debug"):
         logger.warning("Run all tf functions eagerly")
         tf.config.run_functions_eagerly(True)
-        # tf.data.experimental.enable_debug_mode()
 
 
 # ======================================================================
@@ -48,9 +59,9 @@ def config_init():
     if args.runcard:
         setup.update(load_runcard(args.runcard))
         initialize_output_folder(args.output, args.force, setup.get("scan"))
-        setup["output"] = args.output
+        setup["output"] = args.output.as_posix()
         shutil.copyfile(args.runcard, args.output / "input-runcard.yaml")
-        save_runcard(args.output / "runcard.yaml", setup)
+        save_runcard(args.output / "runcard.yaml", setup, modify=False)
     elif args.model:
         setup = load_runcard(args.model / "runcard.yaml")
     else:
@@ -70,4 +81,8 @@ def config_init():
         should_load_dataset=args.load_dataset_test,
         should_save_dataset=args.save_dataset_test,
     )
+
+    from .configflow import set_manual_seed
+
+    set_manual_seed(args.seed)
     return args, setup
