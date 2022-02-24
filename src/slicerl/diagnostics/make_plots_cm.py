@@ -1,5 +1,5 @@
-import matplotlib.pyplot as plt
 from .make_plots_common import plot_histogram
+
 
 def make_plots(generator, folder):
     """
@@ -14,4 +14,3 @@ def make_plots(generator, folder):
     hist_true = [trg.flatten() for trg in generator.targets]
     hist_pred = [pred.flatten() for pred in generator.y_pred.all_y_pred]
     plot_histogram(hist_true, hist_pred, folder)
-

@@ -1,7 +1,6 @@
 # This file is part of SliceRL by M. Rossi
 """ This module contains all the implemented custom layers. """
 import tensorflow as tf
-from tensorflow.keras import Sequential
 from tensorflow.keras.activations import sigmoid, tanh
 from tensorflow.keras.layers import (
     Layer,

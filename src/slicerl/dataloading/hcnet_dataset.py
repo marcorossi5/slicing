@@ -3,7 +3,6 @@ from copy import deepcopy
 import numpy as np
 import tensorflow as tf
 from slicerl import PACKAGE
-from slicerl.utils.tools import onehot
 from .read_data import load_events
 
 logger = logging.getLogger(PACKAGE)
@@ -52,7 +51,7 @@ class HCEventDataset(tf.keras.utils.Sequence):
             - y_pred: Predictions, object storing network predictions
         """
         logger.info("Setting events")
-        self.y_pred = y_pred # store the last predicted values
+        self.y_pred = y_pred  # store the last predicted values
         if self.__events:
             for i, event in enumerate(self.__events):
                 for j, plane in enumerate(event.planes):
@@ -135,7 +134,6 @@ def _build_dataset(
             inp = np.concatenate([plane.point_cloud, [norm_clusters]], axis=0)
 
             if nb_rotations:
-                logger.info(f"Augmenting dataset with {nb_rotations} rotations")
                 inputs.extend(augment_dataset(inp, nb_rotations))
                 targets.extend([plane.ordered_mc_idx] * (nb_rotations + 1))
             else:
@@ -150,7 +148,9 @@ def _build_dataset(
 
     # split dataset
     if should_split:
-        logger.info(f"Splitting training dataset: {1-split} validation holdout percentage")
+        logger.info(
+            f"Splitting training dataset: {1-split:.2f} validation holdout percentage"
+        )
         nb_events = len(inputs)
         perm = np.random.permutation(nb_events)
         nb_split = int(split * nb_events)

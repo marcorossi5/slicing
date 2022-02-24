@@ -120,7 +120,7 @@ class EventDataset(tf.keras.utils.Sequence):
             - y_pred: Predictions, object storing network predictions
         """
         logger.info("Setting events")
-        self.y_pred = y_pred # store the last predicted values
+        self.y_pred = y_pred  # store the last predicted values
         if self.__events:
             for i, event in enumerate(self.__events):
                 event.store_preds(y_pred.get_slices(i))

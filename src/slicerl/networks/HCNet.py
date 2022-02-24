@@ -4,7 +4,6 @@ from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Input
-from tensorflow.keras.layers import Dense
 from tensorflow.keras.activations import relu, softmax
 from slicerl import PACKAGE
 from .AbstractNet import BatchCumulativeNetwork
@@ -104,9 +103,6 @@ class HCNet(BatchCumulativeNetwork):
             )
             self.fc_filters.append(self.units)
 
-        # pre encoder layer
-        # self.pre_fc = Dense(16, name="pre")
-
         # attention layers
         self.mhas = [
             TransformerEncoder(
@@ -149,7 +145,6 @@ class HCNet(BatchCumulativeNetwork):
             tf.Tensor, hit class prbabilities of shape=(1,N,units)
         """
         x = inputs
-        # x = self.pre_fc(inputs)
         for mha in self.mhas:
             x = self.activation(mha(x))
 
@@ -179,5 +174,5 @@ def inference(network, test_generator):
     """
     inputs = test_generator.inputs
     preds = [network.predict(ii[None], verbose=0)[0] for ii in tqdm(inputs)]
-    preds =  np.array(preds, dtype=object)
+    preds = np.array(preds, dtype=object)
     return preds

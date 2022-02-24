@@ -5,11 +5,11 @@ from slicerl import PACKAGE
 
 logger = logging.getLogger(PACKAGE + ".diagnostics")
 
-THRESHOLD = 0.9 # the purity / completeness threshold
+THRESHOLD = 0.9  # the purity / completeness threshold
 
 
 def get_beam_metrics(events, pndr=False, dump=False):
-    """ Returns the beam metrics. """
+    """Returns the beam metrics."""
     statuses = []  # correct, lost, split status
     purities = []
     completenesses = []
@@ -73,10 +73,12 @@ def get_beam_metrics(events, pndr=False, dump=False):
                     completenesses.append(completeness)
 
                 if nb_p_slices == 1:
-                    print_str = "  Is{result}," \
-                                + f" reco Hits: {nb_pred_hits[-1]},  " \
-                                + f"Purity: {purities[-1]*100:.2f}%, " \
-                                + f"Completeness {completenesses[-1]*100:.2f}%"
+                    print_str = (
+                        "  Is{result},"
+                        + f" reco Hits: {nb_pred_hits[-1]},  "
+                        + f"Purity: {purities[-1]*100:.2f}%, "
+                        + f"Completeness {completenesses[-1]*100:.2f}%"
+                    )
                     if purity >= THRESHOLD:
                         logger.debug(print_str.format(result="Correct"))
                         statuses.append([1, 0, 0])
@@ -89,9 +91,11 @@ def get_beam_metrics(events, pndr=False, dump=False):
                     if np.max(cs) > THRESHOLD:
                         # check the purity of the most complete slice
                         nb = nb_pred_hits[-nb_p_slices:][amax_cs]
-                        print_str = f"  Is(result), reco Hits: {nb},  " \
-                            + f"Purity: {purities[-nb_p_slices:][amax_cs]*100:.2f}%, " \
+                        print_str = (
+                            f"  Is(result), reco Hits: {nb},  "
+                            + f"Purity: {purities[-nb_p_slices:][amax_cs]*100:.2f}%, "
                             + f"Completeness {completenesses[-nb_p_slices:][amax_cs]*100:.2f}%"
+                        )
                         p = purities[-nb_p_slices:][amax_cs]
                         if p > THRESHOLD:
                             logger.debug(print_str.format(result="Correct"))
@@ -247,7 +251,7 @@ def plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder):
 def plot_test_beam_metrics(events, output_folder="./"):
     """Plot the test beam metrics distribution and output some statistics."""
     beam_metrics = get_beam_metrics(events)
-    
+
     logger.info(
         "Evaluating metrics Cluster Merging Network ...\n"
         + print_beam_metrics(beam_metrics)
@@ -256,7 +260,7 @@ def plot_test_beam_metrics(events, output_folder="./"):
     beam_pndr_metrics = get_beam_metrics(events, pndr=True)
     logger.info(
         "Evaluating metrics Pandora ...\n" + print_beam_metrics(beam_pndr_metrics)
-    )    
+    )
 
     plot_purity_completeness(beam_metrics, beam_pndr_metrics, output_folder)
 
@@ -306,7 +310,7 @@ def check_beam_metrics(events):
 
 # ======================================================================
 def print_beam_metrics(beam_metrics):
-    """ Returns the formatted message with the beam metrics to be printed. """
+    """Returns the formatted message with the beam metrics to be printed."""
     m = beam_metrics[0].sum(0) > 0
     nb_tests = np.count_nonzero(m)
     stats = beam_metrics[0][:, m]

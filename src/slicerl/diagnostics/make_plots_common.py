@@ -6,6 +6,7 @@ from slicerl import PACKAGE
 
 logger = logging.getLogger(PACKAGE + ".diagnostics")
 
+
 def make_plots(generator, folder):
     plot_test_beam_metrics(generator.events, folder)
     plot_slice_size(generator.events, folder)
