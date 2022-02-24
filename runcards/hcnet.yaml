@@ -1,0 +1,62 @@
+# This file is part of SliceRL by M. Rossi
+gpu: "0"
+dataset:
+  split: 0.9
+  standardize: true
+  nb_rotations: 16 # number of hit coordinates rotations (0 if no augmentation)
+model:
+  net_type: HC # CM | HC
+  threshold: 0.9 # for inference
+  units: 64 # number of classes, keep this >64
+  f_dims: 6 # 89
+  nb_mha_heads: 1
+  mha_filters:
+    - 8
+    - 16
+    - 32
+  kernel_transformation: relu # softmax | relu
+  projection_matrix_type: null # random | null
+  nb_random_features: 128
+  nb_fc_heads: 1
+  fc_filters:
+    - 64
+  batch_size: 8
+  activation: lrelu
+  use_bias: true
+test:
+  dataset_dir: ../dataset/prod4_test
+  checkpoint: network.h5
+  fn:
+    - data/prod4_test/prod4_0.3GeV_run47144279_50evts.csv.gz  
+    - data/prod4_test/prod4_0.5GeV_run47144284_50evts.csv.gz  
+    - data/prod4_test/prod4_1GeV_run18800650_50evts.csv.gz    
+    - data/prod4_test/prod4_2GeV_run44833767_50evts.csv.gz
+    - data/prod4_test/prod4_6GeV_run44121960_50evts.csv.gz
+    - data/prod4_test/prod4_7GeV_run20915159_50evts.csv.gz
+  nev: -1
+  min_hits: 5
+train:
+  dataset_dir: ../dataset/prod4
+  fn:
+    - data/prod4_train/prod4_0.3GeV_run47144279_100evts.csv.gz     
+    - data/prod4_train/prod4_0.5GeV_run4714428_100evts.csv.gz      
+    - data/prod4_train/prod4_1GeV_run18800650_0006_100evts.csv.gz  
+    - data/prod4_train/prod4_2GeV_run44833767_100evts.csv.gz
+    - data/prod4_train/prod4_p6GeV_run44121960_100evts.csv.gz
+    - data/prod4_train/prod4_7GeV_run20915159_100evts.csv.gz
+  nev: -1
+  min_hits: 3
+  hist_freq: 10
+  epochs: 50
+  lr: 0.005
+  min_lr: 0.00001
+  patience: 20
+  es_patience: 100
+  optimizer: Adam
+  initial_weights: null
+scan: false
+cluster:
+  max_evals: 10
+  enable: false
+  url: null
+  exp_key: null
